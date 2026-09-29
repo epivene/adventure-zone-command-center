@@ -31,6 +31,52 @@ beforeEach(async () => {
 afterEach(async () => {
   await db.close();
 });
+it("blocks inactive action starts while retaining completed receipts and retries", async () => {
+  const conversations = new ConversationStore(db);
+  const action = await actions.prepare(intent);
+  const c = (await conversations.get("a", intent.conversationId))!;
+  const archived = await conversations.setLifecycle(
+    "a",
+    c.id,
+    c.version,
+    "archived",
+  );
+  await expect(actions.claim("a", action.id, "worker")).rejects.toThrow(
+    "ASSISTANT_CONVERSATION_INACTIVE",
+  );
+  await expect(
+    actions.prepare({
+      ...intent,
+      id: randomUUID(),
+      arguments: { body: "New" },
+    }),
+  ).rejects.toThrow("ASSISTANT_CONVERSATION_INACTIVE");
+  await conversations.setLifecycle("a", c.id, archived.version, "active");
+  const claim = await actions.claim("a", action.id, "worker");
+  await expect(
+    conversations.setLifecycle("a", c.id, archived.version + 1, "trashed"),
+  ).rejects.toThrow("ASSISTANT_CONVERSATION_BUSY");
+  await actions.checkpoint(
+    "a",
+    action.id,
+    claim!.leaseToken,
+    "provider_started",
+    {},
+  );
+  await expect(
+    conversations.setLifecycle("a", c.id, archived.version + 1, "trashed"),
+  ).rejects.toThrow("ASSISTANT_CONVERSATION_BUSY");
+  await actions.checkpoint("a", action.id, claim!.leaseToken, "uncertain", {});
+  await expect(
+    conversations.setLifecycle("a", c.id, archived.version + 1, "trashed"),
+  ).rejects.toThrow("ASSISTANT_CONVERSATION_BUSY");
+  await actions.reconcile("a", action.id, { receipt: "kept" });
+  await conversations.setLifecycle("a", c.id, archived.version + 1, "trashed");
+  expect(
+    (await actions.prepare({ ...intent, id: randomUUID() })).result,
+  ).toEqual({ receipt: "kept" });
+  expect((await actions.get("a", action.id))?.status).toBe("succeeded");
+});
 it("requires reconciliation after possible external mutation", () => {
   expect(recoveryMode("provider_started")).toBe("reconcile");
   expect(recoveryMode("uncertain")).toBe("reconcile");

@@ -1,4 +1,5 @@
 import type { DocumentResult } from "@/features/assistant-workspace/types";
+import { PublicResearchResult } from "./PublicResearchResult";
 const dollars = (cents: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
     cents / 100,
@@ -29,7 +30,7 @@ export function DocumentResults({
       {items.map((item) => (
         <section
           key={item.id}
-          className="rounded-xl border bg-white p-4 text-sm"
+          className="min-w-0 rounded-xl border bg-white p-4 text-sm"
         >
           {item.data.view === "document_reading" ? (
             <>
@@ -106,55 +107,7 @@ export function DocumentResults({
               </ul>
             </>
           ) : item.data.view === "public_research" ? (
-            <>
-              <h3 className="font-semibold">Public research</h3>
-              <p className="mt-1 text-xs text-slate-600">
-                {item.data.query} · {item.data.model}
-              </p>
-              {!item.data.complete && (
-                <p className="mt-2 text-amber-800">Research incomplete</p>
-              )}
-              {item.data.parts.map((part, index) => (
-                <div key={index} className="mt-3">
-                  <p className="whitespace-pre-wrap">{part.text}</p>
-                  <p className="mt-1 flex flex-wrap gap-2">
-                    {part.citations.map((c, n) => (
-                      <a
-                        key={`${c.url}:${n}`}
-                        href={c.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-teal-800 underline"
-                      >
-                        {c.title}
-                      </a>
-                    ))}
-                  </p>
-                </div>
-              ))}
-              <details className="mt-3">
-                <summary>Consulted sources</summary>
-                <ul>
-                  {item.data.consultedSources.map((s) => (
-                    <li key={s.url}>
-                      <a
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-teal-800 underline"
-                      >
-                        {s.title}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-              {item.data.warnings.map((w) => (
-                <p key={w} className="mt-2 text-xs text-amber-800">
-                  {w}
-                </p>
-              ))}
-            </>
+            <PublicResearchResult data={item.data} />
           ) : (
             <>
               <h3 className="font-semibold">
@@ -191,13 +144,17 @@ export function DocumentResults({
               </a>
             </>
           )}
-          <p className="mt-3 text-xs text-slate-500">
-            Saved snapshot
-            {item.retrievedAt
-              ? ` · ${new Date(item.retrievedAt).toLocaleString()}`
-              : ""}
-            . Ask to refresh for current information.
-          </p>
+          {!(
+            item.data.view === "public_research" && item.data.savedResearch
+          ) && (
+            <p className="mt-3 text-xs text-slate-500">
+              Saved snapshot
+              {item.retrievedAt
+                ? ` · ${new Date(item.retrievedAt).toLocaleString()}`
+                : ""}
+              . Ask to refresh for current information.
+            </p>
+          )}
         </section>
       ))}
     </div>

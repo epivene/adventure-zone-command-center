@@ -4,6 +4,7 @@ import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { RunContext, ToolResult } from "./contracts";
 import { blocked } from "./read-tools";
 import type { DocumentExtractionStore } from "./document-extraction-store";
+import { isSpendingPreflightError } from "./spending-provider";
 export function documentCompleteness(
   totalPages: number,
   readablePages: number[],
@@ -102,7 +103,8 @@ export class DocumentReader {
           retrievedAt: new Date().toISOString(),
         })),
       };
-    } catch {
+    } catch (error) {
+      if (isSpendingPreflightError(error)) return blocked(error.message);
       return blocked(
         context.signal.aborted
           ? "ASSISTANT_CANCELLED"
@@ -117,7 +119,8 @@ export class DocumentReader {
   ) {
     try {
       return await this.deps.visualExtract!(input);
-    } catch {
+    } catch (error) {
+      if (isSpendingPreflightError(error)) throw error;
       return {
         text: "Visual transcription interrupted; review the original pages. Usage could not be verified.",
         usageUnknown: true,

@@ -84,6 +84,10 @@ export async function syncOfflineDraft(
         `/conversations/${encodeURIComponent(conversationId)}`,
       );
       assertOfflineBinding(binding);
+      if (result.lifecycle === "archived" || result.lifecycle === "trashed")
+        throw new Error(
+          "Restore this conversation before syncing its saved drafts.",
+        );
       const server = result.drafts.find((item) => item.id === draftId);
       if (!server)
         throw new Error(

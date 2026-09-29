@@ -1,3 +1,13 @@
+import { loadTaskChangeProof } from "./profile-task-evidence";
+import { guardTaskMutation } from "./profile-task-safety";
+import { profileTaskView } from "./profile-task-view";
+import {
+  createProfileTaskTools,
+  profileTaskSavedContext,
+} from "./profile-task-tools";
+import { ProfileTaskRunner } from "./profile-task-runner";
+import { grantTaskAction } from "./profile-task-policy";
+import { ProfileTaskStore } from "./profile-task-store";
 import { CampaignStore } from "./campaign-store";
 import { ScreenshotStore } from "./screenshots";
 import { createScreenshotTools } from "./screenshot-tools";
@@ -34,9 +44,20 @@ import { createReadTools } from "./read-tools";
 import { createToolRegistry } from "./tool-registry";
 import { createWorkspaceTools } from "./workspace-tools";
 import { createWorkspaceWorker } from "./worker";
+import { SpendingStore } from "./spending-store";
+import { SavedResearchCache } from "./research-cache";
 export function createWorkspaceRuntime() {
   const config = readModelConfig(process.env);
+  const spending = new SpendingStore(db, pool);
+  const researchCache = new SavedResearchCache(pool);
   const ownerId = "owner";
+  const profileTasks = new ProfileTaskStore(pool);
+  const profileTaskRunner = new ProfileTaskRunner(
+    pool,
+    profileTasks,
+    config.model,
+    config.allowedActorIds,
+  );
   const conversations = new ConversationStore(pool),
     runs = new RunStore(pool),
     actions = new ActionStore(pool),
@@ -46,7 +67,7 @@ export function createWorkspaceRuntime() {
   const campaigns = new CampaignStore(db, pool);
   const screenshots = new ScreenshotStore(pool);
   const readScreenshot = screenshots.readForModel.bind(screenshots);
-  const reads = productionReads(pool, ownerId, google);
+  const reads = productionReads(pool, ownerId, google, spending);
   const send = createWorkspaceSendService({
     pool,
     db,
@@ -54,28 +75,92 @@ export function createWorkspaceRuntime() {
     conversations,
     google,
   });
-  const executor = new ActionExecutor(ownerId, actions, {
-    ...campaignAdapters(db, pool),
-    ...operationsAdapters(db, pool),
-    ...productionRecordAdapters(db, pool),
-    ...commercialAdapters(db, pool),
-    ...externalAdapters(pool, google),
-    save_gmail_draft: gmailDraftAdapter(drafts, google),
-    send_draft: send.adapter,
+  const executor = new ActionExecutor(
+    ownerId,
+    actions,
+    {
+      ...campaignAdapters(db, pool),
+      ...operationsAdapters(db, pool),
+      ...productionRecordAdapters(db, pool),
+      ...commercialAdapters(db, pool),
+      ...externalAdapters(pool, google),
+      save_gmail_draft: gmailDraftAdapter(drafts, google),
+      send_draft: send.adapter,
+    },
+    async (context, intent) => {
+      if (
+        process.env.ASSISTANT_PROFILE_TASKS_ENABLED !== "true" ||
+        !context.taskId
+      )
+        return null;
+      const task = await profileTasks.get(context.actor.id, context.taskId);
+      const item = task?.items.find((i) => i.profileId === intent.targetId);
+      if (item)
+        await pool.query(
+          `UPDATE assistant_profile_task_items SET action_ids=CASE WHEN action_ids @> $2::jsonb THEN action_ids ELSE action_ids || $2::jsonb END WHERE id=$1`,
+          [item.id, JSON.stringify([intent.id])],
+        );
+      const row = (
+        await pool.query(
+          "SELECT * FROM organizations WHERE id=$1 AND consolidated_into_id IS NULL",
+          [intent.targetId],
+        )
+      ).rows[0];
+      return task && item && row
+        ? grantTaskAction(
+            task,
+            item,
+            intent,
+            new Date(row.updated_at).toISOString(),
+            {
+              ...row,
+              address1: row.address_1,
+              address2: row.address_2,
+              postalCode: row.postal_code,
+            },
+            await loadTaskChangeProof(pool, task, intent),
+          )
+        : null;
+    },
+    (context, intent) =>
+      guardTaskMutation(
+        pool,
+        context,
+        intent,
+        process.env.ASSISTANT_PROFILE_TASKS_ENABLED === "true",
+      ),
+  );
+  const validateTaskProfiles = async (ids: string[]) => {
+    const found = await pool.query(
+      "SELECT id FROM organizations WHERE id=ANY($1::uuid[]) AND consolidated_into_id IS NULL",
+      [ids],
+    );
+    if (found.rows.length !== ids.length)
+      throw new Error("ASSISTANT_PROFILE_NOT_FOUND");
+  };
+  const campaignTools = createCampaignTools({
+    ownerId,
+    database: db,
+    db: pool,
+    campaigns,
+    conversations,
+    runs,
+    executor,
+    config,
+    spending,
+    researchCache,
   });
   const tools = createToolRegistry([
+    createProfileTaskTools(
+      pool,
+      profileTasks,
+      validateTaskProfiles,
+      () => process.env.ASSISTANT_PROFILE_TASKS_ENABLED === "true",
+      (context, call) => campaignTools.execute(context, call),
+    ),
     createScreenshotTools({ ownerId, screenshots, runs }),
     createHistoryTools({ ownerId, conversations, runs }),
-    createCampaignTools({
-      ownerId,
-      database: db,
-      db: pool,
-      campaigns,
-      conversations,
-      runs,
-      executor,
-      config,
-    }),
+    campaignTools,
     createOperationsTools({ ownerId, database: db, db: pool, runs, executor }),
     createReadTools({ ownerId, ...reads }),
     createCommercialTools({
@@ -101,9 +186,19 @@ export function createWorkspaceRuntime() {
     }),
   ]);
   const worker = createWorkspaceWorker({
+    taskContext: (context) =>
+      profileTaskSavedContext(pool, context, profileTasks),
+    profileTasks: {
+      enabled: () => process.env.ASSISTANT_PROFILE_TASKS_ENABLED === "true",
+      dispatchNextTaskBatch:
+        profileTaskRunner.dispatchNextTaskBatch.bind(profileTaskRunner),
+      reconcileTaskRun:
+        profileTaskRunner.reconcileTaskRun.bind(profileTaskRunner),
+      check: profileTaskRunner.check.bind(profileTaskRunner),
+    },
     runs,
     conversations,
-    model: createOpenAiModel(config, undefined, readScreenshot),
+    model: createOpenAiModel(config, undefined, readScreenshot, spending),
     modelFor: (model) => {
       if (model && !config.models.includes(model))
         throw new Error("ASSISTANT_MODEL_UNAVAILABLE");
@@ -111,12 +206,14 @@ export function createWorkspaceRuntime() {
         { ...config, model: model ?? config.model },
         undefined,
         readScreenshot,
+        spending,
       );
     },
     tools,
     allowedActorIds: config.allowedActorIds,
     maxSteps: config.maxSteps,
     maxTokens: config.maxRunTokens,
+    historicalEvidence: (context) => researchCache.listIndex(context),
     evidence: async (organizationId, eventYear) =>
       (
         await knowledge.list({
@@ -137,6 +234,12 @@ export function createWorkspaceRuntime() {
       })),
   });
   return {
+    profileTasks,
+    taskView: (task: import("./profile-task-contracts").Task) =>
+      profileTaskView(pool, task),
+    validateTaskProfiles,
+    spending,
+    researchCache,
     screenshots,
     actionPreview: async (context: RunContext, intent: ActionIntent) => {
       try {

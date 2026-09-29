@@ -27,6 +27,33 @@ beforeEach(async () => {
 afterEach(async () => {
   await db.close();
 });
+it("keeps existing screenshots readable after trash and blocks new uploads", async () => {
+  const c = await conversations.create("owner", "Screenshots remain");
+  const original = await store.upload(
+    "owner",
+    c.id,
+    id,
+    "screen.png",
+    "image/png",
+    png,
+  );
+  await conversations.setLifecycle("owner", c.id, c.version, "trashed");
+  expect((await store.read("owner", c.id, id)).attachment).toEqual(original);
+  expect(
+    await store.upload("owner", c.id, id, "screen.png", "image/png", png),
+  ).toEqual(original);
+  await expect(
+    store.upload(
+      "owner",
+      c.id,
+      "22222222-2222-4222-8222-222222222222",
+      "new.png",
+      "image/png",
+      png,
+    ),
+  ).rejects.toThrow("ASSISTANT_CONVERSATION_INACTIVE");
+  expect(objects.size).toBe(1);
+});
 it("keeps uploads private, immutable and scoped to their conversation", async () => {
   const c = await conversations.create("owner", "Screen");
   const a = await store.upload(

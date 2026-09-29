@@ -94,6 +94,7 @@
     "@workspace/db": "workspace:*",
     "drizzle-orm": "catalog:",
     "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "xlsx": "^0.18.5"
   }
 }

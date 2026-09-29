@@ -27,6 +27,68 @@ const ok = {
   code: null,
 };
 const call = { id: "call1", name: "read", arguments: "{}" };
+it("pauses on a pre-generation spending limit without inventing unknown usage or retrying", async () => {
+  const next = vi.fn().mockRejectedValue(new Error("ASSISTANT_BUDGET_LIMIT"));
+  const store = memory();
+  const result = await runTurn(
+    context,
+    { next },
+    { definitions: () => [], execute: vi.fn() },
+    store,
+  );
+  expect(result.status).toBe("partial");
+  expect(result.text).toContain("Spending controls");
+  expect(result.text).toContain("does not restart");
+  expect(next).toHaveBeenCalledTimes(1);
+  expect(next.mock.calls[0][0].spendingScope).toEqual({
+    actorId: "owner",
+    conversationId: "c",
+    runId: "r",
+    callId: "r:assistant:0",
+  });
+  expect(store.get()?.cost?.calls).toEqual({});
+  expect(store.get()?.cost?.pendingModel).toBe(false);
+});
+it("stops immediately after a nested tool spending pause and preserves completed receipts", async () => {
+  const next = vi.fn().mockResolvedValue({
+    text: "",
+    calls: [
+      call,
+      { ...call, id: "paid", name: "research_public_sources" },
+      { ...call, id: "later" },
+    ],
+    providerItems: [],
+    inputTokens: 2,
+    outputTokens: 1,
+  });
+  const receipt = {
+    kind: "app_draft",
+    id: "d",
+    href: "/draft/d",
+    verifiedAt: new Date().toISOString(),
+  };
+  const execute = vi
+    .fn()
+    .mockResolvedValueOnce({ ...ok, receipts: [receipt] })
+    .mockResolvedValueOnce({
+      ...ok,
+      status: "blocked",
+      code: "ASSISTANT_BUDGET_LIMIT",
+    });
+  const store = memory();
+  const result = await runTurn(
+    context,
+    { next },
+    { definitions: () => [], execute },
+    store,
+  );
+  expect(result.status).toBe("partial");
+  expect(result.receipts).toEqual([receipt]);
+  expect(execute).toHaveBeenCalledTimes(2);
+  expect(next).toHaveBeenCalledTimes(1);
+  expect(store.get()?.pending).toHaveLength(3);
+  expect(store.get()?.results.later).toBeUndefined();
+});
 function memory() {
   let checkpoint: TurnCheckpoint | undefined;
   return {

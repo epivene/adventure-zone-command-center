@@ -3,6 +3,25 @@ import { describe, expect, it } from "vitest";
 import { AssistantMessage } from "./AssistantMessage";
 
 describe("AssistantMessage", () => {
+  it("renders markdown tables inside a keyboard-scrollable container", () => {
+    render(
+      <AssistantMessage
+        text={
+          "| Event | Contact |\n| --- | --- |\n| **County Fair** | [Website](https://fair.example/contact) |"
+        }
+      />,
+    );
+    expect(screen.getByRole("columnheader", { name: "Event" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "County Fair" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Website" })).toHaveAttribute(
+      "href",
+      "https://fair.example/contact",
+    );
+    const scroller = screen.getByRole("table").parentElement!;
+    expect(scroller).toHaveAttribute("tabindex", "0");
+    expect(scroller).toHaveClass("overflow-x-auto", "max-w-full");
+  });
+
   it("renders assistant emphasis, quoted drafts and lists as readable content", () => {
     const { container } = render(
       <AssistantMessage

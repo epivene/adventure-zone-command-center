@@ -18,7 +18,13 @@ import { GoogleReviewProfileAssignmentService } from "../google-workspace/google
 import { assertSendRevision } from "./send-tools";
 import { assertMimeReadback } from "./gmail-drafts";
 import type { MutationAdapter } from "./action-executor";
-import type { RunContext, ActionIntent, ToolResult } from "./contracts";
+import type {
+  RunContext,
+  ActionIntent,
+  ToolResult,
+  Queryable,
+} from "./contracts";
+import { transactionQueries } from "./transaction-queries";
 export type PaymentModel = "prepaid" | "pay_per_play" | "administrative";
 export function createWorkspaceSendService(deps: {
   pool: Pool;
@@ -26,7 +32,10 @@ export function createWorkspaceSendService(deps: {
   drafts: DraftStore;
   conversations: ConversationStore;
   google: PostgresGoogleConnectionRepository;
-  dispatchFactory?: (payment: PaymentModel) => OutreachDispatch;
+  dispatchFactory?: (
+    payment: PaymentModel,
+    database?: typeof Database,
+  ) => OutreachDispatch;
   protectContact?: typeof outreachDispatchProtection;
   captureSources?: (draft: WorkspaceDraft) => Promise<string>;
   syncSent?: (input: {
@@ -56,19 +65,43 @@ export function createWorkspaceSendService(deps: {
       throw new Error("ASSISTANT_PROFILE_REQUIRED");
     return draft;
   }
-  async function reviewRecord(actor: string, id: string) {
-    const r = await pool.query(
+  async function reviewRecord(
+    actor: string,
+    id: string,
+    query: Queryable = pool,
+  ) {
+    const r = await query.query(
       `SELECT * FROM assistant_workspace_send_reviews WHERE actor_id=$1 AND draft_id=$2`,
       [actor, id],
     );
     if (!r.rows[0]) throw new Error("ASSISTANT_SEND_REVIEW_REQUIRED");
     return r.rows[0];
   }
-  function dispatch(paymentModel: PaymentModel) {
-    if (deps.dispatchFactory) return deps.dispatchFactory(paymentModel);
+  async function lockActiveConversation(
+    query: Queryable,
+    actor: string,
+    id: string,
+  ) {
+    const result = await query.query(
+      "SELECT lifecycle FROM assistant_workspace_conversations WHERE id=$1 AND actor_id=$2 FOR UPDATE",
+      [id, actor],
+    );
+    if (!result.rows[0]) throw new Error("ASSISTANT_CONVERSATION_NOT_FOUND");
+    if (result.rows[0].lifecycle !== "active")
+      throw new Error("ASSISTANT_CONVERSATION_INACTIVE");
+  }
+  function dispatch(
+    paymentModel: PaymentModel,
+    database: typeof Database = db,
+  ) {
+    if (deps.dispatchFactory)
+      return deps.dispatchFactory(paymentModel, database);
+    const promotion = new EarlyBirdPromoService(
+      new EarlyBirdPromoRepository(database),
+    );
     return new OutreachDispatch(
-      db,
-      createProductionOutreachAllocation(db),
+      database,
+      createProductionOutreachAllocation(database),
       async (d) => {
         if (paymentModel !== "prepaid")
           return removeEarlyBirdPromoBlock(d.content.body);
@@ -147,6 +180,8 @@ export function createWorkspaceSendService(deps: {
     const connection = await pool.connect();
     try {
       await connection.query("BEGIN");
+      // Match approval's parent-first lock order before touching Office rows.
+      await lockActiveConversation(connection, actor, draft.conversationId);
       await connection.query(
         `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,
         [draft.id],
@@ -277,24 +312,39 @@ export function createWorkspaceSendService(deps: {
   ) {
     if (!input.evidenceReviewed)
       throw new Error("ASSISTANT_SOURCE_REVIEW_REQUIRED");
-    await owned(actor, id, revision);
-    const r = await reviewRecord(actor, id);
-    assertSendRevision(revision, r.revision);
     const draft = await owned(actor, id, revision);
-    if (r.office_snapshot.sources !== (await capture(draft)))
-      throw new Error("ASSISTANT_SOURCES_CHANGED");
+    // Source capture can read Gmail; finish it before taking a database lock.
+    const sources = await capture(draft);
     const { evidenceReviewed: _, ...approval } = input;
-    await dispatch(r.payment_model).approve(
-      "office_email",
-      id,
-      { ...approval, overrides: {} },
-      actor,
-    );
-    await pool.query(
-      `UPDATE assistant_workspace_send_reviews SET approved_revision=$3,approved_by=$1,approved_at=now() WHERE actor_id=$1 AND draft_id=$2 AND revision=$3`,
-      [actor, id, revision],
-    );
-    return { approved: true, revision };
+    return db.transaction(async (tx) => {
+      const query = transactionQueries(tx);
+      await lockActiveConversation(query, actor, draft.conversationId);
+      const current = await query.query(
+        "SELECT revision FROM assistant_workspace_drafts WHERE id=$1 AND actor_id=$2 AND conversation_id=$3",
+        [id, actor, draft.conversationId],
+      );
+      if (!current.rows[0]) throw new Error("ASSISTANT_DRAFT_NOT_FOUND");
+      assertSendRevision(revision, current.rows[0].revision);
+      const r = await reviewRecord(actor, id, query);
+      assertSendRevision(revision, r.revision);
+      if (r.office_snapshot.sources !== sources)
+        throw new Error("ASSISTANT_SOURCES_CHANGED");
+      // Use the same transaction for outreach approval and its assistant receipt.
+      // Nested allocation work uses a savepoint, not a second pooled connection.
+      await dispatch(r.payment_model, tx as unknown as typeof Database).approve(
+        "office_email",
+        id,
+        { ...approval, overrides: {} },
+        actor,
+      );
+      const saved = await query.query(
+        `UPDATE assistant_workspace_send_reviews SET approved_revision=$3,approved_by=$1,approved_at=now() WHERE actor_id=$1 AND draft_id=$2 AND revision=$3 RETURNING draft_id`,
+        [actor, id, revision],
+      );
+      if (!saved.rows.length)
+        throw new Error("ASSISTANT_DRAFT_VERSION_CONFLICT");
+      return { approved: true, revision };
+    });
   }
   async function boundary(
     context: RunContext,

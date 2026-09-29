@@ -61,6 +61,7 @@ let server: Draft,
   patches: unknown[],
   loseResponse: boolean,
   failReads: boolean;
+let lifecycle: Conversation["lifecycle"];
 let beforeResponse: () => Promise<void>;
 const saved = async () => (await loadOfflineWorkspace()).snapshots[0].drafts[0];
 beforeEach(async () => {
@@ -70,6 +71,7 @@ beforeEach(async () => {
   patches = [];
   loseResponse = false;
   failReads = false;
+  lifecycle = undefined;
   beforeResponse = async () => {};
   localStorage.setItem("az_owner_token", `owner.${Date.now() + 86400000}.sig`);
   vi.stubGlobal("fetch", async (url: string, init: RequestInit = {}) => {
@@ -79,7 +81,7 @@ beforeEach(async () => {
     ) {
       if (failReads) throw new Error("Disconnected");
       return new Response(
-        JSON.stringify({ ...conversation, drafts: [server] }),
+        JSON.stringify({ ...conversation, lifecycle, drafts: [server] }),
       );
     }
     if (url.endsWith("/drafts/d1") && init.method === "PATCH") {
@@ -129,6 +131,59 @@ it("syncs only the explicit subject/body revision patch and advances local revis
     syncState: "idle",
   });
 });
+it.each(["archived", "trashed"] as const)(
+  "keeps local edits and makes no PATCH when the conversation is %s",
+  async (inactive) => {
+    lifecycle = inactive;
+    const before = await saved();
+
+    await expect(syncOfflineDraft("c1", "d1")).rejects.toThrow(
+      /Restore this conversation before syncing/i,
+    );
+
+    expect(patches).toEqual([]);
+    expect(await saved()).toEqual(before);
+
+    lifecycle = "active";
+    expect(await syncOfflineDraft("c1", "d1")).toMatchObject({
+      status: "synced",
+    });
+    expect(patches).toEqual([{ revision: "r1", ...edits }]);
+  },
+);
+it.each(["archived", "trashed"] as const)(
+  "retains an uncertain save while %s and reconciles it after Restore",
+  async (inactive) => {
+    loseResponse = true;
+    await expect(syncOfflineDraft("c1", "d1")).rejects.toThrow(/lost/i);
+    const before = await saved();
+    expect(before).toMatchObject({
+      local: edits,
+      attempt: { revision: "r1", edits },
+      syncState: "uncertain",
+    });
+    lifecycle = inactive;
+    failReads = false;
+
+    await expect(syncOfflineDraft("c1", "d1")).rejects.toThrow(
+      /Restore this conversation before syncing/i,
+    );
+
+    expect(patches).toHaveLength(1);
+    expect(await saved()).toEqual(before);
+
+    lifecycle = "active";
+    expect(await syncOfflineDraft("c1", "d1")).toMatchObject({
+      status: "synced",
+    });
+    expect(patches).toHaveLength(1);
+    expect(await saved()).toMatchObject({
+      local: null,
+      attempt: null,
+      syncState: "idle",
+    });
+  },
+);
 it("preserves both versions without a mutation when the server changed", async () => {
   server = {
     ...server,

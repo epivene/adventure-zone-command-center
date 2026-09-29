@@ -1,3 +1,8 @@
+import { loadTaskChangeProof } from "./profile-task-evidence";
+import { guardTaskMutation } from "./profile-task-safety";
+import { ProfileTaskStore } from "./profile-task-store";
+import { grantTaskAction } from "./profile-task-policy";
+import { transactionQueries } from "./transaction-queries";
 import { sql } from "drizzle-orm";
 import type { db as Database } from "@workspace/db";
 import type { Pool } from "pg";
@@ -38,6 +43,15 @@ export function productionRecordAdapters(
     "update_followup",
   ]) {
     adapters[kind] = {
+      rollbackErrorCodes: [
+        "ASSISTANT_VERSION_CONFLICT",
+        "ASSISTANT_PROFILE_NOT_FOUND",
+        "ASSISTANT_APPROVAL_REQUIRED",
+        "ASSISTANT_TASK_PAUSED",
+        "ASSISTANT_TASK_CONFLICT",
+        "ASSISTANT_TASK_REVIEW_REQUIRED",
+        "ASSISTANT_ACCESS_DENIED",
+      ],
       async validate(context, intent) {
         validateRecordAction(kind, intent.arguments);
         const target =
@@ -72,6 +86,76 @@ export function productionRecordAdapters(
             )
           ).rows[0];
           if (previous) return previous.result as ToolResult;
+          await guardTaskMutation(
+            transactionQueries(tx),
+            context,
+            intent,
+            process.env.ASSISTANT_PROFILE_TASKS_ENABLED === "true",
+          );
+          if (context.taskId) {
+            const q = transactionQueries(tx);
+            const taskRow = (
+              await q.query(
+                `SELECT t.id FROM assistant_profile_tasks t JOIN assistant_workspace_conversations c ON c.id=t.conversation_id AND c.actor_id=t.actor_id WHERE t.id=$1 AND t.actor_id=$2 AND c.lifecycle='active' AND t.state=ANY($3::text[]) FOR UPDATE OF c,t`,
+                [
+                  context.taskId,
+                  context.actor.id,
+                  context.taskReview
+                    ? ["running", "paused", "waiting_review"]
+                    : ["running"],
+                ],
+              )
+            ).rows[0];
+            if (
+              !taskRow ||
+              process.env.ASSISTANT_PROFILE_TASKS_ENABLED !== "true"
+            )
+              throw new Error("ASSISTANT_TASK_PAUSED");
+            const task = await new ProfileTaskStore(q).get(
+              context.actor.id,
+              context.taskId,
+            );
+            const item = task?.items.find(
+              (i) => i.profileId === intent.targetId,
+            );
+            if (
+              !task ||
+              !item ||
+              !["add_profile_note", "update_profile"].includes(kind)
+            )
+              throw new Error("ASSISTANT_ACCESS_DENIED");
+            if (
+              context.taskReview &&
+              (task.version !== context.taskVersion ||
+                !item.actionIds.includes(intent.id))
+            )
+              throw new Error("ASSISTANT_ACCESS_DENIED");
+            const current = (
+              await q.query(
+                "SELECT * FROM organizations WHERE id=$1 AND consolidated_into_id IS NULL FOR UPDATE",
+                [intent.targetId],
+              )
+            ).rows[0];
+            if (!current) throw new Error("ASSISTANT_PROFILE_NOT_FOUND");
+            const fields = {
+              ...current,
+              address1: current.address_1,
+              address2: current.address_2,
+              postalCode: current.postal_code,
+            };
+            if (
+              !context.taskReview &&
+              !grantTaskAction(
+                task,
+                item,
+                intent,
+                new Date(current.updated_at).toISOString(),
+                fields,
+                await loadTaskChangeProof(q, task, intent),
+              )
+            )
+              throw new Error("ASSISTANT_APPROVAL_REQUIRED");
+          }
           const args = validateRecordAction(kind, intent.arguments) as any;
           let profileId = intent.targetId;
           let output: ToolResult;

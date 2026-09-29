@@ -524,3 +524,56 @@ it("exposes persisted estimates and totals every conversation run beyond the rec
     pricedCalls: 31,
   });
 });
+
+it("organizes conversation history with validated filters, version conflicts and restore", async () => {
+  const f = await fixture();
+  const patch = (body: Record<string, unknown>, id = f.c.id) => request(f.app).patch(`/conversations/${id}/lifecycle`).set("Authorization", f.authorization).send(body);
+  const archived = await patch({ version: f.c.version, lifecycle: "archived" });
+  expect(archived.status).toBe(200);
+  expect(archived.body.lifecycle).toBe("archived");
+  expect((await request(f.app).get("/conversations").set("Authorization", f.authorization)).body).toEqual([]);
+  const list = await request(f.app).get("/conversations?lifecycle=archived").set("Authorization", f.authorization);
+  expect(list.body.map((item: any) => item.id)).toEqual([f.c.id]);
+  expect((await request(f.app).get("/conversations?lifecycle=all").set("Authorization", f.authorization)).status).toBe(422);
+  expect((await patch({ version: f.c.version, lifecycle: "trashed" })).status).toBe(409);
+  expect((await patch({ version: archived.body.version, lifecycle: "trashed", actorId: "other" })).status).toBe(422);
+  const other = await f.runtime.conversations.create("other", "Other owner");
+  expect((await patch({ version: other.version, lifecycle: "trashed" }, other.id)).status).toBe(404);
+  const blocked = await request(f.app).post(`/conversations/${f.c.id}/messages`).set("Authorization", f.authorization).send({ requestKey: "archived-write", text: "Do new work" });
+  expect(blocked.status).toBe(409);
+  expect(blocked.body.code).toBe("ASSISTANT_CONVERSATION_INACTIVE");
+  expect((await patch({ version: archived.body.version, lifecycle: "active" })).status).toBe(200);
+  const submitted = await request(f.app).post(`/conversations/${f.c.id}/messages`).set("Authorization", f.authorization).send({ requestKey: "active-write", text: "Do new work" });
+  expect(submitted.status).toBe(202);
+  const busy = await patch({ version: archived.body.version + 1, lifecycle: "trashed" });
+  expect(busy.status).toBe(409);
+  expect(busy.body.code).toBe("ASSISTANT_CONVERSATION_BUSY");
+});
+
+it("rejects inactive draft edits and returns a completed action receipt without new approval", async () => {
+  const f = await fixture();
+  const { DraftStore } = await import("../features/assistant-workspace/draft-store");
+  const { ActionStore } = await import("../features/assistant-workspace/action-store");
+  const { ActionExecutor } = await import("../features/assistant-workspace/action-executor");
+  const { randomUUID } = await import("node:crypto");
+  f.runtime.drafts = new DraftStore(database);
+  f.runtime.actions = new ActionStore(database);
+  const draft = await f.runtime.drafts.create("owner", f.c.id, { to: ["a@example.test"], cc: [], subject: "Saved", html: "<p>Saved</p>", text: "Saved", threadId: null, attachmentHashes: [], attachmentIds: [], organizationId: null, templateId: null, templateVersion: null });
+  const source = await f.runtime.conversations.append("owner", f.c.id, "original", { role: "user", text: "Create a note" });
+  const intent = { id: randomUUID(), actorId: "owner", conversationId: f.c.id, kind: "add_profile_note", targetId: randomUUID(), expectedRevision: null, connectionId: null, arguments: { body: "Saved" }, sourceMessageId: source.id };
+  const action = await f.runtime.actions.prepare(intent);
+  const claim = await f.runtime.actions.claim("owner", action.id, "worker");
+  const receipt = { status: "ok", data: { id: "note" }, receipts: [{ id: "note" }], evidence: [], code: null };
+  await f.runtime.actions.checkpoint("owner", action.id, claim.leaseToken, "succeeded", receipt);
+  const apply = vi.fn();
+  f.runtime.executor = new ActionExecutor("owner", f.runtime.actions, { add_profile_note: { validate: vi.fn(), apply } });
+  await f.runtime.conversations.setLifecycle("owner", f.c.id, f.c.version, "trashed");
+  const edit = await request(f.app).patch(`/drafts/${draft.id}`).set("Authorization", f.authorization).send({ revision: draft.revision, subject: "Changed", html: "<p>Changed</p>", text: "Changed" });
+  expect(edit.status).toBe(409);
+  expect(edit.body.code).toBe("ASSISTANT_CONVERSATION_INACTIVE");
+  const result = await request(f.app).post(`/actions/${action.id}/execute`).set("Authorization", f.authorization).send({ requestKey: "check-result-after-trash", revision: null });
+  expect(result.status).toBe(200);
+  expect(result.body).toEqual(receipt);
+  expect(apply).not.toHaveBeenCalled();
+  expect((await f.runtime.conversations.get("owner", f.c.id)).messages).toHaveLength(1);
+});

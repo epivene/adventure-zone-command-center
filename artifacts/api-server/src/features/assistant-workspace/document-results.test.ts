@@ -122,3 +122,61 @@ it("projects sourced research without provider state and excludes unsafe saved c
     publicDocumentResults(make("http://127.0.0.1/private") as any),
   ).toEqual([]);
 });
+
+it("preserves safe saved research dates while stripping internal cache keys", () => {
+  const generatedAt = "2026-09-26T10:00:00Z";
+  const visible = {
+    id: "33333333-3333-4333-8333-333333333333",
+    generatedAt,
+    expiresAt: "2026-09-27T10:00:00Z",
+    reusedAt: "2026-09-26T12:00:00Z",
+    stale: false,
+  };
+  const cards = publicDocumentResults([
+    {
+      id: "run",
+      turn: {
+        results: {
+          call: {
+            evidence: [{ retrievedAt: generatedAt }],
+            data: {
+              view: "public_research",
+              query: "Fair contact",
+              model: "gpt-6-luna",
+              complete: true,
+              parts: [
+                {
+                  text: "Official contact",
+                  citations: [
+                    {
+                      url: "https://fair.example/contact",
+                      title: "Fair",
+                      startIndex: 0,
+                      endIndex: 16,
+                    },
+                  ],
+                },
+              ],
+              consultedSources: [],
+              warnings: [],
+              savedResearch: {
+                ...visible,
+                version: 1,
+                scopeFingerprint: "internal-scope-key",
+                queryFingerprint: "internal-query-key",
+                requestedModel: "private-config-value",
+              },
+            },
+          },
+        },
+      },
+    },
+  ] as any);
+  expect(cards[0]).toMatchObject({
+    retrievedAt: generatedAt,
+    data: { savedResearch: visible },
+  });
+  expect(JSON.stringify(cards)).not.toMatch(
+    /internal-scope-key|internal-query-key|private-config-value|requestedModel/,
+  );
+});

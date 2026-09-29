@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { blocked, result } from "./read-tools";
 const common = new Set([
+  "propose_profile_task",
+  "get_profile_task",
+  "record_profile_task_outcome",
+  "research_profile_task",
+  "prepare_profile_task_change",
   "search_profiles",
   "read_profile",
   "select_profiles",
@@ -20,6 +25,8 @@ const common = new Set([
   "list_followups",
   "read_conversation_history",
   "read_conversation_screenshot",
+  "list_saved_research",
+  "read_saved_research",
 ]);
 type Definition = {
   type: "function";

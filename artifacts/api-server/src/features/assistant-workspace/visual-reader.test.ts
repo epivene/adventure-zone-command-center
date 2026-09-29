@@ -1,6 +1,7 @@
 import { it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createVisualReader, createOwnedVisualReader } from "./visual-reader";
 import { readModelConfig } from "./model-config";
+import { SpendingPreflightError, type SpendingPort } from "./spending-provider";
 const config = () =>
   readModelConfig({
     ASSISTANT_WORKSPACE_ENABLED: "true",
@@ -177,4 +178,130 @@ it("retains billed provider metadata when visual output cannot be parsed", async
     cachedInputTokens: 3,
     outputTokens: 9,
   });
+});
+
+const budget = (): SpendingPort => ({
+  summary: vi.fn(async () => ({ economyMode: true })),
+  reserve: vi.fn(async () => {}),
+  settle: vi.fn(async () => {}),
+});
+it("routes owned visual reads to the configured economy model and preflights the complete PDF", async () => {
+  const ledger = budget();
+  const payloads: any[] = [];
+  const runs: any = {
+    get: vi.fn(async () => ({
+      conversationId: "c",
+      input: { model: "gpt-6-sol" },
+    })),
+  };
+  const read = createOwnedVisualReader(
+    { ...config(), model: "gpt-6-sol", models: ["gpt-6-sol", "gpt-6-luna"] },
+    runs,
+    async (url, init) => {
+      payloads.push(JSON.parse(String(init?.body)));
+      if (String(url).endsWith("/input_tokens")) {
+        expect(ledger.reserve).not.toHaveBeenCalled();
+        return Response.json({
+          input_tokens: 1500,
+          object: "response.input_tokens",
+        });
+      }
+      expect(ledger.reserve).toHaveBeenCalledOnce();
+      return Response.json({
+        id: "doc-response",
+        status: "completed",
+        model: "gpt-6-luna",
+        service_tier: "default",
+        output: [],
+        usage: { input_tokens: 1500, output_tokens: 200 },
+      });
+    },
+    ledger,
+  );
+  await read({
+    ...input(),
+    mimeType: "application/pdf",
+    context: {
+      actor: { id: "owner", role: "owner" },
+      conversationId: "c",
+      runId: "r",
+      toolCallId: "tool",
+    } as any,
+  });
+  expect(payloads).toHaveLength(2);
+  expect(payloads[0].input).toEqual(payloads[1].input);
+  expect(payloads[0].input[0].content).toContainEqual({
+    type: "input_file",
+    filename: "source.pdf",
+    file_data: "data:application/pdf;base64,AQI=",
+  });
+  expect(payloads[1]).toMatchObject({
+    model: "gpt-6-luna",
+    service_tier: "default",
+    max_output_tokens: 8192,
+  });
+  expect(ledger.settle).toHaveBeenCalledExactlyOnceWith(
+    "owner",
+    "r:document:tool",
+    1500 * 125 + 200 * 500,
+  );
+});
+it("propagates a budget pause before document generation rather than recording unknown paid usage", async () => {
+  const ledger = budget();
+  vi.mocked(ledger.reserve).mockRejectedValue(
+    new Error("ASSISTANT_BUDGET_LIMIT"),
+  );
+  const fetcher = vi.fn(async () =>
+    Response.json({ input_tokens: 100, object: "response.input_tokens" }),
+  );
+  const model = "gpt-6-luna";
+  const read = createVisualReader({ ...config(), model }, fetcher, ledger, {
+    actorId: "owner",
+    conversationId: "c",
+    runId: "r",
+    callId: "r:document:tool",
+    source: "document",
+    model,
+  });
+  await expect(read(input())).rejects.toBeInstanceOf(SpendingPreflightError);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(ledger.settle).not.toHaveBeenCalled();
+});
+
+it("lets the extraction cache retry a settings read failure without creating a paid call", async () => {
+  const ledger = budget();
+  vi.mocked(ledger.summary).mockRejectedValue(
+    new Error("Settings unavailable"),
+  );
+  const runs: any = {
+    get: vi.fn(async () => ({
+      conversationId: "c",
+      input: { model: "gpt-6-sol" },
+    })),
+  };
+  const fetcher = vi.fn(async () => {
+    throw new Error("Must not reach provider");
+  });
+  const read = createOwnedVisualReader(
+    { ...config(), model: "gpt-6-sol", models: ["gpt-6-sol"] },
+    runs,
+    fetcher,
+    ledger,
+  );
+  await expect(
+    read({
+      ...input(),
+      context: {
+        actor: { id: "owner", role: "owner" },
+        conversationId: "c",
+        runId: "r",
+        toolCallId: "tool",
+      } as any,
+    }),
+  ).rejects.toMatchObject({
+    message: "ASSISTANT_SPENDING_UNAVAILABLE",
+    safeToRetry: true,
+  });
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(ledger.reserve).not.toHaveBeenCalled();
 });

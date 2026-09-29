@@ -21,6 +21,7 @@ export const assistantWorkspaceConversations = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     actorId: text("actor_id").notNull(),
     title: text("title").notNull(),
+    lifecycle: text("lifecycle").notNull().default("active"),
     selection: jsonb("selection").notNull(),
     summary: jsonb("summary").notNull().default({}),
     version: integer("version").notNull().default(1),
@@ -33,6 +34,15 @@ export const assistantWorkspaceConversations = pgTable(
   },
   (t) => [
     unique().on(t.id, t.actorId),
+    check(
+      "assistant_workspace_conversation_lifecycle_valid",
+      sql`${t.lifecycle} IN ('active','archived','trashed')`,
+    ),
+    index("assistant_workspace_conversation_lifecycle_idx").on(
+      t.actorId,
+      t.lifecycle,
+      t.updatedAt,
+    ),
     index("assistant_workspace_conversation_owner_idx").on(
       t.actorId,
       t.updatedAt,
@@ -349,4 +359,175 @@ export const assistantWorkspaceScreenshots = pgTable(
       sql`${t.contentType} IN ('image/png','image/jpeg','image/webp')`,
     ),
   ],
+);
+
+export const assistantWorkspaceSpendingSettings = pgTable(
+  "assistant_workspace_spending_settings",
+  {
+    actorId: text("actor_id").primaryKey(),
+    version: integer("version").notNull().default(1),
+    dailyLimitNanos: bigint("daily_limit_nanos", { mode: "number" })
+      .notNull()
+      .default(1_000_000_000),
+    monthlyLimitNanos: bigint("monthly_limit_nanos", { mode: "number" })
+      .notNull()
+      .default(30_000_000_000),
+    economyMode: boolean("economy_mode").notNull().default(true),
+    trackingStartedAt: timestamp("tracking_started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check(
+      "assistant_workspace_spending_settings_version_check",
+      sql`${t.version}>0`,
+    ),
+    check(
+      "assistant_workspace_spending_settings_daily_limit_nanos_check",
+      sql`${t.dailyLimitNanos} BETWEEN 0 AND 1000000000000 AND ${t.dailyLimitNanos} % 10000000 = 0`,
+    ),
+    check(
+      "assistant_workspace_spending_settings_monthly_limit_nanos_check",
+      sql`${t.monthlyLimitNanos} BETWEEN 0 AND 1000000000000 AND ${t.monthlyLimitNanos} % 10000000 = 0`,
+    ),
+  ],
+);
+
+export const assistantWorkspaceSpendingCalls = pgTable(
+  "assistant_workspace_spending_calls",
+  {
+    callId: text("call_id").primaryKey(),
+    actorId: text("actor_id")
+      .notNull()
+      .references(() => assistantWorkspaceSpendingSettings.actorId),
+    conversationId: uuid("conversation_id").notNull(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => assistantWorkspaceRuns.id),
+    source: text("source").notNull(),
+    model: text("model").notNull(),
+    budgetDay: date("budget_day").notNull(),
+    reservedNanos: bigint("reserved_nanos", { mode: "number" }).notNull(),
+    chargedNanos: bigint("charged_nanos", { mode: "number" }),
+    state: text("state").notNull().default("reserved"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.conversationId, t.actorId],
+      foreignColumns: [
+        assistantWorkspaceConversations.id,
+        assistantWorkspaceConversations.actorId,
+      ],
+    }),
+    check(
+      "assistant_workspace_spending_calls_source_check",
+      sql`${t.source} IN ('assistant','research','document')`,
+    ),
+    check(
+      "assistant_workspace_spending_calls_reserved_nanos_check",
+      sql`${t.reservedNanos}>0 AND ${t.reservedNanos}<=9007199254740991`,
+    ),
+    check(
+      "assistant_workspace_spending_calls_charged_nanos_check",
+      sql`${t.chargedNanos}>=0 AND ${t.chargedNanos}<=9007199254740991`,
+    ),
+    check(
+      "assistant_workspace_spending_calls_state_check",
+      sql`${t.state} IN ('reserved','uncertain','settled')`,
+    ),
+    check(
+      "assistant_workspace_spending_calls_check",
+      sql`(${t.state}='settled' AND ${t.chargedNanos} IS NOT NULL) OR (${t.state} IN ('reserved','uncertain') AND ${t.chargedNanos} IS NULL)`,
+    ),
+    index("assistant_workspace_spending_day_idx").on(t.actorId, t.budgetDay),
+    index("assistant_workspace_spending_hold_idx")
+      .on(t.actorId)
+      .where(sql`${t.state} IN ('reserved','uncertain')`),
+  ],
+);
+
+export const assistantProfileTasks = pgTable("assistant_profile_tasks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  actorId: text("actor_id").notNull(),
+  conversationId: uuid("conversation_id").notNull(),
+  sourceMessageId: uuid("source_message_id").notNull(),
+  requestKey: text("request_key").notNull(),
+  scope: jsonb("scope").notNull(),
+  authority: jsonb("authority").notNull(),
+  state: text("state").notNull().default("proposed"),
+  version: integer("version").notNull().default(1),
+  pauseReason: text("pause_reason"),
+  leaseToken: integer("lease_token").notNull().default(0),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  workerId: text("worker_id"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export const assistantProfileTaskItems = pgTable(
+  "assistant_profile_task_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taskId: uuid("task_id").notNull(),
+    profileId: uuid("profile_id").notNull(),
+    profileNameSnapshot: text("profile_name_snapshot")
+      .notNull()
+      .default("Unavailable profile"),
+    eventYear: integer("event_year"),
+    state: text("state").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    reason: text("reason"),
+    evidenceIds: jsonb("evidence_ids").notNull().default([]),
+    receiptIds: jsonb("receipt_ids").notNull().default([]),
+    actionIds: jsonb("action_ids").notNull().default([]),
+    ordinal: integer("ordinal").notNull(),
+  },
+);
+export const assistantProfileTaskRuns = pgTable("assistant_profile_task_runs", {
+  taskId: uuid("task_id").notNull(),
+  runId: uuid("run_id").notNull(),
+  batchNumber: integer("batch_number").notNull(),
+  itemIds: jsonb("item_ids").notNull(),
+  settled: boolean("settled").notNull().default(false),
+});
+
+export const assistantProfileTaskCommands = pgTable(
+  "assistant_profile_task_commands",
+  {
+    taskId: uuid("task_id").notNull(),
+    requestKey: text("request_key").notNull(),
+    payload: jsonb("payload").notNull(),
+  },
+);
+export const assistantProfileTaskEvidence = pgTable(
+  "assistant_profile_task_evidence",
+  {
+    taskId: uuid("task_id").notNull(),
+    profileId: uuid("profile_id").notNull(),
+    evidenceId: text("evidence_id").notNull(),
+    data: jsonb("data").notNull(),
+  },
+);
+export const assistantProfileTaskChangeEvidence = pgTable(
+  "assistant_profile_task_change_evidence",
+  {
+    taskId: uuid("task_id").notNull(),
+    profileId: uuid("profile_id").notNull(),
+    kind: text("kind").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    arguments: jsonb("arguments").notNull(),
+    evidenceIds: jsonb("evidence_ids").notNull(),
+  },
 );

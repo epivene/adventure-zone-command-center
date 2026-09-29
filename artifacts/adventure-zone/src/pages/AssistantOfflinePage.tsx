@@ -553,6 +553,11 @@ export default function AssistantOfflinePage() {
           <p className="mt-1">
             AI chat needs internet. Documents and images are not downloaded.
           </p>
+          <p className="mt-1">
+            Prepared copies can remain here after a conversation is archived or
+            moved to Trash. Sync checks its current status online; restore the
+            conversation before syncing drafts.
+          </p>
         </div>
         <a
           href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/assistant/workspace${snapshot ? `/${encodeURIComponent(snapshot.conversation.id)}` : ""}`}

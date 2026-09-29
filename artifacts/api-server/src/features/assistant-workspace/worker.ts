@@ -1,5 +1,11 @@
+import { buildConversationContext } from "./conversation-context";
 import { randomUUID } from "node:crypto";
-import type { Evidence, ModelPort, ToolRegistry } from "./contracts";
+import type {
+  Evidence,
+  ModelPort,
+  ToolRegistry,
+  RunContext,
+} from "./contracts";
 import type { ConversationStore } from "./conversation-store";
 import { runTurn } from "./orchestrator";
 import type { RunStore } from "./run-store";
@@ -12,6 +18,14 @@ export interface WorkerDependencies {
   allowedActorIds: string[];
   maxSteps: number;
   maxTokens: number;
+  taskContext?(context: RunContext): Promise<string>;
+  profileTasks?: {
+    enabled(): boolean;
+    dispatchNextTaskBatch(workerId: string): Promise<boolean>;
+    reconcileTaskRun(runId: string): Promise<void>;
+    check(context: RunContext): Promise<void>;
+  };
+  historicalEvidence?(context: RunContext): Promise<Evidence[]>;
   evidence(
     organizationId: string | null,
     eventYear: number | null,
@@ -27,6 +41,8 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
     if (busy || stopped) return;
     busy = true;
     try {
+      if (deps.profileTasks?.enabled())
+        await deps.profileTasks.dispatchNextTaskBatch(workerId);
       const run = await deps.runs.claim(workerId);
       if (!run) return;
       const control = new AbortController();
@@ -41,48 +57,81 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
         if (!deps.allowedActorIds.includes(run.actorId))
           throw new Error("ASSISTANT_ACCESS_DENIED");
         if (run.cancelRequested) control.abort();
+        const context: RunContext = {
+          taskId: run.input.taskId,
+          actor: run.input.actor,
+          conversationId: run.conversationId,
+          runId: run.id,
+          selection: run.input.selection,
+          grants: run.input.grants,
+          signal: control.signal,
+        };
+        const taskText = run.input.taskId
+          ? await deps.taskContext?.(context)
+          : null;
         const savedContext =
           run.turn?.context ??
-          (await deps.conversations.context(
-            run.actorId,
-            run.conversationId,
-            run.input.sourceMessageId,
-          ));
+          (taskText
+            ? buildConversationContext(
+                [
+                  {
+                    id: run.input.sourceMessageId,
+                    role: "user",
+                    text: taskText,
+                    sequence: 0,
+                    createdAt: new Date().toISOString(),
+                    runId: run.id,
+                    requestedScope: run.input.selection,
+                    resultScope: null,
+                  },
+                ],
+                1,
+              )
+            : await deps.conversations.context(
+                run.actorId,
+                run.conversationId,
+                run.input.sourceMessageId,
+              ));
         if (savedContext.sourceMessageId !== run.input.sourceMessageId)
           throw new Error("ASSISTANT_SOURCE_MESSAGE_MISSING");
         await deps.runs.check(run.actorId, run.id, run.leaseToken);
-        await deps.conversations.saveSummary(
-          run.actorId,
-          run.conversationId,
-          savedContext.memory,
-        );
+        if (!run.input.taskId)
+          await deps.conversations.saveSummary(
+            run.actorId,
+            run.conversationId,
+            savedContext.memory,
+          );
         await deps.runs.event(run.actorId, run.id, run.leaseToken, "progress", {
           text: "Reading conversation and current business rules",
         });
         const model = deps.modelFor?.(run.input.model) ?? deps.model;
+        const checkTask = async () => {
+          if (run.input.taskId) {
+            if (!deps.profileTasks?.enabled())
+              throw new Error("ASSISTANT_TASK_PAUSED");
+            await deps.profileTasks.check(context);
+          }
+        };
+        await checkTask();
         const output = await runTurn(
+          context,
           {
-            actor: run.input.actor,
-            conversationId: run.conversationId,
-            runId: run.id,
-            selection: run.input.selection,
-            grants: run.input.grants,
-            signal: control.signal,
-          },
-          {
-            next: (input) =>
-              model.next({
+            next: async (input) => {
+              await checkTask();
+              return model.next({
                 ...input,
                 attachmentScope: {
                   actorId: run.actorId,
                   conversationId: run.conversationId,
                   sourceMessageId: run.input.sourceMessageId,
                 },
-              }),
+              });
+            },
           },
           {
             definitions: deps.tools.definitions.bind(deps.tools),
             async execute(context, call) {
+              await checkTask();
               await deps.runs.check(run.actorId, run.id, run.leaseToken);
               await deps.runs.event(
                 run.actorId,
@@ -112,16 +161,19 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
               turns: savedContext.turns,
               context: savedContext,
               state: run.input.selection,
-              evidence: (
-                await Promise.all(
-                  (run.input.selection.organizationIds.length
-                    ? run.input.selection.organizationIds
-                    : [null]
-                  ).map((id) =>
-                    deps.evidence(id, run.input.selection.eventYear),
-                  ),
-                )
-              ).flat(),
+              evidence: [
+                ...(
+                  await Promise.all(
+                    (run.input.selection.organizationIds.length
+                      ? run.input.selection.organizationIds
+                      : [null]
+                    ).map((id) =>
+                      deps.evidence(id, run.input.selection.eventYear),
+                    ),
+                  )
+                ).flat(),
+                ...((await deps.historicalEvidence?.(context)) ?? []),
+              ],
               checkpoint: run.turn,
             }),
             save: (turn) =>
@@ -130,12 +182,13 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
           },
           { maxSteps: deps.maxSteps, maxTokens: deps.maxTokens },
         );
-        await deps.conversations.append(
-          run.actorId,
-          run.conversationId,
-          run.requestKey,
-          { role: "assistant", text: output.text.slice(0, 20000) },
-        );
+        if (!run.input.taskId)
+          await deps.conversations.append(
+            run.actorId,
+            run.conversationId,
+            run.requestKey,
+            { role: "assistant", text: output.text.slice(0, 20000) },
+          );
         await deps.runs.event(
           run.actorId,
           run.id,
@@ -175,6 +228,7 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
       } finally {
         clearInterval(heartbeat);
         active.delete(run.id);
+        if (run.input.taskId) await deps.profileTasks?.reconcileTaskRun(run.id);
       }
     } finally {
       busy = false;
