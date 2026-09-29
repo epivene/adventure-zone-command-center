@@ -44,5 +44,6 @@ A fresh read-only reviewer identified scope falling back after a completed run, 
 
 ## Header clipping follow-up
 
-The full Assistant workspace now measures the visible app header and follows its height as Incoming Calls changes. At 1299×621 with Incoming Calls enabled and off, the header was 151px tall and the workspace began at 151px; the call control ended at 140px. The focused session suite passes (4 tests), the frontend build passes, and typecheck reports no diagnostics in the changed files.
+The full Assistant workspace now measures the visible app header and follows its height as Incoming Calls changes. A resize observer updates the offset when the header changes size.
 
+At 1299×621 with Incoming Calls enabled and off, the header was 151px tall and the workspace began at 151px; the call control ended at 140px. The focused session suite passes (4 tests), the frontend build passes, and typecheck reports no diagnostics in the changed files.
