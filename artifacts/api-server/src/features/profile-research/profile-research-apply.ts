@@ -95,6 +95,9 @@ export class ProfileResearchApplyService {
 
     const requested = [...new Set(input.suggestionIds)];
     const byId = new Map(run.suggestions.map((suggestion) => [suggestion.id, suggestion]));
+    const dateSuggestionCount = run.suggestions.filter((suggestion) =>
+      suggestion.targetKind === "event_date_fact" && suggestion.reviewStatus === "pending",
+    ).length;
     const result: ProfileResearchApplyResult = { applied: [], stale: [], invalid: [], missing: [] };
 
     for (const id of requested) {
@@ -139,6 +142,10 @@ export class ProfileResearchApplyService {
           if (!startsOn) throw new Error("The event date candidate needs review before it can be saved.");
           if (!/^\d{4}-\d{2}-\d{2}$/.test(startsOn) || (endsOn && !/^\d{4}-\d{2}-\d{2}$/.test(endsOn)))
             throw new Error("The suggested event date is invalid.");
+          if (startsOn < new Date().toISOString().slice(0, 10))
+            throw new Error("A past date cannot fill the next event date.");
+          const needsReview = status === "needs_review" || suggestion.conflict
+            || suggestion.confidence !== "high" || dateSuggestionCount > 1;
           const fact = {
             organizationId: input.profileId,
             startsOn,
@@ -152,10 +159,10 @@ export class ProfileResearchApplyService {
             sourceRecordId: null,
             sourcePointers: [],
             researchedAt: new Date(source.retrievedAt),
-            verifiedAt: status === "confirmed" ? new Date() : null,
+            verifiedAt: status === "confirmed" && !needsReview ? new Date() : null,
             createdBy: run.requestedBy,
           };
-          if (status === "needs_review" || suggestion.conflict) {
+          if (needsReview) {
             await this.eventDates.markNeedsReview(fact);
           } else {
             await this.eventDates.supersedeActiveFact({ ...fact, status });

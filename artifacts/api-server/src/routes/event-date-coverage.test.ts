@@ -16,6 +16,7 @@ describe("event date coverage routes", () => {
         createRun: vi.fn(async () => ({ id: "run-1", batchSize: 25 })),
         getRun: vi.fn(async () => ({ id: "run-1", status: "queued", items: [] })),
         retryItem: vi.fn(async () => ({ id: "item-1", status: "queued" })),
+        listAttemptedOrganizationIds: vi.fn(async () => [] as string[]),
       },
       facts: { listFacts: vi.fn(async () => []), review: vi.fn(async () => ({ id: "fact-1" })) },
       canStartRun: vi.fn(() => true),
@@ -43,6 +44,22 @@ describe("event date coverage routes", () => {
     expect((await request(app).post("/event-date-coverage/runs").set("Authorization", `Bearer ${token}`).send({ batchSize: 0 })).status).toBe(400);
     expect((await request(app).post("/event-date-coverage/runs").set("Authorization", `Bearer ${token}`).send({ organizationIds: ["00000000-0000-4000-8000-000000000001"] })).status).toBe(201);
     expect(dependencies.jobs.createRun).toHaveBeenCalledWith(expect.objectContaining({ batchSize: 25 }));
+  });
+
+  it("skips previously attempted profiles when starting the next batch", async () => {
+    const { app, token, dependencies } = setup();
+    const priorId = "00000000-0000-4000-8000-000000000001";
+    const nextId = "00000000-0000-4000-8000-000000000002";
+    dependencies.coverage.list.mockResolvedValue({
+      ...coveragePage,
+      records: [{ organizationId: priorId }, { organizationId: nextId }],
+    } as never);
+    dependencies.jobs.listAttemptedOrganizationIds.mockResolvedValue([priorId]);
+
+    expect((await request(app).post("/event-date-coverage/runs").set("Authorization", `Bearer ${token}`).send({})).status).toBe(201);
+    expect(dependencies.jobs.createRun).toHaveBeenCalledWith(expect.objectContaining({ organizationIds: [nextId] }));
+    dependencies.jobs.listAttemptedOrganizationIds.mockResolvedValue([priorId, nextId]);
+    expect((await request(app).post("/event-date-coverage/runs").set("Authorization", `Bearer ${token}`).send({})).status).toBe(409);
   });
 
   it("supports retry and review actions and reports rate limits", async () => {

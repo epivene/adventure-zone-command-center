@@ -26,14 +26,6 @@ function hasReachableContact(profile: EventProfile) {
   return profile.contacts.some((contact) => clean(contact.email) || clean(contact.phone));
 }
 
-function hasUpcomingDatedBooking(profile: EventProfile, now: Date) {
-  return profile.bookings.some((booking) => booking.startsAt && booking.startsAt.getTime() >= now.getTime());
-}
-
-function hasHistoricalDatedBooking(profile: EventProfile, now: Date) {
-  return profile.bookings.some((booking) => booking.startsAt && booking.startsAt.getTime() < now.getTime());
-}
-
 function sanitizeIdentityClue(value: string) {
   const normalized = clean(value).slice(0, MAX_CLUE_LENGTH);
   if (!normalized) return "";
@@ -59,7 +51,7 @@ function addFact(
   facts.push({ key, value: normalized, source });
 }
 
-export function detectProfileResearchGaps(profile: EventProfile, now = new Date()): ProfileResearchGap[] {
+export function detectProfileResearchGaps(profile: EventProfile): ProfileResearchGap[] {
   const gaps: ProfileResearchGap[] = [];
   if (!clean(profile.place.website)) {
     gaps.push({ field: "website", label: "Website", targetKind: "organization", targetId: profile.id });
@@ -76,11 +68,7 @@ export function detectProfileResearchGaps(profile: EventProfile, now = new Date(
     const primary = profile.contacts.find((contact) => contact.isPrimary) ?? profile.contacts[0];
     gaps.push({ field: "contact_method", label: "Contact email or phone", targetKind: "contact", targetId: primary?.id ?? null });
   }
-  if (
-    hasHistoricalDatedBooking(profile, now) &&
-    !hasUpcomingDatedBooking(profile, now) &&
-    !profile.effectiveEventDate
-  ) {
+  if (!profile.effectiveEventDate) {
     gaps.push({ field: "next_event_dates", label: "Next event dates", targetKind: "event_date_fact", targetId: null });
   }
   return gaps;
@@ -88,7 +76,6 @@ export function detectProfileResearchGaps(profile: EventProfile, now = new Date(
 
 export function buildProfileResearchContext(
   input: ProfileResearchContextInput,
-  now = new Date(),
 ): ProfileResearchContext {
   const { profile, mode } = input;
   const facts: ProfileResearchKnownFact[] = [];
@@ -140,6 +127,6 @@ export function buildProfileResearchContext(
     mode,
     knownFacts: facts,
     searchClues: [...clueSet].slice(0, MAX_SEARCH_CLUES),
-    gaps: detectProfileResearchGaps(profile, now),
+    gaps: detectProfileResearchGaps(profile),
   };
 }

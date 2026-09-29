@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { buildProfileResearchContext, detectProfileResearchGaps } from "./profile-research-context";
 
-const now = new Date("2026-08-18T18:00:00.000Z");
-
 function profile(overrides: Partial<EventProfile> = {}): EventProfile {
   return {
     id: "10000000-0000-4000-8000-000000000001",
@@ -51,7 +49,7 @@ function profile(overrides: Partial<EventProfile> = {}): EventProfile {
 
 describe("profile research context", () => {
   it("detects useful missing profile information", () => {
-    const gaps = detectProfileResearchGaps(profile(), now);
+    const gaps = detectProfileResearchGaps(profile());
     expect(gaps.map((gap) => gap.field)).toEqual(expect.arrayContaining([
       "website",
       "phone",
@@ -59,6 +57,14 @@ describe("profile research context", () => {
       "next_event_dates",
     ]));
     expect(gaps.map((gap) => gap.field)).not.toContain("location");
+  });
+
+  it("researches the next date even when the profile has no dated booking history", () => {
+    const missingDates = profile({ bookings: [] });
+    expect(detectProfileResearchGaps(missingDates).map((gap) => gap.field))
+      .toContain("next_event_dates");
+    expect(buildProfileResearchContext({ profile: missingDates, mode: "quick" }).gaps)
+      .toContainEqual(expect.objectContaining({ field: "next_event_dates", targetKind: "event_date_fact" }));
   });
 
   it("does not flag next event dates when a researched effective date exists", () => {
@@ -71,12 +77,12 @@ describe("profile research context", () => {
       },
     });
 
-    expect(detectProfileResearchGaps(complete, now).map((gap) => gap.field))
+    expect(detectProfileResearchGaps(complete).map((gap) => gap.field))
       .not.toContain("next_event_dates");
   });
 
   it("builds search clues from structured profile facts", () => {
-    const context = buildProfileResearchContext({ profile: profile(), mode: "quick" }, now);
+    const context = buildProfileResearchContext({ profile: profile(), mode: "quick" });
     expect(context.searchClues).toContain("River Days Fargo ND");
     expect(context.knownFacts).toContainEqual({ key: "location", value: "Fargo, ND", source: "crm" });
   });
@@ -93,7 +99,7 @@ describe("profile research context", () => {
         "melissa@example.com",
         "<p>raw ACT html</p>",
       ],
-    }, now);
+    });
 
     expect(context.searchClues).toContain("River Days Melissa Anderson Fargo ND");
     expect(context.searchClues).toContain("River Days Riverfront Park Fargo ND");
@@ -118,7 +124,7 @@ describe("profile research context", () => {
         locationRegion: null,
       }],
     });
-    expect(detectProfileResearchGaps(complete, now).map((gap) => gap.field)).not.toContain("contact_method");
+    expect(detectProfileResearchGaps(complete).map((gap) => gap.field)).not.toContain("contact_method");
   });
 
   it("caps minimized history clues", () => {
@@ -126,7 +132,7 @@ describe("profile research context", () => {
       profile: profile(),
       mode: "quick",
       historyIdentityClues: Array.from({ length: 20 }, (_, index) => `Contact Person ${index}`),
-    }, now);
+    });
     expect(context.knownFacts.filter((fact) => fact.source === "history")).toHaveLength(8);
     expect(context.searchClues.length).toBeLessThanOrEqual(12);
   });
