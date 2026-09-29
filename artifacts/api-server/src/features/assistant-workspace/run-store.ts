@@ -42,6 +42,10 @@ function map(r: any): SavedRun {
     turn: r.checkpoint.turn,
   };
 }
+function sameSelection(a: Selection, b: Selection): boolean {
+  const key = (s: Selection) => JSON.stringify([[...s.organizationIds].sort(), s.batchId ?? null, s.bookingId, s.threadId, s.draftId, s.eventYear]);
+  return key(a) === key(b);
+}
 export class RunStore {
   constructor(private readonly db: Queryable) {}
   async findSubmitted(
@@ -50,6 +54,7 @@ export class RunStore {
     requestKey: string,
     text: string,
     attachments: Screenshot[] = [],
+    selection?: Selection,
   ): Promise<SavedRun | null> {
     const existing = await this.db.query(
       `SELECT r.*, (m.body=$4 AND m.attachments=$5::jsonb) AS same_message
@@ -60,7 +65,9 @@ export class RunStore {
     if (!existing.rows[0]) return null;
     if (!existing.rows[0].same_message)
       throw new Error("ASSISTANT_MESSAGE_CONFLICT");
-    return map(existing.rows[0]);
+    const saved = map(existing.rows[0]);
+    if (selection && !sameSelection(saved.input.selection, selection)) throw new Error("ASSISTANT_MESSAGE_CONFLICT");
+    return saved;
   }
   async submit(
     input: Omit<RunInput, "sourceMessageId">,
@@ -98,7 +105,9 @@ export class RunStore {
       ],
     );
     if (!existing.rows[0]) throw new Error("ASSISTANT_MESSAGE_CONFLICT");
-    return map(existing.rows[0]);
+    const saved = map(existing.rows[0]);
+    if (!sameSelection(saved.input.selection, input.selection)) throw new Error("ASSISTANT_MESSAGE_CONFLICT");
+    return saved;
   }
   async enqueue(input: RunInput): Promise<SavedRun> {
     const r = await this.db.query(

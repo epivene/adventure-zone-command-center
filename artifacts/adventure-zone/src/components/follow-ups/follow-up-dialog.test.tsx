@@ -1,0 +1,35 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { FollowUpDialog } from "./follow-up-dialog";
+import { businessDateKey } from "@/lib/business-date";
+const actions = vi.hoisted(() => ({ createFollowUpAction: vi.fn(), editFollowUpAction: vi.fn() }));
+vi.mock("@/actions/follow-ups", () => actions);
+afterEach(() => vi.clearAllMocks());
+it("opens a portaled scheduler and retains input when a save fails", async () => {
+  actions.createFollowUpAction.mockResolvedValue({ok:false,error:"Try again"});
+  const saved=vi.fn();
+  const {container}=render(<FollowUpDialog open onOpenChange={() => {}} profileId="p1" onSaved={saved} />);
+  expect(screen.getByRole("dialog")).toBeVisible();
+  expect(container).not.toContainElement(screen.getByRole("dialog"));
+  fireEvent.change(screen.getByLabelText("Due date"),{target:{value:"03/08/2026"}});
+  fireEvent.click(screen.getByRole("button",{name:"Save follow-up"}));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Try again");
+  expect(screen.getByLabelText("Due date")).toHaveValue("03/08/2026");
+  expect(businessDateKey(actions.createFollowUpAction.mock.calls[0][0].dueAt)).toBe("2026-03-08");
+  expect(saved).not.toHaveBeenCalled();
+});
+it("rejects impossible dates and prevents duplicate saves", async () => {
+  let finish: (value: unknown) => void = () => {};
+  actions.createFollowUpAction.mockImplementation(() => new Promise(resolve => { finish=resolve; }));
+  const close=vi.fn(), saved=vi.fn();
+  render(<FollowUpDialog open onOpenChange={close} profileId="p1" onSaved={saved} />);
+  fireEvent.change(screen.getByLabelText("Due date"),{target:{value:"02/30/2026"}});
+  expect(screen.getByRole("button",{name:"Save follow-up"})).toBeDisabled();
+  fireEvent.click(screen.getByRole("button",{name:"Tomorrow"}));
+  fireEvent.click(screen.getByRole("button",{name:"Save follow-up"}));
+  expect(screen.getByRole("button",{name:"Saving…"})).toBeDisabled();
+  finish({ok:true,followUp:{id:"f1"}});
+  await waitFor(() => expect(close).toHaveBeenCalledWith(false));
+  expect(saved).toHaveBeenCalledWith({id:"f1"});
+  expect(actions.createFollowUpAction).toHaveBeenCalledTimes(1);
+});

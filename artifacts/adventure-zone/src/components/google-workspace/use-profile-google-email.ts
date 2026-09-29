@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   getGoogleProfileEmails,
@@ -34,6 +34,8 @@ export function useProfileGoogleEmail(
   organizationId: string,
   currentYear = new Date().getUTCFullYear(),
 ): ProfileGoogleEmailState {
+  const requestVersion = useRef(0);
+  const [loadedFor, setLoadedFor] = useState(organizationId);
   const [conversations, setConversations] = useState<
     GoogleProfileEmailConversation[]
   >([]);
@@ -41,10 +43,14 @@ export function useProfileGoogleEmail(
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
+    const version = ++requestVersion.current;
+    setLoadedFor(organizationId);
+    setConversations([]);
     setLoading(true);
     setError(null);
     try {
       const result = await getGoogleProfileEmails(organizationId);
+      if (version !== requestVersion.current) return;
       const historical = Array.isArray((result as any).historicalConversations)
         ? ((result as any)
             .historicalConversations as GoogleProfileEmailConversation[])
@@ -59,6 +65,7 @@ export function useProfileGoogleEmail(
         ),
       );
     } catch (caught) {
+      if (version !== requestVersion.current) return;
       setConversations([]);
       setError(
         caught instanceof Error
@@ -66,24 +73,26 @@ export function useProfileGoogleEmail(
           : "Could not load Google history.",
       );
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   }, [organizationId]);
 
   useEffect(() => {
     void reload();
+    return () => { requestVersion.current++; };
   }, [reload]);
 
+  const visible = loadedFor === organizationId ? conversations : [];
   return {
-    conversations,
-    current: conversations.filter(
+    conversations: visible,
+    current: visible.filter(
       (conversation) => conversationYear(conversation) === currentYear,
     ),
-    historical: conversations.filter(
+    historical: visible.filter(
       (conversation) => conversationYear(conversation) !== currentYear,
     ),
-    loading,
-    error,
+    loading: loadedFor !== organizationId || loading,
+    error: loadedFor === organizationId ? error : null,
     reload,
   };
 }

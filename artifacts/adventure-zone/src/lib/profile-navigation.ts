@@ -38,3 +38,25 @@ export function readProfileOriginLabel() {
     return "Profiles";
   }
 }
+const PROFILE_RETURN_KEY = "adventure-zone.profile-return";
+function safeReturnPath(path: unknown): path is string {
+  return typeof path === "string" && /^\/(?![\/\\])/.test(path) && !/[\\\r\n]/.test(path);
+}
+export function saveProfileReturnState(path: string, scrollY: number): void {
+  try {
+    if (!safeReturnPath(path)) { window.sessionStorage.removeItem(PROFILE_RETURN_KEY); return; }
+    window.sessionStorage.setItem(PROFILE_RETURN_KEY, JSON.stringify({ path, scrollY: Math.max(0, scrollY) }));
+    rememberProfileOrigin(path);
+  } catch { /* Storage is optional. */ }
+}
+export function readProfileReturnState(): { path: string; scrollY: number } | null {
+  try {
+    const state = JSON.parse(window.sessionStorage.getItem(PROFILE_RETURN_KEY) || "null");
+    return state && safeReturnPath(state.path) && Number.isFinite(state.scrollY) && state.scrollY >= 0 ? state : null;
+  } catch { return null; }
+}
+
+export function profileReturnPath(search: string): string {
+  const target = new URLSearchParams(search).get("returnTo");
+  return safeReturnPath(target) ? target : "/profiles";
+}

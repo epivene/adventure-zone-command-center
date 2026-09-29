@@ -55,7 +55,7 @@ const profile = {
 } as any;
 
 describe("EventProfileWorkspace profile follow-up creation", () => {
-  it("exposes keyboard-friendly YYYY-MM-DD entry in the follow-up scheduler", () => {
+  it("exposes keyboard-friendly MM/DD/YYYY entry in the follow-up scheduler", () => {
     render(<EventProfileWorkspace profile={profile} context={{ action: "follow-up" }} />);
 
     expect(screen.getByLabelText("Follow-up type")).toBeVisible();
@@ -65,10 +65,10 @@ describe("EventProfileWorkspace profile follow-up creation", () => {
     expect(save).toBeDisabled();
 
     expect(dueDate).toHaveAttribute("inputmode", "numeric");
-    expect(dueDate).toHaveAttribute("placeholder", "YYYY-MM-DD");
-    fireEvent.change(dueDate, { target: { value: "2027-06-20" } });
+    expect(dueDate).toHaveAttribute("placeholder", "MM/DD/YYYY");
+    fireEvent.change(dueDate, { target: { value: "06/20/2027" } });
 
-    expect(dueDate).toHaveValue("2027-06-20");
+    expect(dueDate).toHaveValue("06/20/2027");
     expect(save).toBeEnabled();
   });
 

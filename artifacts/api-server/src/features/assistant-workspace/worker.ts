@@ -25,6 +25,7 @@ export interface WorkerDependencies {
     reconcileTaskRun(runId: string): Promise<void>;
     check(context: RunContext): Promise<void>;
   };
+  profileBrief?(context: RunContext): Promise<Evidence[]>;
   historicalEvidence?(context: RunContext): Promise<Evidence[]>;
   evidence(
     organizationId: string | null,
@@ -162,6 +163,7 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
               context: savedContext,
               state: run.input.selection,
               evidence: [
+                ...((await deps.profileBrief?.(context)) ?? []),
                 ...(
                   await Promise.all(
                     (run.input.selection.organizationIds.length

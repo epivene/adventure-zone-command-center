@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, CalendarDays, ContactRound, House, LayoutGrid, MapPinned, Megaphone, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
+import { Bot, ArrowLeft, CalendarDays, ContactRound, House, LayoutGrid, MapPinned, Megaphone, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import { AppMenu } from "./app-menu";
 import { readBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
@@ -9,7 +9,7 @@ type MobileItem = { href: string; label: string; icon: LucideIcon };
 function itemsForWorkspace(workspace: AdminWorkspace): MobileItem[] {
   if (workspace === "booking") {
     return [
-      { href: "/command", label: "Panel", icon: LayoutGrid },
+      { href: "/assistant/workspace", label: "Assistant", icon: Bot },
       { href: "/today", label: "Today", icon: House },
       { href: "/profiles", label: "Profiles", icon: ContactRound },
       { href: "/schedule", label: "Schedule", icon: CalendarDays },

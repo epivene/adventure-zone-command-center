@@ -1,3 +1,7 @@
+import { loadProfileBrief } from "./profile-brief";
+import { submitScopedMessage } from "./scoped-submit";
+import type { RunInput } from "./run-store";
+import type { Screenshot } from "./contracts";
 import { loadTaskChangeProof } from "./profile-task-evidence";
 import { guardTaskMutation } from "./profile-task-safety";
 import { profileTaskView } from "./profile-task-view";
@@ -213,6 +217,7 @@ export function createWorkspaceRuntime() {
     allowedActorIds: config.allowedActorIds,
     maxSteps: config.maxSteps,
     maxTokens: config.maxRunTokens,
+    profileBrief: (context) => loadProfileBrief(pool, context),
     historicalEvidence: (context) => researchCache.listIndex(context),
     evidence: async (organizationId, eventYear) =>
       (
@@ -258,6 +263,17 @@ export function createWorkspaceRuntime() {
           reviewHref: null,
         };
       }
+    },
+    submitScoped: async (input: Omit<RunInput, "sourceMessageId">, text: string, attachments: Screenshot[]) => {
+      const connection = await pool.connect();
+      try {
+        await connection.query("BEGIN");
+        const run = await submitScopedMessage(connection, input, text, attachments);
+        await connection.query("COMMIT");
+        return run;
+      } catch (error) {
+        await connection.query("ROLLBACK"); throw error;
+      } finally { connection.release(); }
     },
     campaigns,
     config,

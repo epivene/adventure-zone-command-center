@@ -91,6 +91,7 @@ export type Conversation = {
   campaignReviews?: CampaignReview[];
   documentResults?: DocumentResult[];
   runs: {
+    selection?: Selection;
     id: string;
     status: string;
     usage: { steps: number; tokens: number; cost?: UsageCost };

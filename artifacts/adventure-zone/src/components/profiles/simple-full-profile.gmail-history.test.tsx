@@ -115,9 +115,9 @@ describe("SimpleFullProfile Gmail history", () => {
     render(<SimpleFullProfile profile={profile} />);
 
     await waitFor(() => expect(googleWorkspace.getGoogleProfileEmails).toHaveBeenCalledWith(profile.id));
-    expect(screen.getByRole("button", { name: /2 Emails/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open emails" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /2 Emails/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Open emails" }));
     expect(screen.getByTestId("profile-google-email-panel")).toHaveTextContent(
       "Gmail history for 11111111-1111-4111-8111-111111111111",
     );
@@ -125,9 +125,9 @@ describe("SimpleFullProfile Gmail history", () => {
 
   it("keeps notes and Gmail in separate expandable sections", async () => {
     render(<SimpleFullProfile profile={profile} />);
-    await waitFor(() => expect(screen.getByRole("button", { name: /2 Emails/ })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Open emails" })).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: /Notes/ }));
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
     expect(screen.getByRole("heading", { name: "Activity history" })).toBeInTheDocument();
     expect(screen.getByTestId("activity-timeline")).toBeInTheDocument();
     expect(screen.queryByTestId("profile-google-email-panel")).not.toBeInTheDocument();

@@ -3,6 +3,7 @@ export type AdminWorkspace = "command" | "booking" | "marketing" | "operations" 
 export const BOOKING_RETURN_STORAGE_KEY = "adventure-zone:booking-return-path";
 
 const bookingPrefixes = [
+  "/assistant/workspace",
   "/today",
   "/profiles",
   "/organizations",

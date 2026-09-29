@@ -174,7 +174,7 @@ describe("OrganizationList profile summary cards", () => {
     expect(screen.getByTestId(/^profile-card-/)).toHaveClass(
       "rounded-md",
     );
-    expect(screen.getByTestId("profile-list-workspace")).toHaveClass(
+    expect(screen.getByTestId("profile-list-workspace")).not.toHaveClass(
       "lg:grid-cols-[minmax(19rem,0.72fr)_minmax(0,1.28fr)]",
     );
     expect(screen.queryByTestId("profile-avatar-link")).not.toBeInTheDocument();
@@ -335,6 +335,6 @@ describe("OrganizationList profile summary cards", () => {
     );
 
     fireEvent.click(card);
-    expect(card).toHaveAttribute("aria-current", "true");
+    expect(window.location.pathname).toContain("/profiles/");
   });
 });

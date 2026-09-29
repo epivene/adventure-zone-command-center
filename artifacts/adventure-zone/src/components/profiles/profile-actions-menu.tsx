@@ -25,12 +25,16 @@ export function ProfileActionsMenu({
   contactId,
   onAddNote,
   showAddNote = true,
+  showFollowUp = true,
+  onEdit,
   triggerLabel = "Actions",
 }: {
   profileId: string;
   contactId?: string | null;
   onAddNote?: () => void;
   showAddNote?: boolean;
+  showFollowUp?: boolean;
+  onEdit?: () => void;
   triggerLabel?: string;
 }) {
   const [lastResortOpen, setLastResortOpen] = useState(false);
@@ -65,7 +69,8 @@ export function ProfileActionsMenu({
             <DropdownMenuLabel>Profile actions</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {showAddNote ? <DropdownMenuItem onSelect={() => onAddNote?.()}>Add note</DropdownMenuItem> : null}
-            <DropdownMenuItem asChild><Link href={followUpHref}>Add follow-up</Link></DropdownMenuItem>
+            {onEdit ? <DropdownMenuItem onSelect={onEdit}>Edit profile</DropdownMenuItem> : null}
+            {showFollowUp ? <DropdownMenuItem asChild><Link href={followUpHref}>Add follow-up</Link></DropdownMenuItem> : null}
             <DropdownMenuItem onSelect={() => setEventFamilyOpen(true)}>Add to Event Family</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setFillerOpen(true)}>{fillerLabel}</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setLastResortOpen(true)}>{lastResortLabel}</DropdownMenuItem>
