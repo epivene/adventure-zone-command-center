@@ -93,6 +93,7 @@ function appFor(options?: {
   mappings?: typeof defaultMappings;
   archiveThread?: ReturnType<typeof vi.fn>;
   reply?: ReturnType<typeof vi.fn>;
+  labelImportError?: string;
 }) {
   const app = express();
   const selectedClient =
@@ -143,6 +144,12 @@ function appFor(options?: {
         listApprovedForOrganization: async (organizationId) =>
           organizationId === "org-1" ? options?.mappings ?? defaultMappings : [],
         organizationOwnsApprovedThread: async () => options?.ownsThread ?? true,
+      },
+      labelImportService: {
+        reconcileOrganization: async () => {
+          if (options?.labelImportError) throw new Error(options.labelImportError);
+          return options?.mappings ?? defaultMappings;
+        },
       },
       archiveService: { archiveApprovedThread: archiveThread },
       replyService: {
@@ -209,6 +216,16 @@ describe("Google Workspace profile email routes", () => {
       unavailableThreadCount: 0,
       conversations: [],
     });
+  });
+
+  it("does not report zero emails when an unlinked Gmail label needs reconnection", async () => {
+    const response = await request(appFor({
+      mappings: [],
+      labelImportError: "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
+    })).get("/google-workspace/profiles/org-1/emails");
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({ error: "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED" });
   });
 
   it("keeps healthy live threads visible when one historical thread is unavailable", async () => {
