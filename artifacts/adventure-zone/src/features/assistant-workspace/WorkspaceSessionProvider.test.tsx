@@ -79,6 +79,29 @@ it("keeps the composer and profile scope when expanding and returning", async ()
   ).toHaveLength(0);
 });
 
+it("places the full workspace below the actual app header height", async () => {
+  vi.mocked(workspaceApi).mockResolvedValue([] as any);
+  const route = memoryLocation({ path: "/assistant/workspace" });
+  render(
+    <Router hook={route.hook}>
+      <WorkspaceSessionProvider>
+        <header data-assistant-shell-header style={{ height: 124 }} />
+      </WorkspaceSessionProvider>
+    </Router>,
+  );
+  const workspace = document.querySelector<HTMLElement>("[data-assistant-workspace-host]");
+  expect(workspace).toBeInTheDocument();
+  await waitFor(() =>
+    expect(workspace?.style.getPropertyValue("--assistant-header-height")).toBe("124px"),
+  );
+  const header = document.querySelector<HTMLElement>("[data-assistant-shell-header]")!;
+  header.style.height = "166px";
+  window.dispatchEvent(new Event("resize"));
+  await waitFor(() =>
+    expect(workspace?.style.getPropertyValue("--assistant-header-height")).toBe("166px"),
+  );
+});
+
 it("closes the profile panel with Escape and restores focus", async () => {
   vi.mocked(workspaceApi).mockResolvedValue([] as any);
   const route = memoryLocation({ path: "/profiles/p1" });

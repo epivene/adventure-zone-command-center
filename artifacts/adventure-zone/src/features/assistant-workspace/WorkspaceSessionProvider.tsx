@@ -2,8 +2,10 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { useLocation } from "wouter";
@@ -92,6 +94,30 @@ export function WorkspaceSessionProvider({
   const host = useRef<HTMLDivElement>(null),
     opener = useRef<HTMLElement | null>(null);
   const full = /^\/assistant\/workspace(?:\/|$)/.test(location);
+  const [headerHeight, setHeaderHeight] = useState(64);
+  useLayoutEffect(() => {
+    if (!full) return;
+    const header = document.querySelector<HTMLElement>(
+      "[data-assistant-shell-header]",
+    );
+    if (!header) return;
+    const measure = () => {
+      const height =
+        header.getBoundingClientRect().height ||
+        Number.parseFloat(window.getComputedStyle(header).height) ||
+        header.offsetHeight;
+      if (height > 0) setHeaderHeight(Math.ceil(height));
+    };
+    measure();
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(header);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [full]);
   const routeId = full ? location.split("/")[3] : undefined;
   const current = sessions.find((item) => item.key === activeKey);
   function openConversation(id?: string) {
@@ -316,13 +342,15 @@ export function WorkspaceSessionProvider({
       </div>
       <div
         ref={host}
+        data-assistant-workspace-host
         hidden={!full && !panelOpen}
         role={!full && panelOpen ? "dialog" : undefined}
         aria-label="Assistant"
         aria-modal={!full && panelOpen && narrow ? true : undefined}
+        style={full ? ({ "--assistant-header-height": `${headerHeight}px` } as CSSProperties) : undefined}
         className={
           full
-            ? "fixed inset-x-0 bottom-[calc(73px+max(0.5rem,env(safe-area-inset-bottom)))] top-0 z-20 md:bottom-0 overflow-y-auto overflow-x-hidden bg-background px-3 pb-24 md:top-[64px] md:px-6"
+            ? "fixed inset-x-0 bottom-[calc(73px+max(0.5rem,env(safe-area-inset-bottom)))] top-0 z-20 md:bottom-0 overflow-y-auto overflow-x-hidden bg-background px-3 pb-24 md:top-[var(--assistant-header-height)] md:px-6"
             : "fixed inset-y-0 right-0 z-40 w-full overflow-y-auto overflow-x-hidden border-l bg-background p-3 shadow-xl lg:w-[48vw] lg:max-w-[720px]"
         }
       >

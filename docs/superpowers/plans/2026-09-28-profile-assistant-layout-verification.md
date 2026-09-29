@@ -41,3 +41,8 @@ A fresh read-only reviewer identified scope falling back after a completed run, 
 - Direct UI scope accepts profile IDs/year only. Related booking/thread/draft/batch references must continue through existing authorized server tools; client-injected related references are rejected.
 - Added transactional `scoped-submit` PGlite tests instead of the proposed separate scope route test file. Existing workspace route tests cover legacy requests. Some planned filenames did not exist; existing worker and context checks were used.
 - Live Gmail matching/OAuth, real model output, physical-phone keyboard behavior and production data were not exercised. This is a draft review candidate, not a deployment or claim that the repository-wide test suite is green.
+
+## Header clipping follow-up
+
+The full Assistant workspace now measures the visible app header and follows its height as Incoming Calls changes. At 1299×621 with Incoming Calls enabled and off, the header was 151px tall and the workspace began at 151px; the call control ended at 140px. The focused session suite passes (4 tests), the frontend build passes, and typecheck reports no diagnostics in the changed files.
+

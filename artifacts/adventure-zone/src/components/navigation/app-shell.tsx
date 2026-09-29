@@ -137,7 +137,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <IncomingCallingProvider><div className="min-h-[100dvh] bg-background text-foreground print:min-h-0">
       <AssistantNavigationContextSync />
       {!immersiveProfile ? (
-        <header className="sticky top-0 z-20 hidden border-b border-border bg-card/95 backdrop-blur md:block print:hidden">
+        <header data-assistant-shell-header className="sticky top-0 z-20 hidden border-b border-border bg-card/95 backdrop-blur md:block print:hidden">
           <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2.5 lg:px-6">
             <WorkspaceSwitcher workspace={workspace} />
             {primaryItems.length ? (
