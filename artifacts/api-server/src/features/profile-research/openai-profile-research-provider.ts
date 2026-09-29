@@ -13,7 +13,11 @@ import type { ProfileResearchSource, ResearchConfidence } from "./profile-resear
 
 type UrlCitation = { type: "url_citation"; url: string; title?: string };
 type ResponseContent = { type?: string; text?: string; annotations?: unknown[] };
-type ResponseOutput = { type?: string; content?: ResponseContent[] };
+type ResponseOutput = {
+  type?: string;
+  content?: ResponseContent[];
+  action?: { type?: string; url?: string; sources?: Array<{ type?: string; url?: string }> };
+};
 type ResponsesPayload = { output_text?: string; output?: ResponseOutput[] };
 
 type ParsedResearch = {
@@ -83,6 +87,18 @@ function extractCitations(payload: ResponsesPayload): UrlCitation[] {
       title: typeof annotation.title === "string" ? annotation.title : annotation.url,
     });
   }
+  for (const item of payload.output ?? []) {
+    if (item.type !== "web_search_call") continue;
+    const action = item.action;
+    const urls = [
+      ...(action?.type === "search" ? action.sources?.map((source) => source.url) ?? [] : []),
+      ...(action?.type === "open_page" || action?.type === "find_in_page" ? [action.url] : []),
+    ];
+    for (const url of urls) {
+      if (typeof url !== "string" || !isSafeResearchUrl(url) || unique.has(url)) continue;
+      unique.set(url, { type: "url_citation", url, title: url });
+    }
+  }
   return [...unique.values()];
 }
 
@@ -151,7 +167,7 @@ Return ONLY JSON with this shape:
   "deepSummary": ${input.mode === "deep" ? '"concise booking-agent brief synthesizing the most useful researched context"' : "null"}
 }
 
-Use only these writable field names in candidates when applicable: organization website, phone, address1, address2, city, region, postalCode, placeType; existing contact name, role, email, phone; existing booking name, city, region. Never return startsAt or endsAt as a booking candidate. Put future dates only in eventDateCandidates. For a recognized recurrence, return the recurrence rule and evidence but leave startsOn and endsOn null; application code calculates the date. Put useful facts that do not map cleanly to those writable fields in findings instead of dropping them. relatedEvents must be [] in Quick mode. All evidence URLs must be URLs from sources used or cited in this web-search response. Prefer official event/organization, government, tourism/chamber, or other clearly credible public sources. Do not propose booking status/probability, follow-ups, merges, deletions, or outreach actions as profile mutations. If identity is uncertain, return low confidence and no candidates that would write profile fields; you may still return clearly labeled low-risk research findings if their sources are valid.`;
+Use only these writable field names in candidates when applicable: organization website, phone, address1, address2, city, region, postalCode, placeType; existing contact name, role, email, phone; existing booking name, city, region. Never return startsAt or endsAt as a booking candidate. Put future dates only in eventDateCandidates. For a recognized recurrence, return the recurrence rule and evidence but leave startsOn and endsOn null; application code calculates the date. Put useful facts that do not map cleanly to those writable fields in findings instead of dropping them. relatedEvents must be [] in Quick mode. All evidence URLs must be exact URLs from pages used or cited in this web-search response; do not rewrite their paths or hostnames. Prefer official event/organization, government, tourism/chamber, or other clearly credible public sources. Do not propose booking status/probability, follow-ups, merges, deletions, or outreach actions as profile mutations. If identity is uncertain, return low confidence and no candidates that would write profile fields; you may still return clearly labeled low-risk research findings if their sources are valid.`;
 }
 
 export class OpenAiProfileResearchProvider implements ProfileResearchProvider {
@@ -169,6 +185,7 @@ export class OpenAiProfileResearchProvider implements ProfileResearchProvider {
       body: JSON.stringify({
         model: process.env.PROFILE_RESEARCH_OPENAI_MODEL || "gpt-5-mini",
         store: false,
+        include: ["web_search_call.action.sources"],
         tools: [{ type: "web_search", search_context_size: input.mode === "deep" ? "high" : "medium" }],
         input: promptFor(input),
       }),
