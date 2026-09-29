@@ -9,7 +9,7 @@ import type {
   OrganizationListPage,
 } from "@/features/organizations/organization-repository";
 import { apiFetch } from "@/lib/auth-token";
-import { ProfileDetailSheet } from "@/components/profiles/profile-detail-sheet";
+import { saveProfileReturnState } from "@/lib/profile-navigation";
 import { dealModelLabels } from "@/components/profiles/profile-at-a-glance";
 import { createFollowUpWorkbook } from "./follow-up-workbook";
 
@@ -101,10 +101,6 @@ export function OrganizationList({
   const [, setLocation] = useLocation();
   const [searchValue, setSearchValue] = useState(query.search);
   const [pendingSearch, setPendingSearch] = useState(false);
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
-    null,
-  );
-  const [desktopSplit, setDesktopSplit] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [followUpExporting, setFollowUpExporting] = useState(false);
   const [exportError, setExportError] = useState("");
@@ -221,25 +217,6 @@ export function OrganizationList({
   useEffect(() => {
     if (!loading && searchValue === query.search) setPendingSearch(false);
   }, [loading, query.search, searchValue]);
-  useEffect(() => {
-    const media = window.matchMedia?.("(min-width: 1024px)");
-    if (!media) return;
-    const sync = () => setDesktopSplit(media.matches);
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
-  }, []);
-  useEffect(() => {
-    if (!desktopSplit) {
-      setSelectedProfileId(null);
-      return;
-    }
-    setSelectedProfileId((current) =>
-      current && organizations.records.some((record) => record.id === current)
-        ? current
-        : (organizations.records[0]?.id ?? null),
-    );
-  }, [desktopSplit, organizations.records]);
   const searching = pendingSearch || loading;
 
   async function exportCsv() {
@@ -552,7 +529,7 @@ export function OrganizationList({
       {afterSearch}
 
       <section
-        className="overflow-hidden rounded-md border border-[#d8d1c4] bg-[#f6f2e9] lg:grid lg:grid-cols-[minmax(19rem,0.72fr)_minmax(0,1.28fr)]"
+        className="overflow-hidden rounded-md border border-[#d8d1c4] bg-[#f6f2e9]"
         data-testid="profile-list-workspace"
       >
         <div className="grid content-start gap-3 p-3 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto lg:border-r lg:border-[#d8d1c4] lg:p-4">
@@ -577,12 +554,7 @@ export function OrganizationList({
                   <li key={organization.id}>
                     <Link
                       aria-label={`Open ${organization.name} profile`}
-                      aria-current={
-                        selectedProfileId === organization.id
-                          ? "true"
-                          : undefined
-                      }
-                      className={`group block rounded-md border bg-[#fffefa] p-4 text-left shadow-sm outline-none transition ${selectedProfileId === organization.id ? "border-[#e85d35] shadow-[inset_4px_0_0_#e85d35,0_7px_20px_rgba(24,34,37,0.09)]" : "border-[#d8d1c4] hover:border-[#e85d35] hover:shadow-md"} focus-visible:ring-2 focus-visible:ring-[#157d78] focus-visible:ring-offset-2`}
+                      className="group block rounded-md border border-[#d8d1c4] bg-[#fffefa] p-4 text-left shadow-sm transition hover:border-[#e85d35] focus-visible:ring-2 focus-visible:ring-[#157d78]"
                       data-testid={`profile-card-${organization.id}`}
                       href={profileHref}
                       onClick={(event) => {
@@ -592,8 +564,7 @@ export function OrganizationList({
                           !event.shiftKey &&
                           event.button === 0
                         ) {
-                          event.preventDefault();
-                          setSelectedProfileId(organization.id);
+                          saveProfileReturnState(window.location.pathname + window.location.search, window.scrollY);
                         }
                       }}
                     >
@@ -722,21 +693,6 @@ export function OrganizationList({
             </nav>
           ) : null}
         </div>
-        <ProfileDetailSheet
-          target={selectedProfileId ? { profileId: selectedProfileId } : null}
-          open={Boolean(selectedProfileId)}
-          onOpenChange={(open) => {
-            if (!open) setSelectedProfileId(null);
-          }}
-          variant={desktopSplit ? "inline" : "sheet"}
-        />
-        {desktopSplit &&
-        organizations.records.length > 0 &&
-        !selectedProfileId ? (
-          <div className="hidden min-h-[30rem] place-items-center bg-[#fffefa] p-8 text-center text-sm text-[#536064] lg:grid">
-            Select a profile to see booking details.
-          </div>
-        ) : null}
       </section>
     </div>
   );

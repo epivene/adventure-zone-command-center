@@ -1,3 +1,4 @@
+import { readProfileReturnState } from "@/lib/profile-navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
@@ -89,6 +90,14 @@ export default function OrganizationsPage() {
   }, [view, query.search, query.lastResort, query.filler, query.travelLegId, query.placeType, query.region, query.hasPhone, query.hasEmail, query.hasFollowUp, query.hasBooking, query.hasLocations, query.showMembers, query.quickFilter, query.sort, query.includeRetired, query.page, query.pageSize]);
 
   useEffect(() => { void loadProfiles(); }, [loadProfiles]);
+
+  useEffect(() => {
+    if (loading || !data) return;
+    const saved = readProfileReturnState();
+    if (saved?.path !== window.location.pathname + window.location.search) return;
+    const frame = requestAnimationFrame(() => window.scrollTo(0, saved.scrollY));
+    return () => cancelAnimationFrame(frame);
+  }, [loading, data]);
 
   const loadDuplicates = useCallback(async () => {
     setDupLoading(true);
