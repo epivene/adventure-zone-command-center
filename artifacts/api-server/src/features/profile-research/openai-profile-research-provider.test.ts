@@ -94,7 +94,39 @@ describe("OpenAiProfileResearchProvider", () => {
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
     const body = JSON.parse(String(request.body));
     expect(body.store).toBe(false);
+    expect(body.include).toEqual(["web_search_call.action.sources"]);
     expect(body.tools).toEqual([expect.objectContaining({ type: "web_search" })]);
+  });
+
+  it("uses consulted web-search sources when JSON output has no inline citations", async () => {
+    process.env.OPENAI_API_KEY = "test-key";
+    const officialUrl = "https://riverdays.example/2027-dates";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      output: [
+        { type: "web_search_call", action: { type: "search", sources: [{ type: "url", url: officialUrl }] } },
+        { type: "message", content: [{
+          type: "output_text",
+          text: JSON.stringify({
+            identity: { confidence: "high", rationale: "Official organizer matched." },
+            candidates: [],
+            eventDateCandidates: [
+              { startsOn: "2027-07-14", endsOn: "2027-07-17", evidenceKind: "published_exact", recurrenceRule: null, rationale: "Published by organizer.", sourceUrl: officialUrl, confidence: 0.98 },
+              { startsOn: "2027-08-01", endsOn: null, evidenceKind: "published_exact", recurrenceRule: null, rationale: "Unsupported.", sourceUrl: "https://uncited.example", confidence: 0.9 },
+            ],
+            findings: [], relatedEvents: [], deepSummary: null,
+          }),
+          annotations: [],
+        }] },
+      ],
+    }), { status: 200 })));
+
+    const result = await new OpenAiProfileResearchProvider().research({
+      context: { ...context, gaps: [{ field: "next_event_dates", label: "Next event dates", targetKind: "event_date_fact", targetId: null }] },
+      mode: "quick",
+    });
+
+    expect(result.eventDateCandidates).toEqual([expect.objectContaining({ startsOn: "2027-07-14", source: expect.objectContaining({ url: officialUrl }) })]);
+    expect(result.sources).toEqual([expect.objectContaining({ url: officialUrl })]);
   });
 
   it("preserves cited key findings and related event opportunities during deep research", async () => {
