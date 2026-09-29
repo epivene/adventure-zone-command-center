@@ -55,3 +55,8 @@ export function readProfileReturnState(): { path: string; scrollY: number } | nu
     return state && safeReturnPath(state.path) && Number.isFinite(state.scrollY) && state.scrollY >= 0 ? state : null;
   } catch { return null; }
 }
+
+export function profileReturnPath(search: string): string {
+  const target = new URLSearchParams(search).get("returnTo");
+  return safeReturnPath(target) ? target : "/profiles";
+}

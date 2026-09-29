@@ -24,6 +24,7 @@ type MenuGroup = { label: string; items: MenuItem[] };
 
 const bookingItems: MenuItem[] = [
   { href: "/profiles", label: "Profiles" },
+  { href: "/dave-requests", label: "Dave Requests" },
   { href: "/email-review", label: "Email Review" },
   { href: "/calls/workspace", label: "Calls" },
   { href: "/calls/voicemail", label: "Voicemail" },
@@ -376,16 +377,18 @@ export function AppMenu({
                 ) : null}
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem
-              aria-label="Open Booking Assistant"
+
+          </div>
+        ) : null}
+            <DropdownMenuItem asChild><Link href="/assistant/workspace" className="rounded-md px-2 py-2"><Bot className="h-4 w-4" />Assistant workspace</Link></DropdownMenuItem>
+              <DropdownMenuItem
+              aria-label="Older conversations and specialist tools"
               className="rounded-md px-2 py-2"
               onSelect={() => openAssistant()}
             >
               <Bot className="h-4 w-4" />
-              Booking Assistant
+              Older conversations & tools
             </DropdownMenuItem>
-          </div>
-        ) : null}
         {mobile && workspace === "booking" ? (
           <div className="grid gap-0.5 py-1">
             {bookingMenuItems.map((item) => <MenuLink item={item} workspace={workspace} location={location} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} key={`${item.href}:${item.label}`} />)}
@@ -432,7 +435,7 @@ export function AppMenu({
         {!mobile ? <DropdownMenuSeparator /> : null}
         {!mobile ? (
           <MenuSubmenu
-            label="Admin Tools"
+            label="Administration"
             groups={visibleAdminToolsGroups}
             workspace={workspace}
             location={location}

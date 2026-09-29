@@ -1,4 +1,4 @@
-import AssistantWorkspacePage from "@/pages/AssistantWorkspacePage";
+import { WorkspaceSessionProvider } from "@/features/assistant-workspace/WorkspaceSessionProvider";
 import AssistantOfflinePage from "@/pages/AssistantOfflinePage";
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
 import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
@@ -364,11 +364,11 @@ function BossProtectedApp() {
 
 function AdminProtectedApp() {
   return (
-    <AssistantContextProvider>
+    <AssistantContextProvider><WorkspaceSessionProvider>
       <AppShell>
         <Switch>
-          <Route path="/assistant/workspace/:conversationId">{params=><AssistantWorkspacePage key={params.conversationId} conversationId={params.conversationId}/>}</Route>
-          <Route path="/assistant/workspace"><AssistantWorkspacePage/></Route>
+          <Route path="/assistant/workspace/:conversationId">{() => null}</Route>
+          <Route path="/assistant/workspace">{() => null}</Route>
           <Route path="/command" component={AdminCommandPanelPage} />
           <Route path="/marketing" component={MarketingHomePage} />
           <Route path="/design-studio/email-templates" component={SettingsCommunicationTemplatesPage} />
@@ -440,7 +440,7 @@ function AdminProtectedApp() {
           <Route component={NotFound} />
         </Switch>
       </AppShell>
-    </AssistantContextProvider>
+    </WorkspaceSessionProvider></AssistantContextProvider>
   );
 }
 

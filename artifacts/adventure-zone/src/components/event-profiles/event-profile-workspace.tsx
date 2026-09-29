@@ -56,6 +56,7 @@ function titleCase(value: string) {
 }
 
 export function EventProfileWorkspace({
+  showHeader = true,
   profile,
   context = {},
   callablePhoneByContactId = {},
@@ -66,6 +67,7 @@ export function EventProfileWorkspace({
   organizationContext = { parent: null, children: [] },
   onOrganizationChanged = () => {},
 }: {
+  showHeader?: boolean;
   profile: EventProfile;
   context?: EventProfileWorkspaceContext;
   callablePhoneByContactId?: Record<string, string | null>;
@@ -101,7 +103,7 @@ export function EventProfileWorkspace({
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
-      <header className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      {showHeader ? <header className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Event profile</p>
         <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -188,7 +190,7 @@ export function EventProfileWorkspace({
             Last Resort: {profile.place.lastResortReason || "Review this event before making commitments."}
           </p>
         ) : null}
-      </header>
+      </header> : null}
 
       <PossibleLocationsDrawer orgId={profile.id} />
 

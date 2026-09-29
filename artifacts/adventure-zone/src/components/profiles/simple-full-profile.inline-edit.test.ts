@@ -7,7 +7,7 @@ describe("SimpleFullProfile inline editing", () => {
   it("exposes Edit and the shared inline editor", () => {
     expect(source).toContain("ProfileInlineEditor");
     expect(source).toContain("setEditing(true)");
-    expect(source).toContain('type="button">Edit</button>');
+    expect(source).toContain("onEdit={() => setEditing(true)}");
     expect(source).toContain("onProfileSaved");
   });
 

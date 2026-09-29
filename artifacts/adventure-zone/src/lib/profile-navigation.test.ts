@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readProfileReturnState, saveProfileReturnState } from "./profile-navigation";
+import { readProfileReturnState, saveProfileReturnState, profileReturnPath } from "./profile-navigation";
 afterEach(() => { window.sessionStorage.clear(); vi.restoreAllMocks(); });
 describe("profile return navigation", () => {
   it("preserves filtered directory location and scroll", () => {
@@ -18,4 +18,11 @@ describe("profile return navigation", () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw Error("denied"); });
     expect(readProfileReturnState()).toBeNull();
   });
+});
+
+it("uses the link return target and ignores stale directory history for direct links",()=>{
+  saveProfileReturnState("/profiles?q=old", 500);
+  expect(profileReturnPath("?returnTo=%2Ftoday")).toBe("/today");
+  expect(profileReturnPath("")).toBe("/profiles");
+  expect(profileReturnPath("?returnTo=https%3A%2F%2Fevil.example")).toBe("/profiles");
 });

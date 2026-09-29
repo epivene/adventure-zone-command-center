@@ -229,6 +229,7 @@ export function createAssistantWorkspaceRouter(
           runs.find((run) => run.input?.model)?.input?.model ?? null,
         documentResults: publicDocumentResults(runs),
         runs: runs.map((run) => ({
+          selection: run.input.selection,
           id: run.id,
           status: run.status,
           usage: {
@@ -284,6 +285,7 @@ export function createAssistantWorkspaceRouter(
         input.requestKey,
         input.text,
         attachments,
+        input.selection,
       );
       if (existing) {
         // A lost HTTP response is a read-only reconciliation, not new spending.
@@ -297,6 +299,7 @@ export function createAssistantWorkspaceRouter(
         return;
       }
       if (
+        !input.selection &&
         process.env.ASSISTANT_PROFILE_TASKS_ENABLED === "true" &&
         !attachments.length &&
         /^\s*(continue|resume)\s*[.!]?\s*$/i.test(input.text)
@@ -353,12 +356,12 @@ export function createAssistantWorkspaceRouter(
       } catch {
         /* Chat remains usable; Gmail tools report disconnection. */
       }
-      const run = await r.runs.submit(
+      const run = await (input.selection ? r.submitScoped : r.runs.submit.bind(r.runs))(
         {
           actor: { id: a, role: "owner", connectionId },
           conversationId: id,
           requestKey: input.requestKey,
-          selection: c.selection,
+          selection: input.selection ?? c.selection,
           grants: [],
           model:
             input.model ??
@@ -370,7 +373,7 @@ export function createAssistantWorkspaceRouter(
         input.text,
         attachments,
       );
-      s.status(202).json({ runId: run.id, status: run.status });
+      s.status(202).json({ runId: run.id, status: run.status, selection: run.input.selection });
       void r.worker.tick().catch(() => {});
     }),
   );

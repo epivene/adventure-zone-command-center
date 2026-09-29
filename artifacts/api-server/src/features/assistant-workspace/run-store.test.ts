@@ -183,3 +183,13 @@ it("rolls back a rejected concurrent message with its run and deduplicates retri
     "ASSISTANT_MESSAGE_CONFLICT",
   );
 });
+it("rejects reusing a submitted message key with another explicit scope", async () => {
+  const c=await conversations.create("owner","Scope");
+  const a={...emptySelection(),organizationIds:["11111111-1111-4111-8111-111111111111"]};
+  const b={...emptySelection(),organizationIds:["22222222-2222-4222-8222-222222222222"]};
+  const input={actor:{id:"owner",role:"owner" as const,connectionId:null},conversationId:c.id,requestKey:"scope",selection:a,grants:[]};
+  const first=await runs.submit(input,"Review");
+  await expect(runs.findSubmitted("owner",c.id,"scope","Review",[],b)).rejects.toThrow("ASSISTANT_MESSAGE_CONFLICT");
+  await expect(runs.submit({...input,selection:b},"Review")).rejects.toThrow("ASSISTANT_MESSAGE_CONFLICT");
+  expect((await runs.get("owner",first.id))?.input.selection).toEqual(a);
+});

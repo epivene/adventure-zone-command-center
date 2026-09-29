@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, CalendarDays, House, Inbox, MailQuestion, MapPinned, ClipboardList, Megaphone, MessageSquare, Palette, UsersRound, type LucideIcon } from "lucide-react";
+import { Bot, ArrowLeft, CalendarDays, House, Inbox, MailQuestion, MapPinned, ClipboardList, Megaphone, MessageSquare, Palette, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import { AddMenu, AppMenu } from "./app-menu";
 import { MobileBottomNav } from "./mobile-bottom-nav";
@@ -30,9 +30,8 @@ function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string 
       { href: "/today", label: "Today", icon: House },
       { href: "/profiles", label: "Profiles", icon: UsersRound },
       { href: "/email-review", label: "Email Review", icon: MailQuestion },
-      { href: "/dave-requests", label: "Dave Requests", icon: ClipboardList },
       { href: "/schedule", label: "Schedule", icon: CalendarDays },
-      { href: "/website-inquiries", label: "Website Inquiries", icon: Inbox },
+      { href: "/assistant/workspace", label: "Assistant", icon: Bot },
     ];
   }
   if (workspace === "operations") {
@@ -197,7 +196,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         {location.startsWith("/office-coordinator") ? <Suspense fallback={null}><OfficeUpdateHistory /></Suspense> : null}
       </main>
 
-      {!immersiveProfile && !assistantWorkspace ? <div className="print:hidden"><AssistantLauncher placement="floating" /></div> : null}
       {assistantRequested ? <div className="print:hidden"><Suspense fallback={null}><AssistantDrawer /></Suspense></div> : null}
       {!immersiveProfile ? <div className="print:hidden"><MobileBottomNav workspace={workspace} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} /></div> : null}
     </div></IncomingCallingProvider>

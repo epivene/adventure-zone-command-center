@@ -1,5 +1,5 @@
-import { FollowUpDialog } from "./follow-up-dialog";
 "use client";
+import { FollowUpDialog } from "./follow-up-dialog";
 
 import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
@@ -27,8 +27,8 @@ export function FollowUpControls({
 }: {
   followUp: FollowUpControlsItem;
   onEdit: (id: string, input: { kind: string; dueAt: string }) => Promise<{ ok: boolean; error?: string }>;
-  onSkip: (id: string) => void;
-  onDismiss: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  onSkip?: (id: string) => void;
+  onDismiss?: (id: string) => Promise<{ ok: boolean; error?: string }>;
   onDelete: (id: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [editOpen, setEditOpen] = useState(false);
@@ -45,6 +45,7 @@ export function FollowUpControls({
     setDismissError("");
     setDismissing(true);
     try {
+      if (!onDismiss) return;
       const result = await onDismiss(followUp.id);
       if (!result.ok) setDismissError(result.error ?? "Could not dismiss.");
     } catch {
@@ -77,9 +78,9 @@ export function FollowUpControls({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuItem onSelect={() => onSkip(followUp.id)}>Skip for now</DropdownMenuItem>
+            {onSkip ? <DropdownMenuItem onSelect={() => onSkip(followUp.id)}>Skip for now</DropdownMenuItem> : null}
             <DropdownMenuItem onSelect={() => setEditOpen(true)}>Edit follow-up</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setDismissOpen(true)}>Dismiss follow-up</DropdownMenuItem>
+            {onDismiss ? <DropdownMenuItem onSelect={() => setDismissOpen(true)}>Dismiss follow-up</DropdownMenuItem> : null}
             <DropdownMenuItem className="text-rose-700 focus:text-rose-700" onSelect={() => setDeleteOpen(true)}>Delete follow-up</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

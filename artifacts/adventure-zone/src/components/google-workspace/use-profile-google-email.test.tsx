@@ -73,3 +73,12 @@ describe("useProfileGoogleEmail", () => {
     expect(result.current.conversations[0]?.threadId).toBe("recovered");
   });
 });
+  it("ignores a late response from the previous profile", async () => {
+    let finish: (value: any) => void = () => {};
+    client.getGoogleProfileEmails.mockImplementation((id: string) => id === "old" ? new Promise(resolve => {finish=resolve;}) : Promise.resolve({conversations:[conversation("new",Date.UTC(2026,1,1))]}));
+    const {result,rerender}=renderHook(({id})=>useProfileGoogleEmail(id,2026),{initialProps:{id:"old"}});
+    rerender({id:"new"});
+    await waitFor(()=>expect(result.current.conversations[0]?.threadId).toBe("new"));
+    await act(async()=>finish({conversations:[conversation("old",Date.UTC(2026,1,1))]}));
+    expect(result.current.conversations.map(row=>row.threadId)).toEqual(["new"]);
+  });

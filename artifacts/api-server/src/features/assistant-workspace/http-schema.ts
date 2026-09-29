@@ -1,6 +1,8 @@
+import { selectionSchema } from "./contracts";
 import { z } from "zod";
 export const messageInput = z
   .object({
+    selection: selectionSchema.optional(),
     requestKey: z.string().min(1).max(128),
     text: z.string().trim().max(20000),
     attachmentIds: z

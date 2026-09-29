@@ -135,3 +135,7 @@ Before Task 1, fetch main and inspect changes since `cb32da44f3801a8a432b43b6323
 All eight tasks must pass their acceptance checks before reporting implementation complete. Preserve local changes and commit history. Prepare a reviewable branch/PR when implementation is ready; do not deploy or merge as part of plan creation. Keep the approved spec and this checklist with the change.
 
 Self-review: every spec section maps to a task; all five review-focus conditions have owning tests; the Chicago timezone correction reuses existing business policy; no product files were changed during planning.
+
+## Execution record
+
+Implemented all eight work areas on `codex/profile-assistant-layout`. See [verification and deviations](2026-09-28-profile-assistant-layout-verification.md) for the executed checks, independent review, baseline failures, and remaining live-integration limits. The checklist above is the original plan; the execution record documents substitutions rather than implying every originally named test existed.

@@ -11,7 +11,7 @@ import {
   type GoogleProfileFile,
   type GoogleThreadDetail,
 } from "@/features/google-workspace/google-workspace-client";
-import { useProfileGoogleEmail } from "./use-profile-google-email";
+import { useProfileGoogleEmail, type ProfileGoogleEmailState } from "./use-profile-google-email";
 
 function fileSize(bytes: number): string {
   if (bytes < 1000) return `${bytes} B`;
@@ -331,11 +331,14 @@ function ProfileFiles({
   );
 }
 
-export function ProfileGoogleEmailPanel({
-  organizationId,
-}: {
-  organizationId: string;
-}) {
+export function ProfileGoogleEmailPanel({ organizationId, state }: { organizationId: string; state?: ProfileGoogleEmailState }) {
+  return state ? <ProfileGoogleEmailView key={organizationId} organizationId={organizationId} state={state} /> : <ProfileGoogleEmailLoader key={organizationId} organizationId={organizationId} />;
+}
+function ProfileGoogleEmailLoader({organizationId}: {organizationId: string}) {
+  const state = useProfileGoogleEmail(organizationId);
+  return <ProfileGoogleEmailView organizationId={organizationId} state={state}/>;
+}
+function ProfileGoogleEmailView({organizationId, state}: {organizationId: string; state: ProfileGoogleEmailState}) {
   const [tab, setTab] = useState<"emails" | "files">("emails");
   const [files, setFiles] = useState<GoogleProfileFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(true);
@@ -346,7 +349,8 @@ export function ProfileGoogleEmailPanel({
     historical: historicalConversations,
     loading,
     error,
-  } = useProfileGoogleEmail(organizationId, currentYear);
+    reload,
+  } = state;
 
   useEffect(() => {
     let active = true;
@@ -404,7 +408,7 @@ export function ProfileGoogleEmailPanel({
         </div>
       </div>
 
-      {error ? <p className="mt-3 text-sm text-rose-700 dark:text-rose-300">{error}</p> : null}
+      {error ? <div role="alert" className="mt-3 text-sm text-rose-700"><p>{error}</p><button type="button" className="button-secondary mt-2" onClick={() => void reload()}>Retry emails</button></div> : null}
 
       {tab === "emails" ? (
         <>

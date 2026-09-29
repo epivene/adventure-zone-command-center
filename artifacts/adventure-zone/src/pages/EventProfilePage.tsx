@@ -1,10 +1,13 @@
+import { useWorkspaceSession } from "@/features/assistant-workspace/WorkspaceSessionProvider";
+import { FollowUpDialog } from "@/components/follow-ups/follow-up-dialog";
+import { profileReturnPath, profileOriginLabel } from "@/lib/profile-navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ConventionHistory } from "@/components/profiles/convention-history";
 import { useLocation, useParams, useSearch } from "wouter";
 import { apiGet, apiPatch } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
 import { EarlyBirdPromoCard, type EarlyBirdPromoView } from "@/components/event-profiles/early-bird-promo-card";
-import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
+import { SimpleFullProfile, type OpenSection } from "@/components/profiles/simple-full-profile";
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { ScoutNotesPanel } from "@/components/profiles/scout-notes-panel";
 import { AttendanceHistoryPanel } from "@/components/profiles/attendance-history-panel";
@@ -35,8 +38,10 @@ export default function EventProfilePage() {
   const { profileId } = useParams<{ profileId: string }>();
   const search = useSearch();
   const [, setLocation] = useLocation();
-  const { openAssistant } = useAssistantContext();
+  const { openProfile } = useWorkspaceSession();
   const [data, setData] = useState<any>(null);
+  const [profileSection, setProfileSection] = useState<OpenSection>(null);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profileImageDataUrl, setProfileImageDataUrl] = useState<string | null>(null);
@@ -61,6 +66,14 @@ export default function EventProfilePage() {
     ? (requestedAction as "call" | "follow-up")
     : undefined;
   const mode = params.get("mode") === "prospect" ? "prospect" as const : undefined;
+  useEffect(() => { if(action === "follow-up") setFollowUpOpen(true); }, [action, profileId]);
+  function changeFollowUpOpen(open: boolean) {
+    setFollowUpOpen(open);
+    if(!open && action === "follow-up") {
+      const next=new URLSearchParams(search); next.delete("action");
+      setLocation(`/profiles/${profileId}${next.size ? `?${next}` : ""}`, {replace:true});
+    }
+  }
 
   async function loadProfile() {
     if (!profileId) return;
@@ -126,7 +139,7 @@ export default function EventProfilePage() {
 
   useEffect(() => { void loadProfile(); }, [profileId, contactId]);
   useEffect(() => {
-    setProfileOrigin(readProfileOriginLabel());
+    setProfileOrigin(profileOriginLabel(profileReturnPath(search)));
   }, [profileId]);
   useEffect(() => {
     if (researchRequested && data && !profileEditing) setResearchOpen(true);
@@ -160,11 +173,7 @@ export default function EventProfilePage() {
       setProfileEditing(false);
       return;
     }
-    if (window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-    setLocation("/profiles");
+    setLocation(profileReturnPath(search));
   }
 
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading profile…</p></div>;
@@ -195,8 +204,27 @@ export default function EventProfilePage() {
   return (
     <div className="profile-modern -mx-4 -my-5 min-h-[100dvh] bg-[#f3f5f0] px-4 py-5 text-[#173b48] md:-mx-8 md:-my-7 md:px-8 md:py-7 lg:px-10">
       <div className="mx-auto grid w-full max-w-[1420px] gap-5">
+        <FollowUpDialog key={profileId} open={followUpOpen} onOpenChange={changeFollowUpOpen} profileId={profileId} profileName={profileLabel} contactId={contactId ?? data.selectedContactId} bookingId={bookingId} onSaved={() => { void loadProfile(); }} />
         {profileId ? <AssistantContextRegistration kind="organization" label={profileLabel} recordId={profileId} /> : null}
 
+        <div>
+          <SimpleFullProfile
+            profile={data}
+            onSectionChange={setProfileSection}
+            onProfileSaved={loadProfile}
+            ratingSummary={data.wrapUpRatingSummary ?? { average: null, count: 0 }}
+            onFollowUp={() => setFollowUpOpen(true)}
+            onAskAssistant={() => { if(profileId) void openProfile(profileId, profileLabel); }}
+            onBack={goBack}
+            originLabel={profileOrigin}
+            profileImageDataUrl={profileImageDataUrl}
+            onProfileImageChange={saveProfileImage}
+            editing={profileEditing}
+            onEditingChange={setProfileEditing}
+          />
+        </div>
+
+        {profileSection === "events" ? <>
         {contractBookings.length || contractVersions.length ? <section className="rounded-xl border border-[#d8dfd6] bg-white p-4 shadow-sm">
           <h2 className="font-bold">Contracts</h2>
           <p className="mb-3 mt-1 text-sm text-[#58717a]">Create one from an event booking, or continue the unfinished draft.</p>
@@ -210,21 +238,7 @@ export default function EventProfilePage() {
 
         {profileId ? <InvoiceContractSummaryCard contractApi={contractsWorkspaceApi} documentApi={businessDocumentsApi} invoiceApi={invoicesApi} organizationId={profileId} /> : null}
 
-        <div className={profileEditing ? "" : "[&>div>section:last-child]:hidden"}>
-          <SimpleFullProfile
-            profile={data}
-            onProfileSaved={loadProfile}
-            ratingSummary={data.wrapUpRatingSummary ?? { average: null, count: 0 }}
-            onAskAssistant={() => openAssistant("What do I need to know before I contact them?")}
-            onBack={goBack}
-            originLabel={profileOrigin}
-            profileImageDataUrl={profileImageDataUrl}
-            onProfileImageChange={saveProfileImage}
-            editing={profileEditing}
-            onEditingChange={setProfileEditing}
-          />
-        </div>
-
+        </> : null}
         {!profileEditing && data.earlyBirdPromo ? (
           <EarlyBirdPromoCard
             promotion={data.earlyBirdPromo}
@@ -234,16 +248,19 @@ export default function EventProfilePage() {
 
         {!profileEditing && profileId ? <OutreachProfileSummary organizationId={profileId} /> : null}
 
+        {!profileEditing && profileSection === "documents" && profileId ? <ProfileDocuments profileId={profileId} /> : null}
+        {profileSection === "notes" ? <>
         {!profileEditing ? <ScoutNotesPanel notes={data.scoutNotes ?? []} /> : null}
 
         {!profileEditing && profileId ? <AttendanceHistoryPanel mode="owner" profileId={profileId} /> : null}
         {!profileEditing && profileId ? <ConventionHistory profileId={profileId} /> : null}
-        {!profileEditing && profileId ? <ProfileDocuments profileId={profileId} /> : null}
 
+        </> : null}
         {researchOpen && profileId ? <ProfileResearchPanel profileId={profileId} contactId={contactId ?? data.selectedContactId ?? null} onClose={() => setResearchOpen(false)} onApplied={loadProfile} /> : null}
 
         {!profileEditing && profileId ? <DerivedFactsReview organizationId={profileId} /> : null}
 
+        {profileSection === "notes" ? <>
         {!profileEditing && profileId ? <PaperNoteHistorySources profileId={profileId} /> : null}
 
         {!profileEditing ? <HistoricalEventDates dates={historicalEventDates} /> : null}
@@ -279,14 +296,16 @@ export default function EventProfilePage() {
           </details>
         ) : null}
 
-        <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open={action === "follow-up"}>
+        </> : null}
+        <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <summary className="cursor-pointer font-semibold text-slate-800">More profile tools</summary>
-          <div className="mt-3 [&>div>header:first-child]:hidden">
+          <div className="mt-3">
             <EventProfileWorkspace
+              showHeader={false}
               profile={data}
               assistedCallingEnabled={data.assistedCallingEnabled === true}
               callablePhoneByContactId={callablePhoneByContactId}
-              context={{ bookingId, followUpId, action, mode }}
+              context={{ bookingId, followUpId, action: action === "follow-up" ? undefined : action, mode }}
               familyNotes={familyNotes}
               familyNotesError={familyNotesError}
               retryFamilyNotes={retryFamilyNotes}

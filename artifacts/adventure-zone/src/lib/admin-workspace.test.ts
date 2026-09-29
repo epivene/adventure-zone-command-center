@@ -23,6 +23,8 @@ describe("admin workspace routing", () => {
   it.each([
     ["/command", "command"],
     ["/today", "booking"],
+    ["/assistant/workspace", "booking"],
+    ["/assistant/workspace/chat-id", "booking"],
     ["/profiles/abc", "booking"],
     ["/organizations", "booking"],
     ["/event-families/abc", "booking"],

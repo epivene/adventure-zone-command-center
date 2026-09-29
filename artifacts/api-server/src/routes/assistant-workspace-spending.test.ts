@@ -161,6 +161,7 @@ it("returns an already accepted request even when its spending exhausted the all
     "22222222-2222-4222-8222-222222222222",
     "Continue",
     [],
+    undefined,
   );
 });
 it("a read-only reconciliation cannot start paid work when the original never arrived and allowance is available", async () => {
