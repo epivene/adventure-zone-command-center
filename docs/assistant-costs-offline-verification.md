@@ -52,3 +52,13 @@ node build.mjs
 ## Remaining device acceptance
 
 A physical Galaxy Fold airplane-mode cold start has not been observed. After deployment: prepare a conversation while online, close and reopen the browser in airplane mode, open Offline workspace, edit/save a draft, reopen again to verify persistence, and reconnect to explicitly sync. Check both folded and unfolded layouts and the on-screen keyboard. Browser storage eviction can require preparation again; readiness is checked instead of assumed.
+
+## 2026-09-26: recovery when reopening offline
+
+The user reported a white screen after reopening/refreshing offline and confirmed that preparation had not completed (or was uncertain). PR #956 was merged and its deployed service worker matched the source. The failure path was reproducible in the worker: an offline navigation without a complete prepared cache returned an empty network error. The document also had an empty root when its application scripts failed to load, and rejected lazy imports had no React error boundary.
+
+The repair returns a self-contained recovery document when required cached files are missing, places readable instructions in the initial HTML before React loads, and catches rejected route imports with retry/saved-workspace controls. Retry explicitly reloads even on URLs containing a fragment. These changes do not prepare records automatically or change saved data, session validation, private API caching, or Gmail behavior.
+
+Validation: 11 focused offline/startup/preparation/auth/routing test files, 55 tests passed. Regressions were observed failing before the fixes. Frontend production builds succeeded at `/` and `/office/`; both manifests had 240 entries with matching SHA-256 digests and correctly substituted saved-workspace links. TypeScript retained the existing 135 frontend diagnostics, with no additional file/error-code combinations. Independent review reported no remaining findings.
+
+The deployed offline page was observed rendering its empty-state instructions while online. A physical phone offline restart remains unobserved. The browser must have obtained the updated HTML or installed the updated worker during an online visit to show app-provided recovery. Full offline records/draft access still requires **Prepare for offline** to finish successfully while connected.

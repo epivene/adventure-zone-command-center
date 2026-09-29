@@ -117,10 +117,28 @@ self.addEventListener("message", (event) => {
   }
 });
 
+function offlineRecoveryResponse() {
+  const workspace = new URL("assistant/workspace", SCOPE).href.replace(/[&<>"']/g,
+    (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+  // This page must work before preparation, without a single cached file or
+  // application script. Never replace missing JavaScript with this HTML.
+  return new Response(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adventure Zone — Offline</title></head>
+<body style="margin:0;background:#f8fafc;color:#0f172a;font:16px/1.6 system-ui,sans-serif">
+<main style="max-width:34rem;margin:10vh auto;padding:24px">
+<h1 style="font-size:1.5rem;line-height:1.3">Offline workspace is not ready</h1>
+<p>This browser does not have all the app files needed to open offline.</p>
+<ol style="padding-left:24px"><li>Reconnect to the internet.</li><li>Open a conversation in the assistant.</li><li>Choose <strong>Prepare for offline</strong> and wait until it says ready.</li></ol>
+<p>If you prepared this device before, reconnect and prepare it again.</p>
+<a href="${workspace}" style="display:inline-block;padding:12px 18px;border-radius:8px;background:#115e59;color:white;text-decoration:none;font-weight:600">Try again when connected</a>
+</main></body></html>`, { status: 503, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+}
+
 async function navigationResponse(request) {
   try { return await fetch(request); } catch {
     const shell = await completeShell().catch(() => null);
-    return shell ? (await shell.cache.match(shell.manifest.shell)) || Response.error() : Response.error();
+    return shell ? (await shell.cache.match(shell.manifest.shell)) || offlineRecoveryResponse() : offlineRecoveryResponse();
   }
 }
 

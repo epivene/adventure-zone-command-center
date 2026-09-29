@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 
 import App from './App';
+import { StartupRecovery } from './components/connectivity/startup-recovery';
 import { initializeAppearance } from './lib/appearance';
 
 import './index.css';
@@ -24,4 +25,4 @@ document.addEventListener('click', (event) => {
   target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(<StartupRecovery><App /></StartupRecovery>);
