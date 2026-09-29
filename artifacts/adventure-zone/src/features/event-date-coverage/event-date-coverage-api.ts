@@ -9,6 +9,11 @@ export type CoverageRecord = {
 };
 export type CoveragePage = { records: CoverageRecord[]; summary: CoverageSummary; total: number; page: number; pageSize: number; pageCount: number };
 export type CoverageRun = { id: string; status: "queued" | "researching" | "complete" | "failed" | "cancelled"; items?: Array<{ id: string; status: string; errorDetail?: string | null }> };
+export type CoverageFact = {
+  id: string; startsOn: string; endsOn: string | null; status: "confirmed" | "expected" | "needs_review";
+  active: boolean; rationale: string; sourceUrl: string | null; sourceTitle: string;
+  sourceRecordType: string | null; sourceRecordId: string | null;
+};
 
 export const eventDateCoverageKeys = {
   all: ["event-date-coverage"] as const,
@@ -21,7 +26,7 @@ export const getCoverageProfiles = (input: { search: string; status: string; pag
   const query = new URLSearchParams({ search: input.search, status: input.status, page: String(input.page ?? 1), pageSize: String(input.pageSize ?? 25) });
   return apiGet<CoveragePage>(`/event-date-coverage/profiles?${query}`);
 };
-export const getCoverageProfile = (organizationId: string) => apiGet<{ organizationId: string; facts: any[] }>(`/event-date-coverage/profiles/${encodeURIComponent(organizationId)}`);
+export const getCoverageProfile = (organizationId: string) => apiGet<{ organizationId: string; facts: CoverageFact[] }>(`/event-date-coverage/profiles/${encodeURIComponent(organizationId)}`);
 export const startCoverageRun = (input: { organizationIds?: string[]; batchSize?: number }) => apiPost<CoverageRun>("/event-date-coverage/runs", input);
 export const getCoverageRun = (runId: string) => apiGet<CoverageRun>(`/event-date-coverage/runs/${encodeURIComponent(runId)}`);
 export const retryCoverageItem = (itemId: string) => apiPost(`/event-date-coverage/items/${encodeURIComponent(itemId)}/retry`, {});

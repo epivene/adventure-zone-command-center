@@ -27,7 +27,7 @@ describe("EventDateCoveragePage", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/settings/event-date-coverage");
     api.getCoverageProfiles.mockResolvedValue(page);
-    api.getCoverageProfile.mockResolvedValue({ organizationId: "org-1", facts: [{ id: "fact-1", rationale: "Official calendar", sourceUrl: "https://example.com", sourceTitle: "Organizer" }] });
+    api.getCoverageProfile.mockResolvedValue({ organizationId: "org-1", facts: [{ id: "fact-1", startsOn: "2027-07-04", endsOn: null, status: "needs_review", active: false, rationale: "Official calendar", sourceUrl: "https://example.com", sourceTitle: "Organizer" }] });
     api.startCoverageRun.mockResolvedValue({ id: "run-1", status: "queued", items: [] });
     api.getCoverageRun.mockResolvedValue({ id: "run-1", status: "complete", items: [] });
     api.retryCoverageItem.mockResolvedValue({}); api.reviewCoverageFact.mockResolvedValue({});
@@ -40,6 +40,7 @@ describe("EventDateCoveragePage", () => {
     expect(screen.getAllByText("Expected").length).toBeGreaterThan(0);
     await userEvent.click(screen.getAllByRole("button", { name: "View evidence" })[0]!);
     expect(await screen.findByText("Official calendar")).toBeInTheDocument();
+    expect(screen.getByText("Proposed date: 2027-07-04")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Organizer" })).toHaveAttribute("href", "https://example.com");
   });
 
