@@ -38,6 +38,10 @@ it("runs beyond the old history limit, checkpoints context before the provider a
         run.input.sourceMessageId,
       );
       expect(input.turns).toHaveLength(6);
+      expect(input.evidence).toContainEqual(
+        expect.objectContaining({ id: "saved-research-index" }),
+      );
+      expect(input.spendingScope.runId).toBe(run.id);
       expect(input.turns.at(-1).text).toBe("Latest correction: 2027 only");
       expect(input.memory.omittedMessageCount).toBe(3);
       expect(JSON.stringify(input)).not.toContain(
@@ -61,6 +65,22 @@ it("runs beyond the old history limit, checkpoints context before the provider a
       maxSteps: 4,
       maxTokens: 1000,
       evidence: async () => [],
+      historicalEvidence: async (context) => {
+        expect(context.conversationId).toBe(c.id);
+        return [
+          {
+            id: "saved-research-index",
+            kind: "web",
+            recordId: "saved",
+            eventYear: null,
+            occurredAt: null,
+            retrievedAt: new Date().toISOString(),
+            version: null,
+            complete: false,
+            text: "Historical saved research is available; no profile completion claim.",
+          },
+        ];
+      },
     });
     await worker.tick();
     expect(next).toHaveBeenCalledTimes(1);

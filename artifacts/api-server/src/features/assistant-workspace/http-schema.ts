@@ -9,6 +9,7 @@ export const messageInput = z
       .refine((ids) => new Set(ids).size === ids.length)
       .default([]),
     model: z.string().max(128).optional(),
+    reconcileOnly: z.boolean().optional(),
   })
   .strict()
   .refine((input) => !!input.text || input.attachmentIds.length > 0);

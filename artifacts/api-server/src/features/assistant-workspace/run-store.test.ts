@@ -14,6 +14,39 @@ beforeEach(async () => {
 afterEach(async () => {
   await db.close();
 });
+it("reconciles an existing request without resubmitting and rejects changed text, screenshots or ownership", async () => {
+  const c = await conversations.create("owner", "Recover request");
+  const input = {
+    actor: { id: "owner", role: "owner" as const, connectionId: null },
+    conversationId: c.id,
+    requestKey: "recover",
+    selection: emptySelection(),
+    grants: [],
+  };
+  const saved = await runs.submit(input, "Continue");
+  expect(
+    (await runs.findSubmitted("owner", c.id, "recover", "Continue"))?.id,
+  ).toBe(saved.id);
+  expect(
+    await runs.findSubmitted("other", c.id, "recover", "Continue"),
+  ).toBeNull();
+  expect(await runs.findSubmitted("owner", c.id, "new", "Continue")).toBeNull();
+  await expect(
+    runs.findSubmitted("owner", c.id, "recover", "Different request"),
+  ).rejects.toThrow("ASSISTANT_MESSAGE_CONFLICT");
+  await expect(
+    runs.findSubmitted("owner", c.id, "recover", "Continue", [
+      {
+        id: "changed",
+        filename: "screen.png",
+        contentType: "image/png",
+        byteSize: 1,
+        sha256: "sha",
+      },
+    ]),
+  ).rejects.toThrow("ASSISTANT_MESSAGE_CONFLICT");
+  expect(await runs.list("owner", c.id)).toHaveLength(1);
+});
 it("serializes new runs with archive and preserves completed run retries", async () => {
   const c = await conversations.create("owner", "Run lifecycle");
   const input = {

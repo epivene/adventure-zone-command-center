@@ -16,7 +16,7 @@ const labels: Record<string, { label: string; help: string }> = {
     help: "A lower-cost option for everyday questions and email drafting. Supports screenshots.",
   },
   "gpt-5.4-nano": {
-    label: "GPT-5.4 Nano · Lowest cost",
+    label: "GPT-5.4 Nano · Small tasks",
     help: "Best for short rewrites and simple questions. Use Mini or Sol for tasks with several steps. Supports screenshots.",
   },
 };

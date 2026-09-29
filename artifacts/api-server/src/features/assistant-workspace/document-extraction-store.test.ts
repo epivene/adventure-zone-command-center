@@ -5,6 +5,7 @@ import { ConversationStore } from "./conversation-store";
 import { RunStore } from "./run-store";
 import { DocumentExtractionStore } from "./document-extraction-store";
 import { emptySelection, type RunContext, type ToolResult } from "./contracts";
+import { SpendingPreflightError } from "./spending-provider";
 let db: PGlite, store: DocumentExtractionStore, context: RunContext;
 const visualCostCall = {
   responseId: "visual-response",
@@ -56,6 +57,33 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await db.close();
+});
+it("allows an explicit later attempt after a no-charge budget pause, but never clears an uncertain claim", async () => {
+  const work = vi
+    .fn()
+    .mockRejectedValueOnce(new SpendingPreflightError("ASSISTANT_BUDGET_LIMIT"))
+    .mockResolvedValueOnce(structuredClone(output));
+  const paused = await store.execute(context, "budget-pause", work);
+  expect(paused.code).toBe("ASSISTANT_BUDGET_LIMIT");
+  expect(paused.usageUnknown).toBeUndefined();
+  await store.execute(
+    { ...context, toolCallId: "later" },
+    "budget-pause",
+    work,
+  );
+  expect(work).toHaveBeenCalledTimes(2);
+  const unresolved = vi
+    .fn()
+    .mockRejectedValue(
+      new SpendingPreflightError("ASSISTANT_BUDGET_CALL_EXISTS", false),
+    );
+  await store.execute(context, "uncertain-reservation", unresolved);
+  await store.execute(
+    { ...context, toolCallId: "later" },
+    "uncertain-reservation",
+    unresolved,
+  );
+  expect(unresolved).toHaveBeenCalledTimes(1);
 });
 it("reuses partial readings and charges recovery once to the original tool call", async () => {
   const work = vi.fn(async () => structuredClone(output));

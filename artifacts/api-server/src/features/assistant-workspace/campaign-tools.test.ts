@@ -11,6 +11,46 @@ const context: RunContext = {
   grants: [],
   signal: new AbortController().signal,
 };
+it("lists and reads saved research for the current selection without using paid research", async () => {
+  const evidence = [
+    { id: "saved-index", kind: "web", text: "Historical report" },
+  ];
+  const listIndex = vi.fn().mockResolvedValue(evidence);
+  const readSavedResearch = vi
+    .fn()
+    .mockResolvedValue({
+      status: "ok",
+      data: {},
+      evidence: [],
+      receipts: [],
+      code: null,
+    });
+  const summary = vi.fn();
+  const tools = createCampaignTools({
+    ownerId: "owner",
+    runs: { get: async () => ({ conversationId: id }) },
+    researchCache: { listIndex, readSavedResearch },
+    spending: { summary },
+  } as any);
+  const selected = {
+    ...context,
+    selection: { ...emptySelection(), organizationIds: [id] },
+  };
+  const listed = await tools.execute(selected, {
+    id: "list",
+    name: "list_saved_research",
+    arguments: "{}",
+  });
+  expect(listed.evidence).toEqual(evidence);
+  expect(listIndex).toHaveBeenCalledWith(selected);
+  await tools.execute(selected, {
+    id: "read",
+    name: "read_saved_research",
+    arguments: JSON.stringify({ id }),
+  });
+  expect(readSavedResearch).toHaveBeenCalledWith(selected, id);
+  expect(summary).not.toHaveBeenCalled();
+});
 it("exposes distinct typed owner tools and rejects a foreign saved run before paging", async () => {
   const next = vi.fn(),
     deps: any = {

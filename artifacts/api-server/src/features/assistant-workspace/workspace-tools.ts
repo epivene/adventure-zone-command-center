@@ -1,3 +1,4 @@
+import { taskChangeId } from "./profile-task-safety";
 import type { CampaignStore } from "./campaign-store";
 import { ActionStore } from "./action-store";
 import { KnowledgeRepository } from "./knowledge";
@@ -374,7 +375,15 @@ export function createWorkspaceTools(deps: {
         const run = await deps.runs.get(context.actor.id, context.runId);
         if (!run) return blocked("ASSISTANT_RUN_NOT_FOUND");
         const intent: ActionIntent = {
-          id: stableId(`${context.runId}:${call.id}`),
+          id: context.taskId
+            ? taskChangeId({
+                taskId: context.taskId,
+                targetId: args.targetId,
+                kind: call.name,
+                expectedRevision: args.expectedRevision,
+                arguments: args.values,
+              })
+            : stableId(`${context.runId}:${call.id}`),
           actorId: context.actor.id,
           conversationId: context.conversationId,
           kind: call.name,

@@ -1,6 +1,7 @@
 import type { Queryable, RunContext, ToolResult } from "./contracts";
 import { createHash } from "node:crypto";
 import { blocked } from "./read-tools";
+import { isSpendingPreflightError } from "./spending-provider";
 const uncertain = (): ToolResult => ({
   ...blocked("ASSISTANT_DOCUMENT_EXTRACTION_UNCERTAIN"),
   status: "uncertain",
@@ -71,7 +72,16 @@ export class DocumentExtractionStore {
         [hash, context.actor.id, JSON.stringify(output)],
       );
       return output;
-    } catch {
+    } catch (error) {
+      if (isSpendingPreflightError(error) && error.safeToRetry) {
+        // No generation started: allow a later user-requested attempt after
+        // changing the allowance. Never clear an uncertain paid extraction.
+        await this.db.query(
+          "DELETE FROM assistant_workspace_document_extractions WHERE cache_key=$1 AND actor_id=$2 AND run_id=$3 AND call_id IS NOT DISTINCT FROM $4 AND state='started'",
+          [hash, context.actor.id, context.runId, context.toolCallId ?? null],
+        );
+        return blocked(error.message);
+      }
       // Leave a durable unresolved claim: another call/run/model cannot rebill it.
       return uncertain();
     }

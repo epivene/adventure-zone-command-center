@@ -75,6 +75,9 @@ export type Grant = {
   connectionId: string | null;
 };
 export type RunContext = {
+  taskId?: string;
+  taskReview?: boolean;
+  taskVersion?: number;
   toolCallId?: string;
   actor: Actor;
   conversationId: string;
@@ -95,6 +98,12 @@ export type ActionIntent = {
   sourceMessageId: string;
 };
 export type ModelInput = {
+  spendingScope?: {
+    actorId: string;
+    conversationId: string;
+    runId: string;
+    callId: string;
+  };
   attachmentScope?: AttachmentScope;
   screenshots?: Screenshot[];
   memory?: ConversationMemory;

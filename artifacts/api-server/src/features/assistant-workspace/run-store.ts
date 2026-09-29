@@ -8,6 +8,8 @@ import type {
 } from "./contracts";
 import type { TurnCheckpoint } from "./orchestrator";
 export type RunInput = {
+  taskId?: string;
+  itemIds?: string[];
   actor: Actor;
   conversationId: string;
   sourceMessageId: string;
@@ -42,6 +44,24 @@ function map(r: any): SavedRun {
 }
 export class RunStore {
   constructor(private readonly db: Queryable) {}
+  async findSubmitted(
+    actorId: string,
+    conversationId: string,
+    requestKey: string,
+    text: string,
+    attachments: Screenshot[] = [],
+  ): Promise<SavedRun | null> {
+    const existing = await this.db.query(
+      `SELECT r.*, (m.body=$4 AND m.attachments=$5::jsonb) AS same_message
+       FROM assistant_workspace_runs r JOIN assistant_workspace_messages m ON m.id=r.source_message_id
+       WHERE r.actor_id=$1 AND r.conversation_id=$2 AND r.request_key=$3`,
+      [actorId, conversationId, requestKey, text, JSON.stringify(attachments)],
+    );
+    if (!existing.rows[0]) return null;
+    if (!existing.rows[0].same_message)
+      throw new Error("ASSISTANT_MESSAGE_CONFLICT");
+    return map(existing.rows[0]);
+  }
   async submit(
     input: Omit<RunInput, "sourceMessageId">,
     text: string,

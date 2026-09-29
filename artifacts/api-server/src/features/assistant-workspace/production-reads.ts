@@ -18,10 +18,12 @@ import { BusinessDocumentRepository } from "../business-documents/business-docum
 import { BusinessDocumentStorage } from "../business-documents/business-document-storage";
 import { PostgresGoogleConnectionRepository } from "../google-workspace/google-connection-repository";
 import { DocumentReader } from "./document-reader";
+import type { SpendingPort } from "./spending-provider";
 export function productionReads(
   pool: Pool,
   ownerId: string,
   google: PostgresGoogleConnectionRepository,
+  spending?: SpendingPort,
 ) {
   let documentService: BusinessDocumentService | undefined;
   const documents = () => (documentService ??= new BusinessDocumentService());
@@ -68,6 +70,8 @@ export function productionReads(
     visualExtract: createOwnedVisualReader(
       readModelConfig(process.env),
       new RunStore(pool),
+      undefined,
+      spending,
     ),
     load: async (context, source) => {
       if ("documentId" in source) {

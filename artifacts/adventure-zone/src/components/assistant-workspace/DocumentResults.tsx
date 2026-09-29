@@ -144,13 +144,17 @@ export function DocumentResults({
               </a>
             </>
           )}
-          <p className="mt-3 text-xs text-slate-500">
-            Saved snapshot
-            {item.retrievedAt
-              ? ` · ${new Date(item.retrievedAt).toLocaleString()}`
-              : ""}
-            . Ask to refresh for current information.
-          </p>
+          {!(
+            item.data.view === "public_research" && item.data.savedResearch
+          ) && (
+            <p className="mt-3 text-xs text-slate-500">
+              Saved snapshot
+              {item.retrievedAt
+                ? ` · ${new Date(item.retrievedAt).toLocaleString()}`
+                : ""}
+              . Ask to refresh for current information.
+            </p>
+          )}
         </section>
       ))}
     </div>

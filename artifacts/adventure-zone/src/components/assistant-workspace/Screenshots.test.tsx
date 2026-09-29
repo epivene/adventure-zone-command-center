@@ -2,6 +2,7 @@ import { it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import AssistantWorkspacePage from "@/pages/AssistantWorkspacePage";
 import { workspaceApi } from "@/features/assistant-workspace/api";
+import { spendingSummary } from "@/test/assistant-spending";
 import {
   uploadScreenshot,
   readScreenshot,
@@ -42,6 +43,7 @@ beforeEach(() => {
     new Blob(["image"], { type: "image/png" }),
   );
   vi.mocked(workspaceApi).mockImplementation(async (path, method) => {
+    if (path === "/spending") return spendingSummary;
     if (path === "/status")
       return {
         ready: true,
@@ -54,7 +56,7 @@ beforeEach(() => {
     return conversation as any;
   });
 });
-it("uploads an image-only message and keeps its exact retry identity after an uncertain send", async () => {
+it("uploads an image-only message and keeps its exact retry identity after an uncertain send exhausts the budget", async () => {
   render(<AssistantWorkspacePage />);
   const picker = await screen.findByLabelText("Attach screenshots");
   fireEvent.change(picker, { target: { files: [file()] } });
@@ -64,6 +66,8 @@ it("uploads an image-only message and keeps its exact retry identity after an un
   let attempts = 0;
   const implementation = vi.mocked(workspaceApi).getMockImplementation()!;
   vi.mocked(workspaceApi).mockImplementation(async (...args) => {
+    if (args[0] === "/spending" && attempts > 0)
+      return { ...spendingSummary, paused: true, remainingUsd: 0 };
     if (args[0].endsWith("/messages") && ++attempts === 1)
       throw new Error("network");
     return implementation(...args);
@@ -73,12 +77,18 @@ it("uploads an image-only message and keeps its exact retry identity after an un
   expect(
     screen.getByRole("img", { name: "Preview: question.png" }),
   ).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Check previous request" }),
+  );
   await waitFor(() => expect(attempts).toBe(2));
   const sends = vi
     .mocked(workspaceApi)
     .mock.calls.filter(([p]) => p.endsWith("/messages"));
-  expect(sends[0].slice(0, 3)).toEqual(sends[1].slice(0, 3));
+  expect(sends[0].slice(0, 2)).toEqual(sends[1].slice(0, 2));
+  expect(sends[1][2]).toEqual({
+    ...(sends[0][2] as object),
+    reconcileOnly: true,
+  });
   expect(sends[0][2]).toMatchObject({
     text: "",
     attachmentIds: [expect.any(String)],
@@ -88,6 +98,41 @@ it("uploads an image-only message and keeps its exact retry identity after an un
       .mocked(workspaceApi)
       .mock.calls.filter(([p, m]) => p === "/conversations" && m === "POST"),
   ).toHaveLength(1);
+  expect(uploadScreenshot).toHaveBeenCalledTimes(1);
+});
+
+it("does not offer reconciliation for a request whose screenshot upload failed before dispatch", async () => {
+  const base = vi.mocked(workspaceApi).getMockImplementation()!;
+  vi.mocked(workspaceApi).mockImplementation(async (...args) => {
+    if (
+      args[0] === "/spending" &&
+      vi.mocked(uploadScreenshot).mock.calls.length
+    )
+      return { ...spendingSummary, paused: true, remainingUsd: 0 };
+    return base(...args);
+  });
+  vi.mocked(uploadScreenshot).mockRejectedValueOnce(
+    new Error("ASSISTANT_SCREENSHOT_UPLOAD"),
+  );
+  render(<AssistantWorkspacePage />);
+  fireEvent.change(await screen.findByLabelText("Attach screenshots"), {
+    target: { files: [file()] },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await screen.findByRole("alert");
+  await screen.findByText(/Paid AI paused/);
+  expect(
+    screen.getByRole("img", { name: "Preview: question.png" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Check previous request" }),
+  ).toBeNull();
+  expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+  expect(
+    vi
+      .mocked(workspaceApi)
+      .mock.calls.some(([path]) => path.endsWith("/messages")),
+  ).toBe(false);
   expect(uploadScreenshot).toHaveBeenCalledTimes(1);
 });
 it("supports paste/drop, removal and clear file validation without uploading before send", async () => {

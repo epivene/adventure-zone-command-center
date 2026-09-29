@@ -1,8 +1,9 @@
-import type { ActionIntent, RunContext, ToolResult } from "./contracts";
+import type { ActionIntent, RunContext, ToolResult, Grant } from "./contracts";
 import { ActionStore } from "./action-store";
 import { assertMutationGrant } from "./record-tools";
 import { blocked } from "./read-tools";
 export interface MutationAdapter {
+  rollbackErrorCodes?: readonly string[];
   validate(context: RunContext, intent: ActionIntent): Promise<void>;
   apply(context: RunContext, intent: ActionIntent): Promise<ToolResult>;
   reconcile?(context: RunContext, intent: ActionIntent): Promise<ToolResult>;
@@ -12,6 +13,14 @@ export class ActionExecutor {
     private readonly ownerId: string,
     private readonly store: ActionStore,
     private readonly adapters: Record<string, MutationAdapter>,
+    private readonly taskGrant?: (
+      context: RunContext,
+      intent: ActionIntent,
+    ) => Promise<Grant | null>,
+    private readonly taskGuard?: (
+      context: RunContext,
+      intent: ActionIntent,
+    ) => Promise<void>,
   ) {}
   async execute(
     context: RunContext,
@@ -64,7 +73,21 @@ export class ActionExecutor {
       };
     }
     try {
-      assertMutationGrant(context.grants, action);
+      await this.taskGuard?.(context, action);
+    } catch (error) {
+      return blocked(
+        error instanceof Error ? error.message : "ASSISTANT_ACCESS_DENIED",
+      );
+    }
+    try {
+      const grant =
+        context.taskId && !context.taskReview
+          ? await this.taskGrant?.(context, action)
+          : null;
+      assertMutationGrant(
+        grant ? [...context.grants, grant] : context.grants,
+        action,
+      );
     } catch {
       return {
         ...blocked("ASSISTANT_APPROVAL_REQUIRED"),
@@ -155,7 +178,21 @@ export class ActionExecutor {
         output,
       );
       return output;
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        adapter.rollbackErrorCodes?.includes(error.message)
+      ) {
+        const output = blocked(error.message);
+        await this.store.checkpoint(
+          context.actor.id,
+          action.id,
+          claimed.leaseToken,
+          "failed",
+          output,
+        );
+        return output;
+      }
       const output: ToolResult = {
         status: "uncertain",
         data: { actionId: action.id },
