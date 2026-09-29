@@ -130,6 +130,20 @@ afterEach(() => {
 });
 
 describe("ProfileGoogleEmailPanel", () => {
+  it("offers Google reconnection instead of an empty mailbox when authorization expired", async () => {
+    client.getGoogleProfileEmails.mockRejectedValueOnce(
+      new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"),
+    );
+
+    render(<ProfileGoogleEmailPanel organizationId="org-1" />);
+
+    expect(
+      await screen.findByRole("link", { name: "Reconnect Google account" }),
+    ).toHaveAttribute("href", "/settings/google-workspace");
+    expect(screen.getByText(/Company Gmail needs to be reconnected/i)).toBeInTheDocument();
+    expect(screen.queryByText(`${new Date().getUTCFullYear()} emails (0)`)).not.toBeInTheDocument();
+  });
+
   it("gives matched historical Gmail conversations separate Emails and Files views", async () => {
     render(<ProfileGoogleEmailPanel organizationId="org-1" />);
 

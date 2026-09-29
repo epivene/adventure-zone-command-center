@@ -185,7 +185,13 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
             req.params.organizationId,
           );
           if (reconciled.length || !mappings.length) mappings = reconciled;
-        } catch {
+        } catch (error) {
+          if (
+            !mappings.length &&
+            errorCode(error) === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"
+          ) {
+            throw error;
+          }
           // Label recovery is best effort. A Gmail rate limit or stale label
           // must not make an otherwise healthy profile fail to load.
         }

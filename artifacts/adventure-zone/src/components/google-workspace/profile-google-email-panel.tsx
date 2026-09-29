@@ -408,7 +408,25 @@ function ProfileGoogleEmailView({organizationId, state}: {organizationId: string
         </div>
       </div>
 
-      {error ? <div role="alert" className="mt-3 text-sm text-rose-700"><p>{error}</p><button type="button" className="button-secondary mt-2" onClick={() => void reload()}>Retry emails</button></div> : null}
+      {error ? (
+        <div role="alert" className="mt-3 text-sm text-rose-700">
+          {error === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED" ? (
+            <>
+              <p>Company Gmail needs to be reconnected before this profile can load its emails.</p>
+              <a className="button-secondary mt-2 inline-flex" href="/settings/google-workspace">
+                Reconnect Google account
+              </a>
+            </>
+          ) : (
+            <>
+              <p>{error}</p>
+              <button type="button" className="button-secondary mt-2" onClick={() => void reload()}>
+                Retry emails
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
 
       {tab === "emails" ? (
         <>
