@@ -25,6 +25,12 @@ describe("CoverageJobRepository", () => {
     expect((await repository.getRun(run.id))?.items).toHaveLength(25);
   });
 
+  it("remembers attempted organizations across runs", async () => {
+    await repository.createRun({ organizationIds: [ids[0]!, ids[1]!], requestedBy: "owner" });
+    await repository.createRun({ organizationIds: [ids[1]!], requestedBy: "owner" });
+    expect((await repository.listAttemptedOrganizationIds()).sort()).toEqual([ids[0], ids[1]]);
+  });
+
   it("claims atomically, recovers an expired lease, and resumes after reconstruction", async () => {
     const run = await repository.createRun({ organizationIds: ids.slice(0, 2), requestedBy: "owner", batchSize: 2 });
     const now = new Date("2026-09-21T12:00:00Z");

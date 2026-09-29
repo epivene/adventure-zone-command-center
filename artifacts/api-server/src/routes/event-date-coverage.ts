@@ -20,7 +20,7 @@ const reviewSchema = z.object({ decision: z.enum(["approve_confirmed", "approve_
 
 type Dependencies = {
   coverage: Pick<CoverageRepository, "list">;
-  jobs: Pick<CoverageJobRepository, "createRun" | "getRun" | "retryItem">;
+  jobs: Pick<CoverageJobRepository, "createRun" | "getRun" | "retryItem" | "listAttemptedOrganizationIds">;
   facts: {
     listFacts(organizationId: string): Promise<unknown[]>;
     review(factId: string, decision: z.infer<typeof reviewSchema>["decision"], actorId: string): Promise<unknown>;
@@ -54,8 +54,16 @@ export function createEventDateCoverageRouter(
     if (!dependencies.canStartRun()) { res.status(429).json({ error: "Research start rate limit reached" }); return; }
     let organizationIds = parsed.data.organizationIds;
     if (!organizationIds) {
-      const page = await dependencies.coverage.list({ today: today(), search: "", status: "missing", page: 1, pageSize: parsed.data.batchSize });
-      organizationIds = page.records.map((row) => row.organizationId);
+      const [page, attemptedIds] = await Promise.all([
+        dependencies.coverage.list({ today: today(), search: "", status: "missing", page: 1, pageSize: Number.MAX_SAFE_INTEGER }),
+        dependencies.jobs.listAttemptedOrganizationIds(),
+      ]);
+      const attempted = new Set(attemptedIds);
+      organizationIds = page.records
+        .filter((row) => !attempted.has(row.organizationId))
+        .slice(0, parsed.data.batchSize)
+        .map((row) => row.organizationId);
+      if (!organizationIds.length) { res.status(409).json({ error: "No unresearched profiles with missing dates remain" }); return; }
     }
     const run = await dependencies.jobs.createRun({ organizationIds, batchSize: parsed.data.batchSize, requestedBy: String((req as any).userId ?? "owner") });
     res.status(201).json(run);

@@ -96,6 +96,27 @@ describe("profile research event date apply", () => {
         "11111111-1111-4111-8111-111111111111",
         [expect.objectContaining({ startsOn: "2027-09-05", status: "confirmed" })],
       ]]));
+
+    runs.getRun.mockResolvedValue({
+      id: "run-2",
+      profileId: "11111111-1111-4111-8111-111111111111",
+      status: "complete",
+      sources: [source],
+      suggestions: [{
+        id: "suggestion-2",
+        targetKind: "event_date_fact",
+        suggestedValue: JSON.stringify({
+          startsOn: "2027-09-06", endsOn: null, evidenceKind: "published_exact",
+          recurrenceRule: null, sourceId: source.id, confidence: 0.7,
+        }),
+        confidence: "medium", rationale: "Uncertain published date", conflict: false,
+        reviewStatus: "pending",
+      }],
+    });
+    expect((await service.apply({ profileId: "11111111-1111-4111-8111-111111111111", runId: "run-2", suggestionIds: ["suggestion-2"] })).applied)
+      .toEqual(["suggestion-2"]);
+    expect(await eventDates.listFacts("11111111-1111-4111-8111-111111111111"))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ startsOn: "2027-09-06", status: "needs_review" })]));
     await client.close();
   });
 });

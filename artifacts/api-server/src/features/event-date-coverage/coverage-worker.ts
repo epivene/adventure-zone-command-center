@@ -156,17 +156,25 @@ export class ProfileResearchCoverageProvider implements CoveragePublicResearch {
     });
     const suggestions = run?.suggestions ?? [];
     const eventDateSuggestions = suggestions.filter((item: any) => item.targetKind === "event_date_fact");
-    const trustworthyIds = eventDateSuggestions
-      .filter((item: any) => item.confidence === "high" && !item.conflict)
-      .map((item: any) => item.id);
-    if (run?.id && trustworthyIds.length) {
+    if (run?.id && eventDateSuggestions.length) {
       const applied = await this.applyService.apply({
         profileId: organizationId,
         runId: run.id,
-        suggestionIds: trustworthyIds,
+        suggestionIds: eventDateSuggestions.map((item: any) => item.id),
       });
-      if (applied.applied.length) return "complete";
+      if (applied.applied.length) {
+        const onlySuggestion = eventDateSuggestions.length === 1 ? eventDateSuggestions[0] : null;
+        const evidenceKind = (() => {
+          try { return JSON.parse(onlySuggestion?.suggestedValue ?? "{}").evidenceKind; }
+          catch { return null; }
+        })();
+        return onlySuggestion?.confidence === "high" && !onlySuggestion.conflict
+          && ["published_exact", "recognized_recurrence"].includes(evidenceKind)
+          && applied.applied.includes(onlySuggestion.id)
+          ? "complete"
+          : "needs_review";
+      }
     }
-    return eventDateSuggestions.length ? "needs_review" : "skipped";
+    return "skipped";
   }
 }

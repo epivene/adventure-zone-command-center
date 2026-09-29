@@ -9,6 +9,12 @@ export type CoverageJobItem = typeof eventDateCoverageItems.$inferSelect;
 export class CoverageJobRepository {
   constructor(private readonly database: Database) {}
 
+  async listAttemptedOrganizationIds(): Promise<string[]> {
+    const rows = await this.database.selectDistinct({ organizationId: eventDateCoverageItems.organizationId })
+      .from(eventDateCoverageItems);
+    return rows.map((row) => row.organizationId);
+  }
+
   async createRun(input: { organizationIds: string[]; requestedBy: string | null; batchSize?: number }) {
     const batchSize = input.batchSize ?? 25;
     const organizationIds = [...new Set(input.organizationIds)].slice(0, batchSize);

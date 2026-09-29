@@ -114,6 +114,7 @@ describe("ProfileResearchCoverageProvider", () => {
             targetKind: "event_date_fact",
             confidence: "high",
             conflict: false,
+            suggestedValue: JSON.stringify({ evidenceKind: "published_exact" }),
           },
           {
             id: "phone-suggestion-1",
@@ -144,6 +145,21 @@ describe("ProfileResearchCoverageProvider", () => {
       profileId: "org-1",
       runId: "research-run-1",
       suggestionIds: ["date-suggestion-1"],
+    });
+  });
+
+  it("saves uncertain date suggestions for review instead of dropping them", async () => {
+    const research = { start: vi.fn(async () => ({
+      id: "research-run-2",
+      suggestions: [{ id: "date-suggestion-2", targetKind: "event_date_fact", confidence: "medium", conflict: false,
+        suggestedValue: JSON.stringify({ evidenceKind: "published_exact" }) }],
+    })) };
+    const apply = { apply: vi.fn(async () => ({ applied: ["date-suggestion-2"] })) };
+    const provider = new ProfileResearchCoverageProvider(research, apply);
+
+    expect(await provider.research("org-2", { itemId: "item-2", workerId: "worker-2" })).toBe("needs_review");
+    expect(apply.apply).toHaveBeenCalledWith({
+      profileId: "org-2", runId: "research-run-2", suggestionIds: ["date-suggestion-2"],
     });
   });
 });
