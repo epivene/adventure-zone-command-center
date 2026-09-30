@@ -61,7 +61,7 @@ export function createChatGPTMcpRouter(deps: {
         .status(429)
         .set("Retry-After", "60")
         .json({ error: "CONNECTION_RATE_LIMITED" });
-    const server = createConnectionMcpServer(deps.services, p),
+    const server = createConnectionMcpServer(deps.services, p, deps.resource),
       transport = new NodeStreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
