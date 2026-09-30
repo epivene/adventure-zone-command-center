@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import {
   ConnectionError,
   inputHash,
+  activeConnection,
   requireConnectionScope,
   type ConnectionDatabase,
   type ConnectionPrincipal,
@@ -93,6 +94,64 @@ export class LeadNoteService {
   private operations: OperationStore;
   constructor(private db: ConnectionDatabase) {
     this.operations = new OperationStore(db);
+  }
+  private async noteRow(tx: SqlQuery, profileId: string, noteId: string, lock = false) {
+    if (!z.string().uuid().safeParse(noteId).success)
+      throw new ConnectionError("CONNECTION_NOTE_UNAVAILABLE", 404);
+    await profileRow(tx, profileId);
+    const row = (await tx.query(
+      "SELECT *,updated_at::text AS version FROM activities WHERE id=$1 AND organization_id=$2 AND kind='note' AND deleted_at IS NULL" + (lock ? " FOR UPDATE" : ""),
+      [noteId, profileId],
+    )).rows[0];
+    if (!row) throw new ConnectionError("CONNECTION_NOTE_UNAVAILABLE", 404);
+    return row;
+  }
+  private noteRevision(row: any) {
+    return inputHash([row.id, row.organization_id, row.subject, row.body, row.version, row.source_record_id]);
+  }
+  async readNote(p: ConnectionPrincipal, input: { profileId: string; noteId: string }) {
+    requireConnectionScope(p, "crm:read");
+    await activeConnection(this.db, p);
+    const row = await this.noteRow(this.db, input.profileId, input.noteId);
+    // Never give an edit token for text the caller has not received in full.
+    const tooLong = (row.body ?? "").length > 20000;
+    return { noteId: row.id, profileId: row.organization_id, subject: row.subject,
+      body: (row.body ?? "").slice(0, 20000), truncated: tooLong,
+      revision: tooLong ? null : this.noteRevision(row),
+      editable: !row.source_record_id && !tooLong,
+      reason: row.source_record_id ? "Imported ACT history is read-only." : tooLong ? "Review this long note in the app." : null,
+      href: `/profiles/${input.profileId}` };
+  }
+  async editNote(p: ConnectionPrincipal, key: MutationKey, raw: {
+    profileId: string; noteId: string; expectedRevision: string; body: string; reason: string;
+  }) {
+    requireConnectionScope(p, "crm:update");
+    const parsed = z.object({
+      profileId: z.string().uuid(), noteId: z.string().uuid(),
+      expectedRevision: z.string().min(1).max(100),
+      body: z.string().trim().min(1).max(20000), reason: z.string().trim().min(1).max(1000),
+    }).strict().safeParse(raw);
+    if (!parsed.success) throw new ConnectionError("CONNECTION_INVALID_NOTE");
+    const input = parsed.data;
+    // Reject rather than silently remove an entire line that might contain business facts.
+    if (/chatgpt|openai|\bAI\b/i.test(input.body) || /chatgpt|openai|\bAI\b/i.test(input.reason))
+      throw new ConnectionError("CONNECTION_INVALID_NOTE", 400, "Keep notes and edit reasons plain, without AI/provider references.");
+    return this.operations.perform(p, "edit_profile_note", key, input, async tx => {
+      const row = await this.noteRow(tx, input.profileId, input.noteId, true);
+      if (row.source_record_id) throw new ConnectionError("CONNECTION_NOTE_READ_ONLY", 403);
+      if ((row.body ?? "").length > 20000 || this.noteRevision(row) !== input.expectedRevision)
+        throw new ConnectionError("CONNECTION_STALE_REVISION", 409);
+      if (row.body === input.body)
+        return receipt(tx, row.id, `/profiles/${input.profileId}`, this.noteRevision(row), { noteId: row.id, changed: false });
+      const revisionId = randomUUID();
+      await tx.query("INSERT INTO activity_revisions(id,activity_id,prior_body,replacement_body,reason) VALUES($1,$2,$3,$4,$5)",
+        [revisionId, row.id, row.body ?? "", input.body, input.reason]);
+      const updated = (await tx.query("UPDATE activities SET body=$2,updated_at=clock_timestamp() WHERE id=$1 RETURNING *,updated_at::text AS version", [row.id, input.body])).rows[0];
+      const snapshot = (r: any) => ({ organizationId: r.organization_id, contactId: r.contact_id, bookingId: r.booking_id, kind: r.kind, body: r.body, occurredAt: new Date(r.occurred_at ?? r.timeline_sort_at).toISOString() });
+      await tx.query(`INSERT INTO audit_entries(entity_type,entity_id,action,"before","after") VALUES('activity',$1,'update',$2::jsonb,$3::jsonb)`,
+        [row.id, JSON.stringify(snapshot(row)), JSON.stringify(snapshot(updated))]);
+      return receipt(tx, row.id, `/profiles/${input.profileId}`, this.noteRevision(updated), { noteId: row.id, changed: true, revisionId });
+    });
   }
   async createLead(
     p: ConnectionPrincipal,
