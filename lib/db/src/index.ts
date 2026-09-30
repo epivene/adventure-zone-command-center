@@ -1,3 +1,4 @@
+import * as chatgptConnectionSchema from "./chatgpt-connection-schema";
 import * as assistantWorkspaceSchema from "./assistant-workspace-schema";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
@@ -84,7 +85,7 @@ export const gmailThreadLockPool = new Pool({
   ...databasePoolTimeouts(),
 });
 import * as outreachPlannerSchema from "./outreach-planner-schema";
-type DatabaseSchema = typeof assistantWorkspaceSchema &
+type DatabaseSchema = typeof chatgptConnectionSchema & typeof assistantWorkspaceSchema &
   typeof outreachPlannerSchema &
   typeof coreSchema &
   typeof eventFamilySchema &
@@ -123,6 +124,7 @@ type DatabaseSchema = typeof assistantWorkspaceSchema &
     designTemplates: typeof designTemplates;
   };
 const schema: DatabaseSchema = {
+  ...chatgptConnectionSchema,
   ...assistantWorkspaceSchema,
   ...outreachPlannerSchema,
   ...coreSchema,
@@ -197,3 +199,5 @@ export * from "./year-end-inspection-schema";
 export * from "./outreach-planner-schema";
 
 export * from "./assistant-workspace-schema";
+
+export * from "./chatgpt-connection-schema";

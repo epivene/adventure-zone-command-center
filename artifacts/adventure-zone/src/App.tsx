@@ -27,6 +27,8 @@ import { OfficeAuthProvider, useOfficeAuth } from "@/lib/office-auth-context";
 import { OFFICE_PROTECTED_PATH } from "@/lib/office-route-pattern";
 import { CommandTerminalLanding } from "@/components/command-terminal/command-terminal-landing";
 
+const SettingsChatGPTConnectionPage = lazy(() => import("@/pages/SettingsChatGPTConnectionPage"));
+const ChatGPTConnectionConsentPage = lazy(() => import("@/pages/ChatGPTConnectionConsentPage"));
 const ManagerIssuesAdminPage = lazy(() => import("@/pages/ManagerIssuesAdminPage"));
 const ManagerRoutePage = lazy(() => import("@/pages/ManagerRoutePage"));
 const ManagerMoneyPage = lazy(() => import("@/pages/ManagerMoneyPage"));
@@ -242,6 +244,7 @@ function ActMigrationRedirect() {
 
 function SettingsStub() {
   const tools = [
+    ["ChatGPT connection", "/settings/chatgpt-connection", "Manage direct access, review profile changes and find saved app drafts."],
     ["Business sources", "/settings/business-sources", "Review protected business source files, conflicts, links, and historical terms."],
     ["Certificates of insurance", "/settings/coi", "Create, review, and renew workspace-scoped certificates linked to Studio files."],
     ["Excel lead lists", "/imports/leads", "Import Amy's event lists and review every source row before research or drafting."],
@@ -388,6 +391,8 @@ function AdminProtectedApp() {
           <Route path="/contacts/:id/edit"><ContactEditPage /></Route>
           <Route path="/contacts/:id">{(params)=><ContactDetailPage contactId={params.id}/>}</Route>
           <Route path="/contacts" component={ContactsPage} />
+          <Route path="/settings/chatgpt-connection" component={SettingsChatGPTConnectionPage} />
+          <Route path="/chatgpt-connection/consent" component={ChatGPTConnectionConsentPage} />
           <Route path="/profiles/:profileId" component={EventProfilePage} />
           <Route path="/profiles" component={OrganizationsPage} />
           <Route path="/organizations"><ProfilesRedirect /></Route>

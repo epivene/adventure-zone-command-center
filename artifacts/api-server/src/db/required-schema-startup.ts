@@ -1,3 +1,4 @@
+import { ensureChatGPTConnectionSchemaBeforeListen } from "./chatgpt-connection-required-startup";
 import { runStartupStep } from "../lib/startup-step";
 import { ensureEventReviewDismissalSchemaBeforeListen } from "./event-review-dismissal-required-startup";
 import { ensureFollowUpDismissalPersistenceBeforeListen } from "./follow-up-dismissal-required-startup";
@@ -76,6 +77,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureDesignStudio?: RequiredStep;
   ensureBusinessDocuments?: RequiredStep;
   ensureGoogleDriveBackup?: RequiredStep;
+  ensureChatGPTConnection?: RequiredStep;
   sleep?: (delayMs: number) => Promise<void>;
 }): Promise<void> {
   const run = dependencies?.run ?? runStartupStep;
@@ -97,6 +99,9 @@ export async function runRequiredSchemaStartup(dependencies?: {
       }
     }
   };
+  if (process.env.CHATGPT_CONNECTION_ENABLED === "true" || dependencies?.ensureChatGPTConnection) {
+    await runRequired("required ChatGPT connection schema", dependencies?.ensureChatGPTConnection ?? ensureChatGPTConnectionSchemaBeforeListen);
+  }
   await runRequired(
     "required paper notes schema",
     dependencies?.ensurePaperNotes ?? ensurePaperNotesSchemaBeforeListen,
