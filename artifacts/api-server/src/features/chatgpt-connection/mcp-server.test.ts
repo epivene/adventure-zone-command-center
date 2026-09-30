@@ -65,6 +65,7 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
       "list_followups",
       "save_followup",
       "get_operation_receipt",
+      "request_write_access",
     ].sort(),
   );
   const call = await rpc(app, "tools/call", {
@@ -73,6 +74,49 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
   });
   expect(call.status, call.text).toBe(200);
   expect(search).toHaveBeenCalledOnce();
+});
+it("lets a read-only connection request owner consent without performing a write", async () => {
+  const { app } = setup(["crm:read"]);
+  const list = await rpc(app, "tools/list");
+  const tool = list.body.result.tools.find(
+    (t: any) => t.name === "request_write_access",
+  );
+  expect(tool).toBeDefined();
+  expect(tool._meta.securitySchemes).toEqual([
+    {
+      type: "oauth2",
+      scopes: ["crm:read", "crm:append", "drafts:write", "followups:write"],
+    },
+  ]);
+  const result = await rpc(app, "tools/call", {
+    name: "request_write_access",
+    arguments: {},
+  });
+  expect(result.body.result.isError).toBe(true);
+  const challenge = result.body.result._meta["mcp/www_authenticate"][0];
+  expect(challenge).toContain('error="insufficient_scope"');
+  expect(challenge).toContain(
+    'scope="crm:read crm:append drafts:write followups:write"',
+  );
+  expect(challenge).toContain(
+    'resource_metadata="https://app.example/.well-known/oauth-protected-resource/api/chatgpt/mcp"',
+  );
+  // setup provides no write-service methods: this must succeed without invoking them.
+  expect(
+    (await rpc(app, "tools/list")).body.result.tools.map((t: any) => t.name),
+  ).not.toContain("create_researched_lead");
+});
+it("reports existing write permission without starting another authorization", async () => {
+  const { app } = setup();
+  const result = await rpc(app, "tools/call", {
+    name: "request_write_access",
+    arguments: {},
+  });
+  expect(result.body.result.isError).not.toBe(true);
+  expect(result.body.result._meta?.["mcp/www_authenticate"]).toBeUndefined();
+  expect(JSON.parse(result.body.result.content[0].text).status).toBe(
+    "authorized",
+  );
 });
 it("hides and blocks ungranted writes and rejects auth, host, origin, disabled flag and oversized bodies", async () => {
   const { app } = setup(["crm:read"]);
