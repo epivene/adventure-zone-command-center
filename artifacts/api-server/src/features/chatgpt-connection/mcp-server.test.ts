@@ -107,7 +107,7 @@ it("lets a read-only connection request owner consent without performing a write
   // setup provides no write-service methods: this must succeed without invoking them.
   expect(
     (await rpc(app, "tools/list")).body.result.tools.map((t: any) => t.name),
-  ).not.toContain("create_researched_lead");
+  ).toContain("create_researched_lead");
 });
 it("reports existing write permission without starting another authorization", async () => {
   const { app } = setup();
@@ -121,10 +121,10 @@ it("reports existing write permission without starting another authorization", a
     "authorized",
   );
 });
-it("hides and blocks ungranted writes and rejects auth, host, origin, disabled flag and oversized bodies", async () => {
+it("advertises and blocks ungranted writes and rejects auth, host, origin, disabled flag and oversized bodies", async () => {
   const { app } = setup(["crm:read"]);
   const list = await rpc(app, "tools/list");
-  expect(list.body.result.tools.map((t: any) => t.name)).not.toContain(
+  expect(list.body.result.tools.map((t: any) => t.name)).toContain(
     "save_app_draft",
   );
   const write = await rpc(app, "tools/call", {
@@ -151,9 +151,32 @@ it("requests separate edit consent without broadening the existing append grant"
   const { app } = setup(["crm:read", "crm:append"]);
   const list = await rpc(app, "tools/list");
   const names = list.body.result.tools.map((t: any) => t.name);
-  expect(names).toContain("read_profile_note"); expect(names).not.toContain("edit_profile_note");
+  expect(names).toContain("read_profile_note"); expect(names).toContain("edit_profile_note");
   const result = await rpc(app, "tools/call", { name: "request_edit_access", arguments: {} });
   expect(result.body.result.isError).toBe(true);
   expect(result.body.result._meta["mcp/www_authenticate"][0]).toContain('scope="crm:read crm:append crm:update"');
-  expect((await rpc(app, "tools/list")).body.result.tools.map((t: any) => t.name)).not.toContain("edit_profile_note");
+  expect((await rpc(app, "tools/list")).body.result.tools.map((t: any) => t.name)).toContain("edit_profile_note");
+});
+
+it("keeps discovery identical across read, append and full grants", async () => {
+  const full = (await rpc(setup().app, "tools/list")).body.result.tools;
+  for (const scopes of [["crm:read"], ["crm:read", "crm:append"]] as const) {
+    const list = await rpc(setup([...scopes]).app, "tools/list");
+    expect(list.body.result.tools).toEqual(full);
+  }
+  const edit = full.find((t: any) => t.name === "edit_profile_note");
+  expect(edit.annotations.destructiveHint).toBe(true);
+  expect(edit._meta.securitySchemes).toEqual([{ type: "oauth2", scopes: ["crm:update"] }]);
+});
+it("challenges an ungranted edit before invoking any note service", async () => {
+  const { app } = setup(["crm:read", "crm:append"]);
+  const result = await rpc(app, "tools/call", {
+    name: "edit_profile_note",
+    arguments: { requestKey: "denied-edit", profileId: randomUUID(), noteId: randomUUID(),
+      expectedRevision: "revision", body: "Short note", reason: "Owner requested cleanup" },
+  });
+  expect(result.body.result?.isError).toBe(true);
+  expect(JSON.parse(result.body.result.content[0].text).code).toBe("CONNECTION_ACCESS_DENIED");
+  expect(result.body.result._meta["mcp/www_authenticate"][0]).toContain('scope="crm:read crm:append crm:update"');
+  // No note methods exist in setup: falling through to a service cannot pass.
 });

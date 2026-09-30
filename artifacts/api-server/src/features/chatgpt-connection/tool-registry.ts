@@ -222,5 +222,6 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       call: (a) => s.operations.get(p, a.operationId),
     },
   ];
-  return tools.filter((t) => !t.scope || p.scopes.includes(t.scope));
+  // Discovery must not cache a permission-dependent subset. Calls remain scope-checked.
+  return tools;
 }
