@@ -111,7 +111,7 @@ export function ProfileAtAGlance({
 }) {
   const nextEvent = profile.effectiveEventDate ?? null;
   const nextEventLabel = nextEvent
-    ? `${readable(nextEvent.displayStatus)} ${formatDate(nextEvent.startsOn)}${nextEvent.endsOn ? `–${formatDate(nextEvent.endsOn)}` : ""}`
+    ? `${nextEvent.displayStatus === "expected" ? "Estimated" : readable(nextEvent.displayStatus)} ${formatDate(nextEvent.startsOn)}${nextEvent.endsOn ? `–${formatDate(nextEvent.endsOn)}` : ""}`
     : "Upcoming date not recorded";
   const today = now.toISOString().slice(0, 10);
   const lastRecordedDate = !nextEvent

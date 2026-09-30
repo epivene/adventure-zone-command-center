@@ -142,3 +142,17 @@ it("keeps distinct event IDs in source query parameters", async () => {
   );
   expect(a.recordId).not.toBe(b.recordId);
 });
+
+it("saves calendar date facts atomically and holds conflicting dates for review", async () => {
+ const { readFile } = await import("node:fs/promises");
+ await f.db.exec(await readFile(new URL("../../../../../lib/db/migrations/20260921_event_date_coverage.sql", import.meta.url),"utf8"));
+ const dates = {startsOn:"2027-05-13",endsOn:"2027-05-16",status:"confirmed" as const,sourceUrl:source.url,rationale:"Official website publishes the 2027 dates."};
+ const sources = [{...source,verification:"verified" as const}];
+ const saved = await service.createLead(f.principal,{requestKey:"dated"},{...lead,eventYear:2027,sources,eventDates:dates,summary:"Family festival. Organizer contact unknown."});
+ const rows = await f.db.query("SELECT *,starts_on::text AS starts_on,ends_on::text AS ends_on FROM event_date_facts WHERE organization_id=$1",[saved.recordId]);
+ expect(rows.rows).toHaveLength(1);
+ expect(rows.rows[0]).toMatchObject({status:"confirmed",active:true,starts_on:"2027-05-13",ends_on:"2027-05-16"});
+ await service.appendNote(f.principal,{requestKey:"conflict"},{profileId:saved.recordId,subject:"Dates",body:"Conflicting published dates need checking.",sources,eventDates:{...dates,startsOn:"2027-05-14"}});
+ expect((await f.db.query("SELECT status,active FROM event_date_facts ORDER BY created_at,id")).rows).toEqual(expect.arrayContaining([{status:"confirmed",active:true},{status:"needs_review",active:false}]));
+ expect((await f.db.query("SELECT * FROM bookings")).rows).toHaveLength(0);
+});

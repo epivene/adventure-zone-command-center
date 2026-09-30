@@ -156,9 +156,9 @@ export default function EventProfilePage() {
     return () => { cancelled = true; };
   }, [profileId, Boolean(data)]);
 
-  async function saveProfileImage(dataUrl: string | null) {
+  async function saveProfileImage(dataUrl: string | null, sourceUrl?: string) {
     if (!profileId) return;
-    const result = await apiPatch<{ ok: boolean; dataUrl: string | null }>(`/event-profiles/${profileId}/photo`, { dataUrl });
+    const result = await apiPatch<{ ok: boolean; dataUrl: string | null }>(`/event-profiles/${profileId}/photo`, { dataUrl, ...(sourceUrl ? {sourceUrl} : {}) });
     setProfileImageDataUrl(result.dataUrl ?? null);
   }
 

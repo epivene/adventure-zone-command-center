@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cleanResearchText, formatResearchNote, validateResearchDates, saveResearchDates, type ResearchDates } from "./research-details";
 import { randomUUID } from "node:crypto";
 import {
   ConnectionError,
@@ -82,12 +83,9 @@ export async function insertResearchNote(
   sources: SourceRef[],
 ) {
   const id = randomUUID();
-  const provenance =
-    "\n\nSources supplied through the direct ChatGPT connection; not independently verified by the app:\n" +
-    sources.map((s) => JSON.stringify(s)).join("\n");
   await tx.query(
     "INSERT INTO activities(id,organization_id,kind,subject,body,occurred_at,timeline_sort_at) VALUES($1,$2,'note',$3,$4,now(),now())",
-    [id, profileId, subject, body + provenance],
+    [id, profileId, cleanResearchText(subject) || "Event research", formatResearchNote(body, sources)],
   );
   return id;
 }
@@ -107,6 +105,8 @@ export class LeadNoteService {
       sourceIdentity: string | null;
       eventYear: number | null;
       sources: SourceRef[];
+      eventDates?: ResearchDates | null;
+      summary?: string;
     },
   ) {
     requireConnectionScope(p, "crm:append");
@@ -122,7 +122,8 @@ export class LeadNoteService {
       })
       .safeParse(raw);
     if (!parsed.success) throw new ConnectionError("CONNECTION_INVALID_LEAD");
-    const input = { ...parsed.data, sources };
+    const eventDates = validateResearchDates(raw.eventDates, sources, "eventYear" in raw ? raw.eventYear : undefined);
+    const input = { ...parsed.data, sources, ...(raw.eventDates !== undefined ? {eventDates} : {}), ...(raw.summary !== undefined ? {summary: raw.summary.slice(0,2000)} : {}) };
     return this.operations.perform(
       p,
       "create_researched_lead",
@@ -195,11 +196,10 @@ export class LeadNoteService {
           tx,
           id,
           "Researched lead" + (input.eventYear ? " — " + input.eventYear : ""),
-          "Research year: " +
-            (input.eventYear ?? "unknown") +
-            ". Organizer responsibility has not been inferred.",
+          input.summary || sources.slice(0,3).map(s => (s.verification === "unverified" ? "Unverified: " : "") + s.claim.slice(0,400)).join("\n"),
           sources,
         );
+        await saveResearchDates(tx, id, eventDates, sources);
         const result = profileSummary(await profileRow(tx, id));
         return receipt(tx, id, result.href, result.revision, result);
       },
@@ -213,6 +213,8 @@ export class LeadNoteService {
       subject: string;
       body: string;
       sources: SourceRef[];
+      eventDates?: ResearchDates | null;
+      summary?: string;
     },
   ) {
     requireConnectionScope(p, "crm:append");
@@ -225,7 +227,8 @@ export class LeadNoteService {
       })
       .safeParse(raw);
     if (!parsed.success) throw new ConnectionError("CONNECTION_INVALID_NOTE");
-    const input = { ...parsed.data, sources };
+    const eventDates = validateResearchDates(raw.eventDates, sources, "eventYear" in raw ? raw.eventYear : undefined);
+    const input = { ...parsed.data, sources, ...(raw.eventDates !== undefined ? {eventDates} : {}), ...(raw.summary !== undefined ? {summary: raw.summary.slice(0,2000)} : {}) };
     return this.operations.perform(
       p,
       "append_research_note",
@@ -240,7 +243,9 @@ export class LeadNoteService {
           input.body,
           sources,
         );
+        const dateFact = await saveResearchDates(tx, input.profileId, eventDates, sources);
         return receipt(tx, id, `/profiles/${input.profileId}`, id, {
+          dateFact,
           noteId: id,
         });
       },

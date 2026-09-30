@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { eventDatesSchema } from "./research-details";
 import { sourceSchema } from "./lead-note-service";
 import { draftContentSchema } from "../assistant-workspace/draft-content";
 import type { ConnectionPrincipal, ConnectionScope } from "./contracts";
@@ -77,7 +78,7 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       name: "create_researched_lead",
       scope: "crm:append",
       description:
-        "Save a sourced lead with duplicate checks. Reuse requestKey on retry. sourceIdentity is an event-specific source URL; preserve unknown organizer roles.",
+        "Save a sourced lead with duplicate checks. Always research event dates first and supply eventDates for At a glance when supported; expected dates need an evidence-based rationale. Supply a short plain-English summary. Never mention ChatGPT or technical tooling in records. Reuse requestKey on retry. sourceIdentity is an event-specific source URL; preserve unknown organizer roles.",
       schema: z
         .object({
           requestKey,
@@ -88,6 +89,8 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
           sourceIdentity: z.string().url().nullable(),
           eventYear: year,
           sources,
+          eventDates: eventDatesSchema.nullable().optional(),
+          summary: z.string().max(2000).optional(),
         })
         .strict(),
       readOnly: false,
@@ -97,7 +100,7 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       name: "append_research_note",
       scope: "crm:append",
       description:
-        "Append researched notes with sources supplied by the caller. Does not independently verify research. Use the same requestKey on retry.",
+        "Append short plain-English research notes and sourced eventDates for At a glance. Never mention ChatGPT or technical tooling in records. Confirmed dates require a matching-year verified source; estimates must be expected with a rationale. Conflicting dates are held for review. Does not independently verify research. Use the same requestKey on retry.",
       schema: z
         .object({
           requestKey,
@@ -105,6 +108,8 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
           subject: z.string().max(300),
           body: z.string().max(20000),
           sources,
+          eventDates: eventDatesSchema.nullable().optional(),
+          summary: z.string().max(2000).optional(),
         })
         .strict(),
       readOnly: false,
