@@ -1,3 +1,4 @@
+import { WebsitePhotoPicker } from "./website-photo-picker";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 import { useProfileGoogleEmail } from "@/components/google-workspace/use-profile-google-email";
 import { ProfileWorkspaceActions } from "./profile-workspace-actions";
@@ -144,7 +145,7 @@ export function SimpleFullProfile({
   onBack?: () => void;
   originLabel?: string;
   profileImageDataUrl?: string | null;
-  onProfileImageChange?: (dataUrl: string | null) => Promise<void>;
+  onProfileImageChange?: (dataUrl: string | null, sourceUrl?: string) => Promise<void>;
   editing?: boolean;
   onEditingChange?: (editing: boolean) => void;
 }) {
@@ -567,6 +568,7 @@ export function SimpleFullProfile({
                   <Camera className="h-4 w-4" />
                 </span>
               </label>
+              {onProfileImageChange && <WebsitePhotoPicker profileId={profile.id} onSave={onProfileImageChange} />}
               {profileImageDataUrl ? (
                 <button
                   className="mt-2 w-16 text-xs font-semibold text-[#71848a] hover:text-[#b8544f] sm:w-20"
