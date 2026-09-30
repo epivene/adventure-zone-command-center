@@ -12,7 +12,7 @@ type Booking={id:string;name:string;city:string;region:string;startsAt:string|nu
 type Note={id:string;kind:string;body:string;occurredAt:string};
 type Mail={id:string;recipientName:string|null;address1:string|null;address2:string|null;city:string|null;region:string|null;postalCode:string|null;preparedAt:string|null;mailedAt:string|null;note:string|null};
 type Contact=OfficeContactDetail&{name:string;isPrimary:boolean;phone:string|null;locationName:string|null;phones:OfficeContactPhone[]};
-type Profile={id:string;name:string;description:string|null;profileImageDataUrl:string|null;phone:string|null;address1:string|null;address2:string|null;city:string|null;region:string|null;postalCode:string|null;website:string|null;contacts:Contact[];bookings:Booking[];notes:Note[];locations:OfficeLocationDetail[];mailActivity:Mail[]};
+type Profile={id:string;name:string;description:string|null;phone:string|null;address1:string|null;address2:string|null;city:string|null;region:string|null;postalCode:string|null;website:string|null;contacts:Contact[];bookings:Booking[];notes:Note[];locations:OfficeLocationDetail[];mailActivity:Mail[]};
 type OpenSection="contacts"|"events"|"notes"|null;
 function address(parts:Array<string|null|undefined>){return parts.filter(Boolean).join(", ");}
 function date(value:string|null){return value?new Date(value).toLocaleDateString():"";}
@@ -42,7 +42,6 @@ export default function OfficeProfilePage({profileId}:{profileId:string}){
 
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="grid gap-4 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
-        <div className="mx-auto size-24 overflow-hidden rounded-full bg-orange-50 shadow-inner sm:size-28 md:mx-0">{profile.profileImageDataUrl?<img alt={`${profile.name} profile`} className="h-full w-full object-cover" src={profile.profileImageDataUrl}/>:<div className="flex h-full w-full items-center justify-center text-orange-700"><UserRound className="h-11 w-11"/></div>}</div>
         <div className="min-w-0 text-center md:text-left"><h1 className="break-words text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{profile.name}</h1><div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-sm text-slate-600 md:justify-start">{location?<span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4"/>{location}</span>:<span>Location not set</span>}</div><div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm md:justify-start">{primaryContact?<span className="font-semibold text-slate-800">{primaryContact.name}</span>:null}{primaryContact?.phone?<span className="font-medium text-slate-700">{primaryContact.phone}</span>:profile.phone?<span className="font-medium text-slate-700">{profile.phone}</span>:null}{primaryContact?.email?<span className="font-medium text-slate-700">{primaryContact.email}</span>:null}{profile.website?<a className="font-medium text-orange-700 hover:underline" href={profile.website} target="_blank" rel="noreferrer">Website</a>:null}</div></div>
       </div>
     </section>
