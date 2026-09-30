@@ -25,15 +25,14 @@ describe("Office Coordinator daily workspace",()=>{
   });
   it("gives profiles admin-quality identity and factual work actions without owner strategy controls",()=>{
     for(const action of ["Edit Profile","Edit contact","Edit location","Add Note","Draft Email"]){expect(profile.toLowerCase()).toContain(action.toLowerCase());}
-    expect(profile).toContain("profileImageDataUrl");
+    expect(profile).not.toContain("profileImageDataUrl");
     expect(profile).toContain("StatCard");
     for(const section of ["Contacts","Events","Notes & History"]){expect(profile).toContain(section);}
     for(const forbidden of ["Last Resort","Probability","Travel Leg","Import","Merge profiles"]){expect(profile).not.toContain(forbidden);}
   });
-  it("uses photo cards and smaller profile pages",()=>{
-    expect(profiles).toContain("profileImageDataUrl");
+  it("uses compact profile cards without photos",()=>{
+    expect(profiles).not.toContain("profileImageDataUrl");
     expect(profiles).toContain("12 per page");
-    expect(profiles).toContain("rounded-full");
   });
   it("matches the main console with a collapsed Event Families dropdown",()=>{
     expect(profiles).toContain("<details");

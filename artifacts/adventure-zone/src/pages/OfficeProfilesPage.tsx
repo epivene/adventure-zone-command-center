@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearch } from "wouter";
-import { MapPin, UserRound } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { officeGet } from "@/lib/office-auth-context";
 import OfficeFamilyPage from "@/pages/OfficeFamilyPage";
 
@@ -10,19 +10,12 @@ type Record = {
   city: string | null;
   region: string | null;
   primaryContactName: string | null;
-  profileImageDataUrl: string | null;
   contactCount: number;
   bookingCount: number;
   locationCount: number;
 };
 type Family = { id: string; name: string; description: string | null; memberCount: number; matchedMemberCount: number };
 type Page = { records: Record[]; families: Family[]; total: number; page: number; pageCount: number };
-
-function ProfileAvatar({ profile }: { profile: Record }) {
-  return profile.profileImageDataUrl
-    ? <img alt={`${profile.name} profile`} className="h-full w-full object-cover" src={profile.profileImageDataUrl} />
-    : <div className="flex h-full w-full items-center justify-center text-orange-700"><UserRound className="h-10 w-10" /></div>;
-}
 
 export default function OfficeProfilesPage() {
   const search = useSearch();
@@ -79,7 +72,6 @@ export default function OfficeProfilesPage() {
           const location=[profile.city,profile.region].filter(Boolean).join(", ");
           return <Link key={profile.id} href={`/office/profiles/${profile.id}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-orange-300 hover:shadow-md">
             <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[5rem_minmax(0,1fr)_auto]">
-              <div className="size-20 overflow-hidden rounded-full bg-orange-50"><ProfileAvatar profile={profile}/></div>
               <div className="min-w-0"><h2 className="break-words text-xl font-bold tracking-tight text-slate-950">{profile.name}</h2><div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">{location?<span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4"/>{location}</span>:<span>Location not set</span>}{profile.primaryContactName?<span>· {profile.primaryContactName}</span>:null}</div><p className="mt-2 text-xs font-medium text-slate-500">{profile.locationCount>0?`${profile.locationCount} location${profile.locationCount===1?"":"s"} · `:""}{profile.contactCount} contact{profile.contactCount===1?"":"s"} · {profile.bookingCount} event{profile.bookingCount===1?"":"s"}</p></div>
               <span className="col-start-2 text-sm font-semibold text-orange-700 sm:col-start-3">Open profile →</span>
             </div>

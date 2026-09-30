@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearch } from "wouter";
-import { LoaderCircle, MapPin, Search, UserRound } from "lucide-react";
+import { LoaderCircle, MapPin, Search } from "lucide-react";
 import { bossGet } from "@/lib/boss-auth-context";
 import { BossProfileDirectoryNav } from "@/components/boss/boss-profile-directory-nav";
 
@@ -10,19 +10,12 @@ type ProfileRecord = {
   city: string | null;
   region: string | null;
   primaryContactName: string | null;
-  profileImageDataUrl: string | null;
   contactCount: number;
   bookingCount: number;
   locationCount: number;
 };
 type Family = { id: string; name: string; description: string | null; memberCount: number; matchedMemberCount: number };
 type Page = { records: ProfileRecord[]; families: Family[]; total: number; page: number; pageCount: number };
-
-function ProfileAvatar({ profile }: { profile: ProfileRecord }) {
-  return profile.profileImageDataUrl
-    ? <img alt={`${profile.name} profile`} className="h-full w-full object-cover" src={profile.profileImageDataUrl} />
-    : <div className="flex h-full w-full items-center justify-center text-primary"><UserRound className="h-10 w-10" /></div>;
-}
 
 export default function BossProfilesPage() {
   const search = useSearch();
@@ -88,7 +81,6 @@ export default function BossProfilesPage() {
               return (
                 <Link className="rounded-xl border border-border bg-card p-3 shadow-sm transition hover:border-primary/40" href={`/boss/profiles/${profile.id}`} key={profile.id}>
                   <div className="grid grid-cols-[4rem_minmax(0,1fr)] items-center gap-3">
-                    <div className="size-16 overflow-hidden rounded-full bg-primary/10"><ProfileAvatar profile={profile} /></div>
                     <div className="min-w-0">
                       <h2 className="break-words text-lg font-bold">{profile.name}</h2>
                       <p className="mt-1 text-sm text-muted-foreground">{location ? <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{location}</span> : "Location not set"}{profile.primaryContactName ? ` · ${profile.primaryContactName}` : ""}</p>

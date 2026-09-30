@@ -19,7 +19,7 @@ describe("modern CRM full profile", () => {
     expect(simple).toContain("Ask Assistant");
     expect(simple).toContain("Open notifications");
     expect(simple).toContain("Open primary contact");
-    expect(simple).toContain("profileImageDataUrl");
+    expect(simple).not.toContain("profileImageDataUrl");
     expect(simple).not.toContain('["overview", "notes", "events"]');
   });
 

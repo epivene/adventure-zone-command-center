@@ -1,4 +1,3 @@
-import { WebsitePhotoPicker } from "./website-photo-picker";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 import { useProfileGoogleEmail } from "@/components/google-workspace/use-profile-google-email";
 import { ProfileWorkspaceActions } from "./profile-workspace-actions";
@@ -10,7 +9,6 @@ import {
   ArrowUpRight,
   Bell,
   Building2,
-  Camera,
   CalendarDays,
   Check,
   ChevronDown,
@@ -131,8 +129,6 @@ export function SimpleFullProfile({
   onSectionChange,
   onBack,
   originLabel = "Profiles",
-  profileImageDataUrl,
-  onProfileImageChange,
   editing,
   onEditingChange,
 }: {
@@ -144,8 +140,6 @@ export function SimpleFullProfile({
   onSectionChange?: (section: OpenSection) => void;
   onBack?: () => void;
   originLabel?: string;
-  profileImageDataUrl?: string | null;
-  onProfileImageChange?: (dataUrl: string | null, sourceUrl?: string) => Promise<void>;
   editing?: boolean;
   onEditingChange?: (editing: boolean) => void;
 }) {
@@ -156,8 +150,6 @@ export function SimpleFullProfile({
       ? "emails"
       : null,
   );
-  const [photoBusy, setPhotoBusy] = useState(false);
-  const [photoError, setPhotoError] = useState("");
   const [noteSearch, setNoteSearch] = useState("");
   const [emailComposerOpen, setEmailComposerOpen] = useState(false);
   const [emailDraft, setEmailDraft] = useState<ProfileEmailDraft | null>(null);
@@ -303,65 +295,6 @@ export function SimpleFullProfile({
     const source = await getPaperNoteActivitySource(activityId);
     if (!source.url) throw new Error("The original paper note image is not available.");
     window.open(source.url, "_blank", "noopener,noreferrer");
-  }
-
-  async function changePhoto(file: File | undefined) {
-    if (!file || !onProfileImageChange) return;
-    if (!file.type.startsWith("image/")) {
-      setPhotoError("Choose an image file.");
-      return;
-    }
-    setPhotoBusy(true);
-    setPhotoError("");
-    try {
-      const source = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error("Could not read that image."));
-        reader.onload = () => resolve(String(reader.result ?? ""));
-        reader.readAsDataURL(file);
-      });
-      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const next = new Image();
-        next.onload = () => resolve(next);
-        next.onerror = () => reject(new Error("Could not open that image."));
-        next.src = source;
-      });
-      const side = Math.min(image.naturalWidth, image.naturalHeight);
-      const canvas = document.createElement("canvas");
-      canvas.width = 320;
-      canvas.height = 320;
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("Could not prepare that image.");
-      context.drawImage(
-        image,
-        (image.naturalWidth - side) / 2,
-        (image.naturalHeight - side) / 2,
-        side,
-        side,
-        0,
-        0,
-        320,
-        320,
-      );
-      await onProfileImageChange(canvas.toDataURL("image/jpeg", 0.82));
-    } catch (error) {
-      setPhotoError(error instanceof Error ? error.message : "Could not save profile photo.");
-    } finally {
-      setPhotoBusy(false);
-    }
-  }
-
-  async function removePhoto() {
-    if (!onProfileImageChange || photoBusy) return;
-    setPhotoBusy(true);
-    setPhotoError("");
-    try {
-      await onProfileImageChange(null);
-    } catch (error) {
-      setPhotoError(error instanceof Error ? error.message : "Could not remove profile photo.");
-    } finally {
-      setPhotoBusy(false);
-    }
   }
 
   function openNoteComposer() {
@@ -544,43 +477,6 @@ export function SimpleFullProfile({
       <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] shadow-[0_12px_32px_rgba(32,71,77,0.06)]">
         <div className="flex flex-col gap-6 p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
-            <div className="shrink-0">
-              <label className="group relative block w-fit cursor-pointer" title="Change profile photo">
-                <input
-                  className="sr-only"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  disabled={photoBusy}
-                  onChange={(event) => void changePhoto(event.target.files?.[0])}
-                />
-                {profileImageDataUrl ? (
-                  <img
-                    src={profileImageDataUrl}
-                    alt={`${profile.place.name} profile`}
-                    className="h-16 w-16 rounded-xl border border-[#bfd5ca] object-cover sm:h-20 sm:w-20"
-                  />
-                ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-[#bfd5ca] bg-[#e3eee8] text-lg font-bold text-[#397064] sm:h-20 sm:w-20">
-                    {initials(profile.place.name)}
-                  </div>
-                )}
-                <span className="absolute -bottom-2 -right-2 rounded-lg border border-[#d8e2dd] bg-[#fbfcf8] p-1.5 text-[#315b66] shadow-sm">
-                  <Camera className="h-4 w-4" />
-                </span>
-              </label>
-              {onProfileImageChange && <WebsitePhotoPicker profileId={profile.id} onSave={onProfileImageChange} />}
-              {profileImageDataUrl ? (
-                <button
-                  className="mt-2 w-16 text-xs font-semibold text-[#71848a] hover:text-[#b8544f] sm:w-20"
-                  disabled={photoBusy}
-                  onClick={() => void removePhoto()}
-                  type="button"
-                >
-                  Remove
-                </button>
-              ) : null}
-            </div>
-
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="break-words text-2xl font-bold tracking-[-0.03em] text-[#173b48] sm:text-3xl">
@@ -629,11 +525,6 @@ export function SimpleFullProfile({
                   </a>
                 ) : null}
               </div>
-              {photoError ? (
-                <p className="mt-2 text-sm font-semibold text-[#b8544f]" role="alert">
-                  {photoError}
-                </p>
-              ) : null}
             </div>
           </div>
 

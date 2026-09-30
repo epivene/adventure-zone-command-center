@@ -4,7 +4,7 @@ import { profileReturnPath, profileOriginLabel } from "@/lib/profile-navigation"
 import { useEffect, useMemo, useState } from "react";
 import { ConventionHistory } from "@/components/profiles/convention-history";
 import { useLocation, useParams, useSearch } from "wouter";
-import { apiGet, apiPatch } from "@/lib/auth-token";
+import { apiGet } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
 import { EarlyBirdPromoCard, type EarlyBirdPromoView } from "@/components/event-profiles/early-bird-promo-card";
 import { SimpleFullProfile, type OpenSection } from "@/components/profiles/simple-full-profile";
@@ -44,7 +44,6 @@ export default function EventProfilePage() {
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [profileImageDataUrl, setProfileImageDataUrl] = useState<string | null>(null);
   const [profileEditing, setProfileEditing] = useState(false);
   const [researchOpen, setResearchOpen] = useState(false);
   const [actHistorySearch, setActHistorySearch] = useState("");
@@ -80,10 +79,9 @@ export default function EventProfilePage() {
     const qs = new URLSearchParams();
     if (contactId) qs.set("contactId", contactId);
     try {
-      const [d, ratingSummary, photo, descriptionResult, earlyBirdPromoResult] = await Promise.all([
+      const [d, ratingSummary, descriptionResult, earlyBirdPromoResult] = await Promise.all([
         apiGet<any>(`/event-profiles/${profileId}?${qs.toString()}`),
         apiGet<{ average: number | null; count: number }>(`/event-wrap-up-ratings/organization/${profileId}`).catch(() => ({ average: null, count: 0 })),
-        apiGet<{ dataUrl: string | null }>(`/event-profiles/${profileId}/photo`).catch(() => ({ dataUrl: null })),
         apiGet<{ description: string | null }>(`/event-profiles/${profileId}/description`).catch(() => ({ description: null })),
         apiGet<{ promotion: EarlyBirdPromoView | null }>(`/early-bird-promo/profile/${profileId}?eventYear=2027`).catch(() => ({ promotion: null })),
       ]);
@@ -121,7 +119,6 @@ export default function EventProfilePage() {
         return [contact.id as string, callablePhone?.number ?? null] as const;
       }));
 
-      setProfileImageDataUrl(photo.dataUrl ?? null);
       setCallablePhoneByContactId(Object.fromEntries(callablePhones));
       setFamilyNotes([]);
       setFamilyNotesError(null);
@@ -155,12 +152,6 @@ export default function EventProfilePage() {
     }).catch(() => { if (!cancelled) { setContractBookings([]); setContractVersions([]); } });
     return () => { cancelled = true; };
   }, [profileId, Boolean(data)]);
-
-  async function saveProfileImage(dataUrl: string | null, sourceUrl?: string) {
-    if (!profileId) return;
-    const result = await apiPatch<{ ok: boolean; dataUrl: string | null }>(`/event-profiles/${profileId}/photo`, { dataUrl, ...(sourceUrl ? {sourceUrl} : {}) });
-    setProfileImageDataUrl(result.dataUrl ?? null);
-  }
 
   function retryFamilyNotes() {
     if (data?.familyContext?.kind !== "event_family") return;
@@ -217,8 +208,6 @@ export default function EventProfilePage() {
             onAskAssistant={() => { if(profileId) void openProfile(profileId, profileLabel); }}
             onBack={goBack}
             originLabel={profileOrigin}
-            profileImageDataUrl={profileImageDataUrl}
-            onProfileImageChange={saveProfileImage}
             editing={profileEditing}
             onEditingChange={setProfileEditing}
           />
