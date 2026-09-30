@@ -50,9 +50,6 @@ export function ProfileDetailSheet({
   variant?: "sheet" | "inline";
 }) {
   const [data, setData] = useState<any>(null);
-  const [profileImageDataUrl, setProfileImageDataUrl] = useState<string | null>(
-    null,
-  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -80,16 +77,12 @@ export function ProfileDetailSheet({
       const qs = new URLSearchParams();
       if (target?.contactId) qs.set("contactId", target.contactId);
       try {
-        const [next, photo] = await Promise.all([
+        const [next] = await Promise.all([
           apiGet<any>(
             `/event-profiles/${profileId}${qs.toString() ? `?${qs.toString()}` : ""}`,
           ),
-          apiGet<{ dataUrl: string | null }>(
-            `/event-profiles/${profileId}/photo`,
-          ).catch(() => ({ dataUrl: null })),
         ]);
         setData(next);
-        setProfileImageDataUrl(photo.dataUrl ?? null);
         setOptimisticRecentNote((current: any) => {
           if (!current) return current;
           const refreshedNotes = Array.isArray(next?.notes) ? next.notes : [];
@@ -265,17 +258,6 @@ export function ProfileDetailSheet({
 
               <section className="rounded-md border border-[#d8d1c4] bg-[#fffefa]">
                 <div className="flex items-start gap-3 border-b border-[#e6dfd2] p-4">
-                  {profileImageDataUrl ? (
-                    <img
-                      alt={`${title} profile`}
-                      className="h-16 w-16 shrink-0 rounded-md border border-[#8fc9bf] object-cover"
-                      src={profileImageDataUrl}
-                    />
-                  ) : (
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border border-[#8fc9bf] bg-[#eaf6f3] text-[#157d78]">
-                      <Building2 className="h-7 w-7" />
-                    </div>
-                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
