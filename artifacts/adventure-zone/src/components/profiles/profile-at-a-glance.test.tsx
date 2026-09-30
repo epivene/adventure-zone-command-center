@@ -38,7 +38,7 @@ describe("ProfileAtAGlance event dates", () => {
         />,
       );
       expect(
-        screen.getByText(new RegExp(displayStatus, "i")),
+        screen.getByText(new RegExp(displayStatus === "expected" ? "Estimated" : displayStatus, "i")),
       ).toHaveTextContent("Sep 4, 2027–Sep 6, 2027");
       if (displayStatus !== "booked")
         expect(
