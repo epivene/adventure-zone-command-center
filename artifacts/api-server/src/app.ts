@@ -1,3 +1,4 @@
+import { mountChatGPTConnection } from "./features/chatgpt-connection/connection-runtime";
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
@@ -47,6 +48,7 @@ app.use(
   }),
 );
 app.use(requireStartupReadiness);
+mountChatGPTConnection(app);
 
 app.use(
   "/api/public/website-inquiries",

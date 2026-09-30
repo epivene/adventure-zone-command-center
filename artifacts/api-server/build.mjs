@@ -38,6 +38,12 @@ async function buildAll() {
     // - uses native modules and loads them dynamically (e.g. sharp)
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
+      // Preserve protocol package internals and their own Zod imports. The app's
+      // zod -> zod/v4 alias must not rewrite SDK imports to zod/v4/v4.
+      "@modelcontextprotocol/server",
+      "@modelcontextprotocol/node",
+      "@modelcontextprotocol/express",
+      "oidc-provider",
       "*.node",
       // AI SDKs — complex builds that can't be bundled; resolved at runtime from node_modules
       "@anthropic-ai/sdk",

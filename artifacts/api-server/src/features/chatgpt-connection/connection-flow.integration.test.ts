@@ -1,0 +1,208 @@
+import { it, expect, vi } from "vitest";
+import express from "express";
+import request from "supertest";
+import { fixture } from "./test-database";
+import { ConnectionReadService } from "./read-service";
+import { LeadNoteService } from "./lead-note-service";
+import { ProfileUpdateService } from "./profile-update-service";
+import { DraftFollowupService } from "./draft-followup-service";
+import { OperationStore } from "./operation-store";
+import { createChatGPTMcpRouter } from "../../routes/chatgpt-mcp";
+import { createChatGPTConnectionRouter } from "../../routes/chatgpt-connection";
+import { issueToken } from "../../lib/auth";
+import { profileRow } from "./read-service";
+vi.mock("../assistant-workspace/model-provider", () => {
+  throw Error("Paid provider imported");
+});
+vi.mock("../assistant-workspace/run-store", () => {
+  throw Error("RunStore imported");
+});
+vi.mock("../assistant-workspace/document-extraction-store", () => {
+  throw Error("Extraction imported");
+});
+it("reads and saves through MCP, replays once, reloads owner drafts, and refuses revoked access with AI off", async () => {
+  process.env.ASSISTANT_WORKSPACE_ENABLED = "false";
+  delete process.env.OPENAI_API_KEY;
+  process.env.OWNER_PASSWORD = "test";
+  process.env.SESSION_SECRET = "integration-secret";
+  const f = await fixture();
+  try {
+    const services = {
+      reads: new ConnectionReadService(f.db),
+      notes: new LeadNoteService(f.db),
+      updates: new ProfileUpdateService(f.db),
+      drafts: new DraftFollowupService(f.db),
+      operations: new OperationStore(f.db),
+    };
+    const app = express();
+    app.use(
+      "/api/chatgpt/mcp",
+      createChatGPTMcpRouter({
+        enabled: true,
+        resource: "https://app.example/api/chatgpt/mcp",
+        allowedOrigins: ["https://app.example"],
+        db: f.db,
+        verify: async (t) => {
+          if (t !== "test-connection") throw Error();
+          return f.principal;
+        },
+        services,
+      }),
+    );
+    app.use(
+      "/api/chatgpt-connection",
+      express.json(),
+      createChatGPTConnectionRouter({
+        enabled: true,
+        resource: "https://app.example/api/chatgpt/mcp",
+        appOrigin: "https://app.example",
+        db: f.db,
+      }),
+    );
+    async function call(name: string, args: any) {
+      const response = await request(app)
+        .post("/api/chatgpt/mcp")
+        .set("Host", "app.example")
+        .set("Accept", "application/json, text/event-stream")
+        .auth("test-connection", { type: "bearer" })
+        .send({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name, arguments: args },
+        });
+      expect(response.status, response.text).toBe(200);
+      if (response.body.result?.isError)
+        throw Error(response.body.result.content[0].text);
+      return JSON.parse(response.body.result.content[0].text);
+    }
+    expect(
+      (await call("search_profiles", { query: "County", eventYear: 2027 }))
+        .items[0].id,
+    ).toBe(f.profileId);
+    await call("read_profile_context", {
+      profileId: f.profileId,
+      eventYear: 2027,
+    });
+    const sources = [
+      {
+        url: "https://fair.example",
+        retrievedAt: "2026-09-30T00:00:00Z",
+        eventYear: 2027,
+        claim: "Public listing, role not verified",
+        verification: "unverified",
+      },
+    ];
+    const operations = [
+      [
+        "append_research_note",
+        {
+          requestKey: "note",
+          profileId: f.profileId,
+          subject: "Research",
+          body: "Unverified contact",
+          sources,
+        },
+      ],
+      [
+        "save_app_draft",
+        {
+          requestKey: "draft",
+          content: {
+            organizationId: f.profileId,
+            to: ["office@fair.example"],
+            cc: [],
+            subject: "Question",
+            html: "<p>Hello</p>",
+            text: "Hello",
+            threadId: null,
+            attachmentIds: [],
+            attachmentHashes: [],
+            templateId: null,
+            templateVersion: null,
+          },
+        },
+      ],
+      [
+        "save_followup",
+        {
+          requestKey: "followup",
+          profileId: f.profileId,
+          contactId: null,
+          bookingId: null,
+          kind: "call",
+          dueAt: "2026-10-05T18:00:00Z",
+        },
+      ],
+    ] as const;
+    for (const [name, input] of operations) {
+      const saved = await call(name, input);
+      expect(await call(name, input)).toEqual(saved);
+      expect(
+        await call("get_operation_receipt", { operationId: saved.operationId }),
+      ).toEqual(saved);
+    }
+    const lead = await call("create_researched_lead", {
+      requestKey: "lead",
+      name: "Different Fair",
+      city: "Elsewhere",
+      region: "UT",
+      officialWebsite: "https://different.example",
+      sourceIdentity: null,
+      eventYear: 2027,
+      sources,
+    });
+    expect(lead.recordId).not.toBe(f.profileId);
+    expect(
+      (await call("list_followups", { profileId: f.profileId })).items,
+    ).toHaveLength(1);
+    const proposal = await call("propose_profile_update", {
+      requestKey: "proposal",
+      profileId: f.profileId,
+      expectedRevision: (await profileRow(f.db, f.profileId)).revision,
+      values: { city: "New Town" },
+      sources,
+    });
+    const approval = await services.updates.approve(
+      "owner",
+      proposal.recordId,
+      proposal.value.contentHash,
+    );
+    await call("apply_approved_profile_update", {
+      requestKey: "apply",
+      proposalId: proposal.recordId,
+      approvalId: approval.approvalId,
+    });
+    const owner = issueToken()!.token;
+    const drafts = await request(app)
+      .get("/api/chatgpt-connection/drafts")
+      .auth(owner, { type: "bearer" });
+    expect(drafts.body.items).toHaveLength(1);
+    expect(drafts.body.items[0].content.text).toBe("Hello");
+    expect((await f.db.query("SELECT * FROM follow_ups")).rows).toHaveLength(1);
+    expect(
+      (await f.db.query("SELECT * FROM chatgpt_external_drafts")).rows,
+    ).toHaveLength(1);
+    await f.db.query(
+      "UPDATE chatgpt_rate_windows SET calls=60,window_start=date_trunc('minute',clock_timestamp()) WHERE connection_id=$1",
+      [f.principal.connectionId],
+    );
+    const limited = await request(app)
+      .post("/api/chatgpt/mcp")
+      .set("Host", "app.example")
+      .set("Accept", "application/json, text/event-stream")
+      .auth("test-connection", { type: "bearer" })
+      .send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    expect(limited.status).toBe(429);
+    await f.db.query("UPDATE chatgpt_rate_windows SET calls=0");
+    await f.db.query(
+      "UPDATE chatgpt_connections SET revoked_at=now() WHERE id=$1",
+      [f.principal.connectionId],
+    );
+    await expect(
+      call("read_profile_context", { profileId: f.profileId, eventYear: 2027 }),
+    ).rejects.toThrow("CONNECTION_REVOKED");
+  } finally {
+    await f.db.close();
+  }
+});
