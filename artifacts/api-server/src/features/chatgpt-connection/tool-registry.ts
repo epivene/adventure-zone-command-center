@@ -51,13 +51,13 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       name: "read_profile_context",
       scope: "crm:read",
       description:
-        "Read one bounded section of a profile. Follow cursors and omitted sections. Recorded contacts are not automatically current event organizers.",
+        "Read one bounded section of a profile. Use section=dates for stored event dates, status, active flag, sources and rationale. Read all dates and bookings pages before saving new dates. Follow cursors and omitted sections. Recorded contacts are not automatically current event organizers.",
       schema: z
         .object({
           profileId: id,
           eventYear: year,
           section: z
-            .enum(["history", "contacts", "bookings", "documents"])
+            .enum(["history", "contacts", "bookings", "documents", "dates"])
             .optional(),
           cursor,
         })

@@ -139,3 +139,33 @@ it("returns only saved extraction for the current accepted document version and 
     }),
   ).rejects.toMatchObject({ code: "CONNECTION_ACCESS_DENIED" });
 });
+
+it("reads dated facts with evidence, review status and stable pagination without crossing profiles", async () => {
+  const { readFile } = await import("node:fs/promises");
+  await f.db.exec(await readFile(new URL("../../../../../lib/db/migrations/20260921_event_date_coverage.sql", import.meta.url), "utf8"));
+  await f.db.query("INSERT INTO event_date_facts(organization_id,starts_on,ends_on,status,active,rationale,source_kind,source_title,source_url) VALUES($1,'2027-05-01','2027-05-02','confirmed',true,'Published dates','web','Event website','https://event.example/dates')", [f.profileId]);
+  await f.db.query("INSERT INTO event_date_facts(organization_id,starts_on,status,active,rationale,source_kind,source_title) SELECT $1,'2028-05-01','needs_review',false,'Conflicting date','derived','Review' FROM generate_series(1,11)", [f.profileId]);
+  const other = randomUUID();
+  await f.db.query("INSERT INTO organizations(id,name) VALUES($1,'Other')", [other]);
+  await f.db.query("INSERT INTO event_date_facts(organization_id,starts_on,status,active,rationale,source_kind,source_title) VALUES($1,'2029-05-01','expected',true,'Annual pattern','derived','Other source')",[other]);
+  const first = await service.context(f.principal,{profileId:f.profileId,eventYear:2027,section:"dates"});
+  expect(first.sections.dates.items).toHaveLength(10);
+  expect(first.sections.dates.truncated).toBe(true);
+  const next = await service.context(f.principal,{profileId:f.profileId,eventYear:2027,section:"dates",cursor:first.sections.dates.nextCursor!});
+  const items = [...first.sections.dates.items,...next.sections.dates.items];
+  expect(items).toHaveLength(12);
+  expect(new Set(items.map(x=>x.id)).size).toBe(12);
+  expect(items).toEqual(expect.arrayContaining([expect.objectContaining({eventYear:2027,startsOn:"2027-05-01",endsOn:"2027-05-02",status:"confirmed",active:true,sourceUrl:"https://event.example/dates",text:"Published dates"})]));
+  expect(items.filter(x=>x.status==="needs_review").every(x=>x.active===false)).toBe(true);
+  expect(items.some(x=>x.subject==="Other source")).toBe(false);
+  expect(next.sections.dates.nextCursor).toBeNull();
+  expect(first.omittedSections).toContain("bookings");
+  expect((await service.context(f.principal,{profileId:other,eventYear:2027,section:"dates"})).sections.dates.items[0]).toMatchObject({status:"expected",startsOn:"2029-05-01"});
+});
+
+it("returns booking end dates and advertises the separate date section", async () => {
+ await f.db.query("INSERT INTO bookings(organization_id,name,starts_at,ends_at,status) VALUES($1,'Fair','2027-06-01T00:00:00Z','2027-06-03T00:00:00Z','potential')",[f.profileId]);
+ const result=await service.context(f.principal,{profileId:f.profileId,eventYear:2027,section:"bookings"});
+ expect(result.sections.bookings.items[0]).toMatchObject({occurredAt:"2027-06-01T00:00:00.000Z",endsAt:"2027-06-03T00:00:00.000Z",status:"potential"});
+ expect(result.omittedSections).toContain("dates");
+});
