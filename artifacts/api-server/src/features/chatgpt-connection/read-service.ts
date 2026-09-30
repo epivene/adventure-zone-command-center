@@ -125,7 +125,7 @@ export class ConnectionReadService {
     await this.authorize(p);
     const profile = profileSummary(await profileRow(this.db, input.profileId));
     const section = input.section ?? "history";
-    if (!["history", "contacts", "bookings", "documents"].includes(section))
+    if (!["history", "contacts", "bookings", "documents", "dates"].includes(section))
       throw new ConnectionError("CONNECTION_INVALID_SECTION");
     const scope = [input.profileId, input.eventYear, section],
       c = cursorDecode(input.cursor, scope);
@@ -136,8 +136,10 @@ export class ConnectionReadService {
       select = `SELECT a.id,a.kind,a.subject,a.body,a.occurred_at,a.date_is_import_fallback,a.timeline_sort_at AS sort_at FROM activities a WHERE a.deleted_at IS NULL AND (a.organization_id=$1 OR (a.organization_id IS NULL AND (a.booking_id IN (${bookingIds}) OR (a.booking_id IS NULL AND a.contact_id IN (${contactIds})))) OR EXISTS(SELECT 1 FROM activity_associations x WHERE x.activity_id=a.id AND (x.organization_id=$1 OR x.contact_id IN (${contactIds}) OR x.booking_id IN (${bookingIds}))))`;
     else if (section === "contacts")
       select = `SELECT c.id,'contact' AS kind,c.first_name||' '||c.last_name AS subject,c.email,c.phone,oc.role,c.updated_at AS sort_at FROM contacts c JOIN organization_contacts oc ON oc.contact_id=c.id WHERE oc.organization_id=$1 AND oc.active=true`;
+    else if (section === "dates")
+      select = `SELECT id,\'event_date\' AS kind,source_title AS subject,rationale AS body,status,starts_on::text,ends_on::text,active,source_url,source_kind,researched_at,verified_at,updated_at AS sort_at FROM event_date_facts WHERE organization_id=$1`;
     else if (section === "bookings")
-      select = `SELECT id,'booking' AS kind,name AS subject,status,starts_at AS occurred_at,updated_at AS sort_at FROM bookings WHERE organization_id=$1`;
+      select = `SELECT id,'booking' AS kind,name AS subject,status,starts_at AS occurred_at,ends_at,updated_at AS sort_at FROM bookings WHERE organization_id=$1`;
     else
       select = `SELECT d.id,'document' AS kind,d.display_name AS subject,d.lifecycle AS status,d.updated_at AS sort_at FROM business_documents d WHERE d.lifecycle<>'deleted' AND EXISTS(SELECT 1 FROM business_document_links l WHERE l.document_id=d.id AND (l.organization_id=$1 OR l.booking_id IN (${bookingIds})))`;
     const rows = (
@@ -155,8 +157,14 @@ export class ConnectionReadService {
       const item: ContextItem = {
         id: row.id,
         kind: row.kind,
-        eventYear: occurredAt ? new Date(occurredAt).getUTCFullYear() : null,
+        eventYear: row.starts_on ? Number(row.starts_on.slice(0, 4)) : occurredAt ? new Date(occurredAt).getUTCFullYear() : null,
         occurredAt,
+        ...(section === "dates" ? {
+          startsOn: row.starts_on, endsOn: row.ends_on, active: row.active,
+          sourceUrl: clip(row.source_url, 2048), sourceKind: row.source_kind,
+          researchedAt: iso(row.researched_at), verifiedAt: iso(row.verified_at),
+        } : {}),
+        ...(section === "bookings" ? { endsAt: iso(row.ends_at) } : {}),
         status: clip(row.status),
         text: text.slice(0, 1500),
         excerpt: text.length > 1500,
@@ -191,12 +199,12 @@ export class ConnectionReadService {
               : null,
         },
       },
-      omittedSections: ["history", "contacts", "bookings", "documents"].filter(
+      omittedSections: ["history", "contacts", "bookings", "documents", "dates"].filter(
         (s) => s !== section,
       ),
       complete: false,
       instruction:
-        "This is one page of one section, not a complete profile history. Dates reflect recorded activity dates, not proof of an event year. Open other sections and follow nextCursor; excerpt=true means consult the original record in the app.",
+        "This is one page of one section, not a complete profile history. Before saving dates, read every page of dates and bookings. Dates includes active, superseded and needs_review research facts; expected means estimated. An empty dates section does not exclude booking dates. A confirmed event date is not a confirmed Adventure Zone booking. Dates reflect recorded activity dates, not proof of an event year. Open other sections and follow nextCursor; excerpt=true means consult the original record in the app.",
     };
   }
   async documentText(
