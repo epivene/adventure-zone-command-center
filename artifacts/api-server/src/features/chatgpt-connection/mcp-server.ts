@@ -69,6 +69,17 @@ export function createConnectionMcpServer(
       };
     },
   );
+  const editScopes: ConnectionScope[] = [...new Set<ConnectionScope>([...principal.scopes, "crm:read", "crm:update"])];
+  server.registerTool("request_edit_access", {
+    description: "Only when the owner asks to enable note editing: request owner consent for crm:update while retaining existing scopes. Allows version-checked note edits with original text in history, and the existing owner-reviewed profile-field proposal flow. Does not grant access or edit records itself. Refresh tools after consent.",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    _meta: { securitySchemes: [{ type: "oauth2", scopes: editScopes }] },
+  }, async () => {
+    if (editScopes.every(scope => principal.scopes.includes(scope)))
+      return { content: [{ type: "text" as const, text: JSON.stringify({status: "authorized", scopes: editScopes}) }] };
+    return { isError: true, content: [{type: "text" as const, text: "Owner consent is required for note editing and owner-reviewed profile updates. No access or records changed."}],
+      _meta: { "mcp/www_authenticate": [`Bearer resource_metadata="${new URL(resource).origin}/.well-known/oauth-protected-resource/api/chatgpt/mcp", error="insufficient_scope", error_description="Owner approval required for CRM edits", scope="${editScopes.join(" ")}"`] } };
+  });
   for (const tool of connectionTools(services, principal))
     server.registerTool(
       tool.name,

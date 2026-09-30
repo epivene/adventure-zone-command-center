@@ -66,6 +66,9 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
       "save_followup",
       "get_operation_receipt",
       "request_write_access",
+      "request_edit_access",
+      "read_profile_note",
+      "edit_profile_note",
     ].sort(),
   );
   const call = await rpc(app, "tools/call", {
@@ -142,4 +145,15 @@ it("hides and blocks ungranted writes and rejects auth, host, origin, disabled f
   expect(
     (await rpc(app, "tools/call", { padding: "x".repeat(300000) })).status,
   ).toBe(413);
+});
+
+it("requests separate edit consent without broadening the existing append grant", async () => {
+  const { app } = setup(["crm:read", "crm:append"]);
+  const list = await rpc(app, "tools/list");
+  const names = list.body.result.tools.map((t: any) => t.name);
+  expect(names).toContain("read_profile_note"); expect(names).not.toContain("edit_profile_note");
+  const result = await rpc(app, "tools/call", { name: "request_edit_access", arguments: {} });
+  expect(result.body.result.isError).toBe(true);
+  expect(result.body.result._meta["mcp/www_authenticate"][0]).toContain('scope="crm:read crm:append crm:update"');
+  expect((await rpc(app, "tools/list")).body.result.tools.map((t: any) => t.name)).not.toContain("edit_profile_note");
 });

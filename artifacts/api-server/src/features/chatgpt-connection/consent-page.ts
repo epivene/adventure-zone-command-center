@@ -8,7 +8,7 @@ export const consentScript = String.raw`
   const labels = {
     'crm:read':'Read profiles, history, saved document text and follow-ups',
     'crm:append':'Create researched leads and append notes',
-    'crm:update':'Propose profile changes and apply exact owner-approved changes',
+    'crm:update':'Edit note text with saved history; propose profile changes and apply exact owner-approved changes',
     'drafts:write':'Save and edit app drafts',
     'followups:write':'Create and edit follow-up reminders'
   };
