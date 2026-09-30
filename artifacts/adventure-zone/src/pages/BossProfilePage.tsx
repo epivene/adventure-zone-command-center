@@ -12,7 +12,7 @@ type Booking = { id: string; name: string; city: string; region: string; startsA
 type Note = { id: string; kind: string; body: string; occurredAt: string };
 type Location = { id: string; label: string; venueName: string | null; address1: string | null; address2: string | null; city: string | null; region: string | null; postalCode: string | null; website: string | null; phone: string | null; email: string | null };
 type Profile = {
-  id: string; name: string; description: string | null; profileImageDataUrl: string | null; phone: string | null;
+  id: string; name: string; description: string | null; phone: string | null;
   address1: string | null; address2: string | null; city: string | null; region: string | null; postalCode: string | null; website: string | null;
   contacts: Contact[]; bookings: Booking[]; notes: Note[]; locations: Location[];
 };
@@ -118,7 +118,7 @@ export default function BossProfilePage({ profileId }: { profileId: string }) {
               <div className="flex flex-col gap-6 p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex min-w-0 items-start gap-4">
                   <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-[#bfd5ca] bg-[#e3eee8] sm:h-20 sm:w-20">
-                    {profile.profileImageDataUrl ? <img alt={`${profile.name} profile`} className="h-full w-full object-cover" src={profile.profileImageDataUrl} /> : <div className="flex h-full w-full items-center justify-center text-lg font-bold text-[#397064]">{initials(profile.name)}</div>}
+                    <div className="flex h-full w-full items-center justify-center text-lg font-bold text-[#397064]">{initials(profile.name)}</div>
                   </div>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2"><h1 className="break-words text-2xl font-bold tracking-[-0.03em] sm:text-3xl">{profile.name}</h1><span className="rounded-full bg-[#e2efe9] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-[#397064]">Active relationship</span></div>
