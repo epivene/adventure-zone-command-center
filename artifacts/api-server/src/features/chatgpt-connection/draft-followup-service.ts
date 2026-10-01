@@ -28,6 +28,7 @@ export type FollowupSummary = {
   kind: string;
   dueAt: string;
   completedAt: string | null;
+  outcome: string | null;
   revision: string;
 };
 const followup = (r: any): FollowupSummary => ({
@@ -38,8 +39,16 @@ const followup = (r: any): FollowupSummary => ({
   kind: r.kind,
   dueAt: iso(r.due_at)!,
   completedAt: iso(r.completed_at),
+  outcome: r.outcome ?? null,
   revision: r.revision,
 });
+export const closeFollowupSchema = z.object({
+  profileId: z.string().uuid(),
+  followupId: z.string().uuid(),
+  expectedRevision: z.string().min(1).max(100),
+  action: z.enum(["complete", "dismiss"]),
+  reason: z.string().trim().min(1).max(2000),
+}).strict();
 async function associations(
   tx: SqlQuery,
   profileId: string,
@@ -94,6 +103,41 @@ export class DraftFollowupService {
   private operations: OperationStore;
   constructor(private db: ConnectionDatabase) {
     this.operations = new OperationStore(db);
+  }
+  async closeFollowup(
+    p: ConnectionPrincipal,
+    key: MutationKey,
+    raw: z.infer<typeof closeFollowupSchema>,
+  ) {
+    requireConnectionScope(p, "followups:write");
+    const input = closeFollowupSchema.parse(raw);
+    return this.operations.perform(p, `${input.action}_followup`, key, input, async (tx) => {
+      // Match profile-merge lock order before locking the reminder itself.
+      await profileRow(tx, input.profileId, true);
+      const row = (await tx.query(
+        "SELECT *,updated_at::text AS revision FROM follow_ups WHERE id=$1 AND organization_id=$2 FOR UPDATE",
+        [input.followupId, input.profileId],
+      )).rows[0];
+      if (!row) throw new ConnectionError("CONNECTION_ACCESS_DENIED", 403);
+      if (row.revision !== input.expectedRevision)
+        throw new ConnectionError("CONNECTION_STALE_REVISION", 409);
+      if (row.completed_at)
+        throw new ConnectionError("CONNECTION_FOLLOWUP_CLOSED", 409);
+      const result = await followupService(tx).edit({
+        followUpId: row.id,
+        kind: row.kind,
+        dueAt: new Date(row.due_at),
+        completed: true,
+        outcome: input.action === "dismiss" ? `Dismissed: ${input.reason}` : input.reason,
+      });
+      if (!result.ok) throw new ConnectionError(result.error.code);
+      // Ensure revision changes even for two writes within the same millisecond.
+      const saved = (await tx.query(
+        "UPDATE follow_ups SET updated_at=GREATEST(clock_timestamp(),$2::timestamptz+interval '1 microsecond') WHERE id=$1 RETURNING *,updated_at::text AS revision",
+        [row.id, row.revision],
+      )).rows[0];
+      return receipt(tx, row.id, `/profiles/${input.profileId}`, saved.revision, followup(saved));
+    });
   }
   async saveDraft(
     p: ConnectionPrincipal,

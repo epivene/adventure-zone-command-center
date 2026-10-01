@@ -185,6 +185,22 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
     expect(drafts.body.items).toHaveLength(1);
     expect(drafts.body.items[0].content.text).toBe("Hello");
     expect((await f.db.query("SELECT * FROM follow_ups")).rows).toHaveLength(1);
+    const existingReminder = (await call("list_followups", {profileId:f.profileId})).items[0];
+    const completed = await call("complete_followup", {
+      requestKey:"complete-reminder",profileId:f.profileId,followupId:existingReminder.id,
+      expectedRevision:existingReminder.revision,reason:"Customer called and reviewed dates",
+    });
+    expect(completed.value.outcome).toBe("Customer called and reviewed dates");
+    const obsolete = await call("save_followup", {
+      requestKey:"obsolete-reminder",profileId:f.profileId,contactId:null,bookingId:null,
+      kind:"email",dueAt:"2026-10-21T16:00:00Z",
+    });
+    const dismissInput = {requestKey:"dismiss-reminder",profileId:f.profileId,followupId:obsolete.recordId,
+      expectedRevision:obsolete.revision,reason:"Superseded by committee review"};
+    const dismissed = await call("dismiss_followup", dismissInput);
+    expect(await call("dismiss_followup", dismissInput)).toEqual(dismissed);
+    expect(dismissed.value.outcome).toBe("Dismissed: Superseded by committee review");
+    expect((await call("list_followups", {profileId:f.profileId})).items.every((x:any)=>x.completedAt)).toBe(true);
     expect(
       (await f.db.query("SELECT * FROM chatgpt_external_drafts")).rows,
     ).toHaveLength(1);
