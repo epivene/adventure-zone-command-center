@@ -155,6 +155,8 @@ function BossNavigationMenu() {
 
 export function BossShell({ children }: { children: ReactNode }) {
   const { boss, signOut } = useBossAuth();
+  const [location] = useLocation();
+  const profileWorkspace = /^\/boss\/profiles(?:\/|$)/.test(location);
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground print:min-h-0">
@@ -183,7 +185,7 @@ export function BossShell({ children }: { children: ReactNode }) {
           ) : null}
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-3 py-4 pb-24 md:px-8 md:py-6 xl:pb-8 print:max-w-none print:p-0">{children}</main>
+      <main className={profileWorkspace ? "min-h-screen px-3 py-4 pb-24 md:px-8 md:py-7 md:pb-8 print:min-h-0 print:p-0" : "mx-auto max-w-7xl px-3 py-4 pb-24 md:px-8 md:py-6 xl:pb-8 print:max-w-none print:p-0"}>{children}</main>
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 xl:hidden print:hidden">
         <nav aria-label="Boss navigation" className="flex gap-0.5 overflow-x-auto">
           {navItems.map((item) => <NavLink key={item.href} item={item} mobile />)}
