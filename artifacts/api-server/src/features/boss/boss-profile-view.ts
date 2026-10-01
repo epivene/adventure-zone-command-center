@@ -22,6 +22,7 @@ export async function listBossProfileDirectory(db: typeof database, query: Organ
       id: row.id, name: row.name, city: row.city, region: row.region,
       contactCount: row.contactCount, bookingCount: row.bookingCount, locationCount: row.locationCount,
       primaryContactName: row.primaryContactName,
+      description: details.get(row.id)?.description ?? null,
       applicationDeadline: row.applicationDeadline,
       recommendedDealModel: row.recommendedDealModel,
       effectiveEventDate: row.effectiveEventDate,
@@ -90,7 +91,7 @@ export async function loadBossGlance(db: typeof database, profile: EventProfile)
   const nextBooking = profile.bookings.filter((row) => row.startsAt && row.startsAt.getTime() >= Date.now()
     && !["declined", "cancelled"].includes(row.status)).sort((a, b) => Number(a.startsAt) - Number(b.startsAt))[0];
   return projectBossGlance(profile, {
-    priority: decision?.priority ?? nextBooking?.probability ?? null,
+    priority: decision?.priority ?? null,
     pipelineStatus: decision?.pipelineStatus ?? nextBooking?.status ?? null,
     nextActionKind: decision?.nextActionKind ?? null,
     nextActionDueAt: decision?.nextActionDueAt ?? null,

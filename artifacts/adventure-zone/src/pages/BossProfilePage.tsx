@@ -34,7 +34,7 @@ function initials(name: string) {
 
 function StatCard({ icon, value, label, active, onClick }: { icon: ReactNode; value: number; label: string; active: boolean; onClick: () => void }) {
   return (
-    <button aria-expanded={active} className={`group rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-ring ${active ? "border-primary/30 bg-secondary" : "border-border bg-card hover:border-primary/30 hover:bg-secondary/60"}`} onClick={onClick} type="button">
+    <button aria-label={`${value} ${label}`} aria-expanded={active} className={`group rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-ring ${active ? "border-primary/30 bg-secondary" : "border-border bg-card hover:border-primary/30 hover:bg-secondary/60"}`} onClick={onClick} type="button">
       <span className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-secondary text-primary">{icon}</span>
       <span className="block text-2xl font-bold tracking-tight text-foreground">{value}</span>
       <span className="mt-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}<ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" /></span>

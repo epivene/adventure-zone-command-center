@@ -624,6 +624,7 @@ export function OrganizationList({
                             {status[0]}
                           </span>
                         </span>
+                        {organization.description?.trim() ? <span className="mt-2 block line-clamp-2 text-sm leading-5 text-muted-foreground" data-testid="profile-about-preview">{organization.description.trim()}</span> : null}
                         <span
                           className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3 text-xs"
                           data-testid="profile-money-line"

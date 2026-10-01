@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { loadProfileCardDetailsWith } from "./organizations";
+import { loadProfileCardDetailsWith } from "../features/organizations/profile-card-details";
 
-const routeSource = fs.readFileSync(path.resolve(__dirname, "organizations.ts"), "utf8");
+const routeSource = fs.readFileSync(path.resolve(__dirname, "../features/organizations/profile-card-details.ts"), "utf8");
 
 describe("profile card enrichment query contract", () => {
   it("loads profile photos with individually parameterized UUIDs instead of one array parameter", () => {

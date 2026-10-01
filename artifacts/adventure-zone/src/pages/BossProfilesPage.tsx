@@ -16,7 +16,7 @@ export default function BossProfilesPage() {
   const search = useSearch();
   const query = useMemo(() => organizationListQuerySchema.parse({
     ...Object.fromEntries(new URLSearchParams(search)),
-    lastResort: "all", filler: "all", includeRetired: undefined,
+    lastResort: "all", filler: "all", activity: undefined, includeRetired: undefined,
   }), [search]);
   const [data, setData] = useState<Directory | null>(null);
   const [error, setError] = useState("");

@@ -101,7 +101,8 @@ describe("Dave profile and contact pages", () => {
     render(<BossProfilePage profileId={profileId} />);
 
     await waitFor(() => expect(mocks.bossGet).toHaveBeenCalledWith(`/boss/google-workspace/profiles/${profileId}/emails`));
-    expect(await screen.findByRole("button", { name: /2 Emails/ })).toBeInTheDocument();
+    const emailButton = await screen.findByRole("button", { name: /Emails/ });
+    await waitFor(() => expect(emailButton).toHaveAttribute("aria-label", "2 Emails"));
   });
 
   it("lets Dave edit and save an event profile", async () => {
