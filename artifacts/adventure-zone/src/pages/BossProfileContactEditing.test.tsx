@@ -13,10 +13,11 @@ vi.mock("@/lib/boss-auth-context", () => ({
   bossPut: mocks.bossPut,
 }));
 vi.mock("@/components/profiles/convention-history", () => ({ ConventionHistory: () => null }));
-vi.mock("@/components/boss/boss-profile-emails", () => ({ BossProfileEmails: () => null }));
+vi.mock("@/components/boss/boss-profile-emails", () => ({ BossProfileEmails: () => null, getBossProfileEmails: (id: string) => mocks.bossGet(`/boss/google-workspace/profiles/${id}/emails`) }));
 vi.mock("wouter", () => ({
   Link: ({ href, children, ...props }: any) => <a href={href} {...props}>{children}</a>,
   useLocation: () => ["/boss", vi.fn()],
+  useSearch: () => "returnTo=%2Fboss%2Fprofiles%3Fsort%3Dname_asc",
 }));
 
 import BossContactDetailPage from "./BossContactDetailPage";
@@ -77,6 +78,9 @@ describe("Dave profile and contact pages", () => {
     render(<BossProfilePage profileId={profileId} />);
 
     expect(await screen.findByText("Relationships / Profiles")).toBeInTheDocument();
+    expect(screen.getByText("At a glance")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Profiles" })).toHaveAttribute("href", "/boss/profiles?sort=name_asc");
+    expect(screen.queryByRole("link", { name: "Find next date" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Contacts/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Bookings/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Emails/ })).toBeInTheDocument();
@@ -88,15 +92,17 @@ describe("Dave profile and contact pages", () => {
     mocks.bossGet.mockImplementation(async (path: string) => {
       if (path.includes("/google-workspace/profiles/")) {
         return {
-          conversations: [{ threadId: "current-thread" }],
-          historicalConversations: [{ threadId: "older-thread" }],
+          conversations: [{ threadId: "current-thread", date: "2026-09-01", internalDateMs: Date.UTC(2026, 8, 1) }],
+          historicalConversations: [{ threadId: "older-thread", date: "2025-09-01", internalDateMs: Date.UTC(2025, 8, 1) }],
         };
       }
       return { profile };
     });
     render(<BossProfilePage profileId={profileId} />);
 
-    expect(await screen.findByRole("button", { name: /2 Emails/ })).toBeInTheDocument();
+    await waitFor(() => expect(mocks.bossGet).toHaveBeenCalledWith(`/boss/google-workspace/profiles/${profileId}/emails`));
+    const emailButton = await screen.findByRole("button", { name: /Emails/ });
+    await waitFor(() => expect(emailButton).toHaveAttribute("aria-label", "2 Emails"));
   });
 
   it("lets Dave edit and save an event profile", async () => {

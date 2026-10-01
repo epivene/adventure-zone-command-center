@@ -1,3 +1,5 @@
+import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
+import { listBossProfileDirectory } from "@/features/boss/boss-profile-view";
 import { Router, type IRouter } from "express";
 import { desc, eq } from "drizzle-orm";
 import { officeEmailDrafts } from "@/db/schema";
@@ -21,12 +23,12 @@ function param(value: string | string[] | undefined) {
 }
 
 router.get("/boss/profiles", requireBoss, async (req, res): Promise<void> => {
-  const parsed = z.object({
-    q: z.string().catch("").default(""),
-    page: z.coerce.number().int().min(1).max(10000).catch(1).default(1),
-  }).parse({ q: req.query.q ?? undefined, page: req.query.page ?? undefined });
+  const query = organizationListQuerySchema.parse({
+    ...req.query,
+    lastResort: "all", filler: "all", activity: undefined, includeRetired: undefined,
+  });
   try {
-    res.json(await profiles.listProfiles({ search: parsed.q.trim(), page: parsed.page }));
+    res.json(await listBossProfileDirectory(db, query));
   } catch (error) {
     req.log.error({ err: error }, "Failed to list Boss profiles");
     res.status(500).json({ error: "Could not load profiles." });
@@ -40,7 +42,7 @@ router.get("/boss/profiles/:profileId", requireBoss, async (req, res): Promise<v
     return;
   }
   try {
-    const profile = await profiles.getProfile(profileId);
+    const profile = await profiles.getProfile(profileId, true);
     if (!profile) {
       res.status(404).json({ error: "Profile not found." });
       return;

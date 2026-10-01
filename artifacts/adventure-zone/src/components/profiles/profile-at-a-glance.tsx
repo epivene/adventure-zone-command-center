@@ -105,9 +105,11 @@ function formatDate(value: Date | string | null | undefined) {
 export function ProfileAtAGlance({
   profile,
   now = new Date(),
+  allowDateManagement = true,
 }: {
   profile: AtAGlanceProfile;
   now?: Date;
+  allowDateManagement?: boolean;
 }) {
   const nextEvent = profile.effectiveEventDate ?? null;
   const nextEventLabel = nextEvent
@@ -163,37 +165,37 @@ export function ProfileAtAGlance({
   return (
     <section
       aria-labelledby="at-a-glance-heading"
-      className="border-l-4 border-[#e85d35] bg-[#fffefa] px-4 py-5 text-[#182225] sm:px-7"
+      className="border-l-4 border-[#e85d35] bg-card px-4 py-5 text-foreground sm:px-7"
       data-testid="profile-detail-header"
     >
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#9b633e]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
             Booking decision
           </p>
           <h2
-            className="mt-1 text-lg font-bold text-[#182225]"
+            className="mt-1 text-lg font-bold text-foreground"
             id="at-a-glance-heading"
           >
             At a glance
           </h2>
         </div>
-        <p className="text-xs text-[#536064]">Recorded facts and next steps</p>
+        <p className="text-xs text-muted-foreground">Recorded facts and next steps</p>
       </div>
 
       <dl className="mt-4 flex flex-wrap gap-2" data-testid="glance-metrics">
-        <div className="min-w-[190px] flex-1 rounded-md border border-[#ccc5b8] p-4">
-          <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
+        <div className="min-w-[190px] flex-1 rounded-md border border-border p-4">
+          <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
             Next event date
           </dt>
-          <dd className="mt-1 flex items-center gap-2 text-sm font-bold text-[#182225]">
-            <CalendarDays className="h-4 w-4 text-[#157d78]" />
+          <dd className="mt-1 flex items-center gap-2 text-sm font-bold text-foreground">
+            <CalendarDays className="h-4 w-4 text-primary" />
             {nextEventLabel}
           </dd>
-          {dateFact ? (
+          {dateFact && (dateFact.sourceUrl || allowDateManagement) ? (
             <dd className="mt-2 text-xs">
               <a
-                className="font-semibold text-[#157d78] underline"
+                className="font-semibold text-primary underline"
                 href={
                   dateFact.sourceUrl ??
                   `/settings/event-date-coverage?search=${encodeURIComponent(profile.place.name ?? "")}`
@@ -204,45 +206,45 @@ export function ProfileAtAGlance({
             </dd>
           ) : null}
           {!nextEvent ? (
-            <dd className="mt-2 text-xs text-[#536064]">
+            <dd className="mt-2 text-xs text-muted-foreground">
               {lastRecordedDate
                 ? `Last recorded date: ${formatDate(lastRecordedDate)}. `
                 : ""}
-              <a
-                className="font-semibold text-[#157d78] underline"
+              {allowDateManagement ? <a
+                className="font-semibold text-primary underline"
                 href={`/settings/event-date-coverage?search=${encodeURIComponent(profile.place.name ?? "")}`}
               >
                 Find next date
-              </a>
+              </a> : null}
             </dd>
           ) : null}
         </div>
         {profile.place.applicationDeadline ? (
-          <div className="min-w-[190px] flex-1 rounded-md border border-[#ccc5b8] p-4">
-            <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
+          <div className="min-w-[190px] flex-1 rounded-md border border-border p-4">
+            <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
               Deadline
             </dt>
-            <dd className="mt-1 text-sm font-bold text-[#182225]">
+            <dd className="mt-1 text-sm font-bold text-foreground">
               {formatDate(profile.place.applicationDeadline)}
             </dd>
           </div>
         ) : null}
         {profile.decisionSummary?.priority ? (
-          <div className="min-w-[190px] flex-1 rounded-md border border-[#ccc5b8] p-4">
-            <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
+          <div className="min-w-[190px] flex-1 rounded-md border border-border p-4">
+            <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
               Fit / priority
             </dt>
-            <dd className="mt-1 text-sm font-bold text-[#182225]">
+            <dd className="mt-1 text-sm font-bold text-foreground">
               {readable(profile.decisionSummary.priority)}
             </dd>
           </div>
         ) : null}
         {profile.decisionSummary?.pipelineStatus ? (
-          <div className="min-w-[190px] flex-1 rounded-md border border-[#ccc5b8] p-4">
-            <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
+          <div className="min-w-[190px] flex-1 rounded-md border border-border p-4">
+            <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
               Pipeline status
             </dt>
-            <dd className="mt-1 text-sm font-bold text-[#182225]">
+            <dd className="mt-1 text-sm font-bold text-foreground">
               {readable(profile.decisionSummary.pipelineStatus)}
             </dd>
           </div>
@@ -274,23 +276,23 @@ export function ProfileAtAGlance({
         data-testid="action-contact-columns"
       >
         {actionKind ? (
-          <div className="rounded-md border-t-4 border-[#e85d35] bg-[#f6f2e9] p-4">
-            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
+          <div className="rounded-md border-t-4 border-[#e85d35] bg-muted p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
               Next action
             </p>
-            <p className="mt-1 text-sm font-bold text-[#182225]">
+            <p className="mt-1 text-sm font-bold text-foreground">
               {`${actionKind}${actionDue ? ` · Due ${actionDue}` : ""}`}
             </p>
           </div>
         ) : null}
         {displayContact ? (
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
               {primaryContact ? "Primary contact" : "Contact"}
             </p>
-            <div className="mt-2 grid gap-2 text-sm text-[#315b66]">
+            <div className="mt-2 grid gap-2 text-sm text-primary">
               <span className="inline-flex items-center gap-2 font-bold">
-                <UserRound className="h-4 w-4 text-[#157d78]" />
+                <UserRound className="h-4 w-4 text-primary" />
                 {displayContact.name}
               </span>
               {displayContact.email ? (
@@ -315,12 +317,12 @@ export function ProfileAtAGlance({
           </div>
         ) : null}
         {notePreview ? (
-          <div className="rounded-md bg-[#f6f2e9] p-4 lg:col-span-2">
-            <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
+          <div className="rounded-md bg-muted p-4 lg:col-span-2">
+            <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
               <StickyNote className="h-4 w-4" />
               Latest note
             </p>
-            <p className="mt-2 text-sm leading-6 text-[#182225]">
+            <p className="mt-2 text-sm leading-6 text-foreground">
               {notePreview}
               {(noteText?.length ?? 0) > 220 ? "…" : ""}
             </p>

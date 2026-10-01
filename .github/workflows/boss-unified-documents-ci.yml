@@ -10,6 +10,16 @@ on:
       - "artifacts/adventure-zone/src/components/office/office-shell.tsx"
       - "artifacts/adventure-zone/src/pages/BossProfilesPage.tsx"
       - "artifacts/adventure-zone/src/pages/BossProfilePage.tsx"
+      - "artifacts/adventure-zone/src/pages/BossProfilesPage.search.test.tsx"
+      - "artifacts/adventure-zone/src/pages/BossProfileContactEditing.test.tsx"
+      - "artifacts/adventure-zone/src/components/boss/boss-profile-emails.tsx"
+      - "artifacts/adventure-zone/src/components/google-workspace/**"
+      - "artifacts/adventure-zone/src/components/profiles/profile-at-a-glance.tsx"
+      - "artifacts/adventure-zone/src/components/organizations/organization-list.tsx"
+      - "artifacts/api-server/src/features/boss/boss-profile-view*"
+      - "artifacts/api-server/src/features/organizations/profile-card-details.ts"
+      - "artifacts/api-server/src/features/organizations/organization-directory-page.ts"
+      - "artifacts/api-server/src/features/office/office-profile-service.ts"
       - "artifacts/adventure-zone/src/pages/OfficeDocumentsPage.tsx"
       - "artifacts/adventure-zone/src/App.tsx"
       - "artifacts/adventure-zone/src/pages/BossTemplatesFilesPage.tsx"
@@ -51,7 +61,9 @@ jobs:
       - name: Boss workspace tests
         run: pnpm --filter @workspace/adventure-zone test:boss
       - name: Boss profile search and editing tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts src/pages/BossProfilesPage.search.test.tsx src/pages/BossProfileContactEditing.test.tsx
+        run: pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts src/pages/BossProfilesPage.search.test.tsx src/pages/BossProfileContactEditing.test.tsx src/components/google-workspace/profile-google-email-panel.test.tsx src/components/google-workspace/use-profile-google-email.test.tsx src/components/organizations/organization-list-card.test.tsx src/components/profiles/profile-at-a-glance.test.tsx
+      - name: Boss profile facts and Office privacy tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/routes/organizations.profile-card-details.test.ts src/features/boss/boss-profile-view.test.ts src/features/office/office-profile-service.test.ts src/routes/boss-profile-emails.test.ts src/routes/boss-profile-contact-edit.test.ts
       - name: Business document route tests
         run: pnpm --filter @workspace/api-server exec vitest run src/routes/business-documents.test.ts src/routes/boss-business-documents.test.ts src/routes/office-documents.test.ts src/features/business-documents/business-document-ingestion.test.ts src/features/business-documents/business-document-repository.test.ts
       - name: Build API and frontend

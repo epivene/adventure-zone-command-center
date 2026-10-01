@@ -13,7 +13,7 @@ import { saveProfileReturnState } from "@/lib/profile-navigation";
 import { dealModelLabels } from "@/components/profiles/profile-at-a-glance";
 import { createFollowUpWorkbook } from "./follow-up-workbook";
 
-function listHref(query: OrganizationListQuery) {
+function directoryHref(query: OrganizationListQuery, basePath: string) {
   const params = new URLSearchParams();
   if (query.directoryView && query.directoryView !== "all")
     params.set("view", query.directoryView);
@@ -35,12 +35,12 @@ function listHref(query: OrganizationListQuery) {
   if (query.page > 1) params.set("page", String(query.page));
   if (query.pageSize !== 50) params.set("pageSize", String(query.pageSize));
   const suffix = params.toString();
-  return suffix ? `/profiles?${suffix}` : "/profiles";
+  return suffix ? `${basePath}?${suffix}` : basePath;
 }
 
-function detailHref(organizationId: string, query: OrganizationListQuery) {
-  const params = new URLSearchParams({ returnTo: listHref(query) });
-  return `/profiles/${organizationId}?${params.toString()}`;
+function profileHref(organizationId: string, query: OrganizationListQuery, basePath: string) {
+  const params = new URLSearchParams({ returnTo: directoryHref(query, basePath) });
+  return `${basePath}/${organizationId}?${params.toString()}`;
 }
 
 type ActiveFilter = { label: string; href: string };
@@ -72,10 +72,10 @@ const statusStyles = {
   deadline_soon: ["Deadline soon", "bg-orange-100 text-orange-900"],
   needs_follow_up: ["Needs follow-up", "bg-amber-100 text-amber-900"],
   contacted: ["Contacted", "bg-sky-100 text-sky-900"],
-  waiting: ["Waiting", "bg-slate-100 text-slate-700"],
+  waiting: ["Waiting", "bg-muted text-foreground"],
   booked: ["Booked", "bg-teal-100 text-teal-900"],
   not_a_fit: ["Not a fit", "bg-rose-100 text-rose-900"],
-  unrecorded: ["Status not recorded", "bg-slate-100 text-slate-700"],
+  unrecorded: ["Status not recorded", "bg-muted text-foreground"],
 } as const;
 
 const quickFilterLabels = {
@@ -91,14 +91,22 @@ export function OrganizationList({
   travelLegs,
   afterSearch,
   loading = false,
+  basePath = "/profiles",
+  showExports = true,
+  showStrategyFilters = true,
 }: {
   organizations: OrganizationListPage;
   query: OrganizationListQuery;
   travelLegs: { id: string; name: string; color: string }[];
   afterSearch?: ReactNode;
   loading?: boolean;
+  basePath?: string;
+  showExports?: boolean;
+  showStrategyFilters?: boolean;
 }) {
   const [, setLocation] = useLocation();
+  const listHref = (next: OrganizationListQuery) => directoryHref(next, basePath);
+  const detailHref = (id: string, next: OrganizationListQuery) => profileHref(id, next, basePath);
   const [searchValue, setSearchValue] = useState(query.search);
   const [pendingSearch, setPendingSearch] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -294,8 +302,8 @@ export function OrganizationList({
   return (
     <div className="grid gap-4">
       <form
-        action="/profiles"
-        className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+        action={basePath}
+        className="rounded-xl border border-border bg-card p-3 shadow-sm"
         method="get"
       >
         {query.directoryView && query.directoryView !== "all" ? (
@@ -305,11 +313,12 @@ export function OrganizationList({
           <input name="quick" type="hidden" value={query.quickFilter} />
         ) : null}
         <div className="flex flex-col gap-2 sm:flex-row">
-          <label className="relative min-w-0 flex-1">
-            <span className="sr-only">Search profiles and contacts</span>
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <label className="relative block min-w-0 flex-1">
+            <span className="sr-only">Search profiles</span>
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               className="min-h-11 w-full pr-10"
+              aria-label="Search profiles"
               name="q"
               onChange={(event) => {
                 setSearchValue(event.currentTarget.value);
@@ -333,7 +342,7 @@ export function OrganizationList({
               </span>
             ) : null}
           </label>
-          <label className="grid min-w-[12rem] gap-1 text-xs font-semibold text-slate-600">
+          <label className="grid min-w-[12rem] gap-1 text-xs font-semibold text-muted-foreground">
             <span>Sort by</span>
             <select
               className="min-h-11"
@@ -352,6 +361,7 @@ export function OrganizationList({
             </select>
           </label>
           <div className="flex items-end gap-2">
+            {showExports ? <>
             <button
               className="button-primary inline-flex flex-1 items-center justify-center gap-2 sm:flex-none"
               disabled={followUpExporting}
@@ -370,6 +380,7 @@ export function OrganizationList({
               <Download aria-hidden className="h-4 w-4" />
               {exporting ? "Exporting…" : "Export CSV"}
             </button>
+            </> : null}
             <Link
               className="button-secondary flex-1 text-center sm:flex-none"
               href={directoryReset}
@@ -380,19 +391,19 @@ export function OrganizationList({
         </div>
 
         <details className="group mt-2">
-          <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+          <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-sm font-semibold text-foreground hover:bg-muted">
             <span>Filters</span>
             {activeFilters.length ? (
               <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-800">
                 {activeFilters.length}
               </span>
             ) : null}
-            <span className="ml-auto text-slate-400 transition group-open:rotate-180">
+            <span className="ml-auto text-muted-foreground transition group-open:rotate-180">
               ⌄
             </span>
           </summary>
 
-          <div className="mt-2 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-2 grid gap-3 border-t border-border pt-3 sm:grid-cols-2 lg:grid-cols-3">
             <label className="grid gap-1 text-sm font-semibold">
               Profile type
               <select defaultValue={query.placeType ?? ""} name="type">
@@ -423,6 +434,7 @@ export function OrganizationList({
                 ))}
               </select>
             </label>
+            {showStrategyFilters ? <>
             <label className="grid gap-1 text-sm font-semibold">
               Profile status
               <select defaultValue={query.lastResort} name="lastResort">
@@ -437,6 +449,7 @@ export function OrganizationList({
                 <option value="only">Filler only</option>
               </select>
             </label>
+            </> : null}
             <div className="grid grid-cols-2 gap-2 sm:col-span-2 lg:col-span-2">
               {[
                 ["hasPhone", query.hasPhone, "Has phone"],
@@ -470,18 +483,18 @@ export function OrganizationList({
 
         {activeFilters.length ? (
           <div
-            className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3"
+            className="mt-3 flex flex-wrap gap-1.5 border-t border-border pt-3"
             aria-label="Active filters"
           >
             {activeFilters.map((filter) => (
               <Link
                 aria-label={`Remove ${filter.label} filter`}
-                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-secondary/80"
                 href={filter.href}
                 key={filter.label}
               >
                 {filter.label}
-                <span aria-hidden className="text-slate-400">
+                <span aria-hidden className="text-muted-foreground">
                   ×
                 </span>
               </Link>
@@ -512,7 +525,7 @@ export function OrganizationList({
           return (
             <Link
               aria-current={active ? "true" : undefined}
-              className={`shrink-0 rounded-full border px-3 py-2 text-sm font-bold outline-none transition focus-visible:ring-2 focus-visible:ring-orange-600 focus-visible:ring-offset-2 ${active ? "border-orange-700 bg-orange-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-orange-400"}`}
+              className={`shrink-0 rounded-full border px-3 py-2 text-sm font-bold outline-none transition focus-visible:ring-2 focus-visible:ring-orange-600 focus-visible:ring-offset-2 ${active ? "border-orange-700 bg-orange-700 text-white" : "border-border bg-card text-foreground hover:border-orange-400"}`}
               href={listHref({
                 ...query,
                 quickFilter: active ? null : value,
@@ -529,11 +542,11 @@ export function OrganizationList({
       {afterSearch}
 
       <section
-        className="overflow-hidden rounded-md border border-[#d8d1c4] bg-[#f6f2e9]"
+        className="overflow-hidden rounded-md border border-border bg-muted"
         data-testid="profile-list-workspace"
       >
-        <div className="grid content-start gap-3 p-3 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto lg:border-r lg:border-[#d8d1c4] lg:p-4">
-          <p aria-live="polite" className="text-sm text-[#536064]">
+        <div className="grid content-start gap-3 p-3 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto lg:border-r lg:border-border lg:p-4">
+          <p aria-live="polite" className="text-sm text-muted-foreground">
             Showing {organizations.records.length} of {organizations.total}{" "}
             profiles
           </p>
@@ -554,7 +567,7 @@ export function OrganizationList({
                   <li key={organization.id}>
                     <Link
                       aria-label={`Open ${organization.name} profile`}
-                      className="group block rounded-md border border-[#d8d1c4] bg-[#fffefa] p-4 text-left shadow-sm transition hover:border-[#e85d35] focus-visible:ring-2 focus-visible:ring-[#157d78]"
+                      className="group block rounded-md border border-border bg-card p-4 text-left shadow-sm transition hover:border-[#e85d35] focus-visible:ring-2 focus-visible:ring-[#157d78]"
                       data-testid={`profile-card-${organization.id}`}
                       href={profileHref}
                       onClick={(event) => {
@@ -572,12 +585,12 @@ export function OrganizationList({
                         className="block min-w-0"
                         data-testid="profile-decision-summary"
                       >
-                        <span className="flex items-start justify-between gap-3">
+                        <span className="flex flex-wrap items-start justify-between gap-3">
                           <span className="min-w-0">
-                            <span className="block text-xl font-extrabold leading-tight tracking-tight text-[#182225] group-hover:text-orange-800">
+                            <span className="block break-words text-xl font-extrabold leading-tight tracking-tight text-foreground group-hover:text-orange-800">
                               {organization.name}
                             </span>
-                            <span className="mt-1 block text-xs font-medium text-[#536064]">
+                            <span className="mt-1 block text-xs font-medium text-muted-foreground">
                               {location || "Location not recorded"}
                             </span>
                             <span
@@ -586,7 +599,7 @@ export function OrganizationList({
                                   ? "No reviews"
                                   : `${rating.toFixed(1)} out of 5 stars from ${ratingCount} reviews`
                               }
-                              className="mt-1.5 block text-xs font-semibold text-[#536064]"
+                              className="mt-1.5 block text-xs font-semibold text-muted-foreground"
                               data-testid="profile-rating-summary"
                             >
                               {rating === null ? (
@@ -611,18 +624,19 @@ export function OrganizationList({
                             {status[0]}
                           </span>
                         </span>
+                        {organization.description?.trim() ? <span className="mt-2 block line-clamp-2 text-sm leading-5 text-muted-foreground" data-testid="profile-about-preview">{organization.description.trim()}</span> : null}
                         <span
-                          className="mt-3 flex items-center justify-between gap-3 border-t border-[#e5dfd4] pt-3 text-xs"
+                          className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3 text-xs"
                           data-testid="profile-money-line"
                         >
-                          <strong className="text-[#182225]">
+                          <strong className="text-foreground">
                             {organization.recommendedDealModel
                               ? dealModelLabels[
                                   organization.recommendedDealModel
                                 ]
                               : "No deal recommendation"}
                           </strong>
-                          <span className="text-right text-[#536064]">
+                          <span className="text-right text-muted-foreground">
                             {organization.effectiveEventDate
                               ? `${readableAction(organization.effectiveEventDate.displayStatus)} ${formatDate(organization.effectiveEventDate.startsOn, "")}${organization.effectiveEventDate.endsOn ? `–${formatDate(organization.effectiveEventDate.endsOn, "")}` : ""}`
                               : "Date not found"}
@@ -631,7 +645,7 @@ export function OrganizationList({
                         <span className="mt-2.5 flex items-start gap-2 text-xs font-bold text-[#a63f35]">
                           <span
                             aria-hidden
-                            className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#e85d35] ring-4 ring-[#f6f2e9]"
+                            className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#e85d35] ring-4 ring-muted"
                           />
                           <span>
                             {organization.nextActionKind
@@ -651,7 +665,7 @@ export function OrganizationList({
               })}
             </ul>
           ) : (
-            <div className="rounded-md border border-dashed border-[#b8b0a3] bg-[#fffefa] p-8 text-center">
+            <div className="rounded-md border border-dashed border-border bg-card p-8 text-center">
               <p className="font-semibold">No profiles match these filters.</p>
               <Link
                 className="button-secondary mt-3 inline-flex"
@@ -677,7 +691,7 @@ export function OrganizationList({
               ) : (
                 <span />
               )}
-              <p className="text-sm font-semibold text-slate-600">
+              <p className="text-sm font-semibold text-muted-foreground">
                 Page {organizations.page} of {organizations.pageCount}
               </p>
               {organizations.page < organizations.pageCount ? (
