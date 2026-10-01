@@ -24,10 +24,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Profile card tests
-        run: >-
-          pnpm exec vitest run
-          artifacts/api-server/src/routes/organizations.profile-card-details.test.ts
-          artifacts/adventure-zone/src/components/organizations/organization-list-card.test.tsx
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run src/routes/organizations.profile-card-details.test.ts
+          pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts src/components/organizations/organization-list-card.test.tsx
       - name: Workspace typecheck
         run: pnpm run typecheck
       - name: Workspace build

@@ -24,6 +24,7 @@ describe("Boss profile directory parity", () => {
     window.history.replaceState(null, "", "/boss/profiles?sort=name_asc");
     render(<BossProfilesPage />);
     await waitFor(() => expect(mocks.bossGet).toHaveBeenCalledWith("/boss/profiles?sort=name_asc"));
+    await waitFor(() => expect(screen.queryByRole("status", { name: "Searching profiles" })).not.toBeInTheDocument());
     const input = screen.getByRole("searchbox", { name: "Search profiles" });
     expect(input).toHaveStyle({ paddingLeft: "3rem" });
     fireEvent.change(input, { target: { value: "rock springs" } });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearch } from "wouter";
 import { bossGet } from "@/lib/boss-auth-context";
 import { BossProfileDirectoryNav } from "@/components/boss/boss-profile-directory-nav";
@@ -14,10 +14,10 @@ type Directory = OrganizationListPage & {
 
 export default function BossProfilesPage() {
   const search = useSearch();
-  const query = organizationListQuerySchema.parse({
+  const query = useMemo(() => organizationListQuerySchema.parse({
     ...Object.fromEntries(new URLSearchParams(search)),
     lastResort: "all", filler: "all", includeRetired: undefined,
-  });
+  }), [search]);
   const [data, setData] = useState<Directory | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);

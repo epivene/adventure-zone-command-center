@@ -11,8 +11,8 @@ import {
   organizationLocations,
   organizations,
 } from "../../db/schema";
-import { resolveEffectiveEventDate } from "@/features/event-date-coverage/effective-event-date";
-import type { EffectiveEventDate } from "@/features/event-date-coverage/event-date-types";
+import { resolveEffectiveEventDate } from "../event-date-coverage/effective-event-date";
+import type { EffectiveEventDate } from "../event-date-coverage/event-date-types";
 import type { OrganizationListQuery } from "./last-resort-input";
 
 type MatchedOrganizationLocation = {

@@ -72,10 +72,10 @@ const statusStyles = {
   deadline_soon: ["Deadline soon", "bg-orange-100 text-orange-900"],
   needs_follow_up: ["Needs follow-up", "bg-amber-100 text-amber-900"],
   contacted: ["Contacted", "bg-sky-100 text-sky-900"],
-  waiting: ["Waiting", "bg-slate-100 text-foreground"],
+  waiting: ["Waiting", "bg-muted text-foreground"],
   booked: ["Booked", "bg-teal-100 text-teal-900"],
   not_a_fit: ["Not a fit", "bg-rose-100 text-rose-900"],
-  unrecorded: ["Status not recorded", "bg-slate-100 text-foreground"],
+  unrecorded: ["Status not recorded", "bg-muted text-foreground"],
 } as const;
 
 const quickFilterLabels = {
@@ -489,7 +489,7 @@ export function OrganizationList({
             {activeFilters.map((filter) => (
               <Link
                 aria-label={`Remove ${filter.label} filter`}
-                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-slate-200"
+                className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-secondary/80"
                 href={filter.href}
                 key={filter.label}
               >
@@ -525,7 +525,7 @@ export function OrganizationList({
           return (
             <Link
               aria-current={active ? "true" : undefined}
-              className={`shrink-0 rounded-full border px-3 py-2 text-sm font-bold outline-none transition focus-visible:ring-2 focus-visible:ring-orange-600 focus-visible:ring-offset-2 ${active ? "border-orange-700 bg-orange-700 text-white" : "border-slate-300 bg-white text-foreground hover:border-orange-400"}`}
+              className={`shrink-0 rounded-full border px-3 py-2 text-sm font-bold outline-none transition focus-visible:ring-2 focus-visible:ring-orange-600 focus-visible:ring-offset-2 ${active ? "border-orange-700 bg-orange-700 text-white" : "border-border bg-card text-foreground hover:border-orange-400"}`}
               href={listHref({
                 ...query,
                 quickFilter: active ? null : value,

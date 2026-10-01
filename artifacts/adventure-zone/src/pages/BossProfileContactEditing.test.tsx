@@ -92,14 +92,15 @@ describe("Dave profile and contact pages", () => {
     mocks.bossGet.mockImplementation(async (path: string) => {
       if (path.includes("/google-workspace/profiles/")) {
         return {
-          conversations: [{ threadId: "current-thread" }],
-          historicalConversations: [{ threadId: "older-thread" }],
+          conversations: [{ threadId: "current-thread", date: "2026-09-01", internalDateMs: Date.UTC(2026, 8, 1) }],
+          historicalConversations: [{ threadId: "older-thread", date: "2025-09-01", internalDateMs: Date.UTC(2025, 8, 1) }],
         };
       }
       return { profile };
     });
     render(<BossProfilePage profileId={profileId} />);
 
+    await waitFor(() => expect(mocks.bossGet).toHaveBeenCalledWith(`/boss/google-workspace/profiles/${profileId}/emails`));
     expect(await screen.findByRole("button", { name: /2 Emails/ })).toBeInTheDocument();
   });
 

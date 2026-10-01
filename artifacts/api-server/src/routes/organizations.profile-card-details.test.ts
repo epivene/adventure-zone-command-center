@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { loadProfileCardDetailsWith } from "./organizations";
+import { loadProfileCardDetailsWith } from "../features/organizations/profile-card-details";
 
 const profileId = "10000000-0000-4000-8000-000000000001";
 
@@ -26,6 +26,7 @@ describe("profile card detail enrichment", () => {
       phone: null,
       email: null,
       website: null,
+      description: null,
       placeType: null,
       profileImageDataUrl: "data:image/jpeg;base64,photo",
       ratingAverage: null,

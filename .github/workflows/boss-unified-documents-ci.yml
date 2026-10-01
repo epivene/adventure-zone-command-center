@@ -61,9 +61,9 @@ jobs:
       - name: Boss workspace tests
         run: pnpm --filter @workspace/adventure-zone test:boss
       - name: Boss profile search and editing tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts src/pages/BossProfilesPage.search.test.tsx src/pages/BossProfileContactEditing.test.tsx src/components/google-workspace/profile-google-email-panel.test.tsx
+        run: pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts src/pages/BossProfilesPage.search.test.tsx src/pages/BossProfileContactEditing.test.tsx src/components/google-workspace/profile-google-email-panel.test.tsx src/components/google-workspace/use-profile-google-email.test.tsx src/components/organizations/organization-list-card.test.tsx src/components/profiles/profile-at-a-glance.test.tsx
       - name: Boss profile facts and Office privacy tests
-        run: pnpm --filter @workspace/api-server exec vitest run src/features/boss/boss-profile-view.test.ts src/features/office/office-profile-service.test.ts src/routes/boss-profile-emails.test.ts src/routes/boss-profile-contact-edit.test.ts
+        run: pnpm --filter @workspace/api-server exec vitest run src/routes/organizations.profile-card-details.test.ts src/features/boss/boss-profile-view.test.ts src/features/office/office-profile-service.test.ts src/routes/boss-profile-emails.test.ts src/routes/boss-profile-contact-edit.test.ts
       - name: Business document route tests
         run: pnpm --filter @workspace/api-server exec vitest run src/routes/business-documents.test.ts src/routes/boss-business-documents.test.ts src/routes/office-documents.test.ts src/features/business-documents/business-document-ingestion.test.ts src/features/business-documents/business-document-repository.test.ts
       - name: Build API and frontend
