@@ -10,7 +10,7 @@ import type { ConnectionPrincipal, ConnectionScope } from "./contracts";
 import type { ConnectionReadService } from "./read-service";
 import type { LeadNoteService } from "./lead-note-service";
 import type { ProfileUpdateService } from "./profile-update-service";
-import type { DraftFollowupService } from "./draft-followup-service";
+import { closeFollowupSchema, type DraftFollowupService } from "./draft-followup-service";
 import type { OperationStore } from "./operation-store";
 export type ConnectionServices = {
   work: BookingWorkService;
@@ -234,6 +234,24 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       destructive: true,
       call: ({ requestKey, ...a }) =>
         s.drafts.saveFollowup(p, { requestKey }, a),
+    },
+    {
+      name: "complete_followup",
+      scope: "followups:write",
+      description: "Complete an actually performed follow-up with an accurate outcome in reason. First list_followups and use its exact revision and profile ID. For obsolete or duplicate reminders use dismiss_followup instead. Preserves history; does not send messages, change booking status, or schedule another reminder. Reuse requestKey on identical retries and verify the receipt.",
+      schema: closeFollowupSchema.omit({action:true}).extend({requestKey}).strict(),
+      readOnly: false,
+      destructive: true,
+      call: ({requestKey, ...a}) => s.drafts.closeFollowup(p, {requestKey}, {...a, action:"complete"}),
+    },
+    {
+      name: "dismiss_followup",
+      scope: "followups:write",
+      description: "Dismiss an obsolete, duplicate or superseded reminder with a reason, preserving it in history as Dismissed without claiming the contact happened. First list_followups and use its exact revision and profile ID. Does not delete records, send messages, change booking status, or schedule another reminder. Reuse requestKey on identical retries and verify the receipt.",
+      schema: closeFollowupSchema.omit({action:true}).extend({requestKey}).strict(),
+      readOnly: false,
+      destructive: true,
+      call: ({requestKey, ...a}) => s.drafts.closeFollowup(p, {requestKey}, {...a, action:"dismiss"}),
     },
     {
       name: "get_operation_receipt",
