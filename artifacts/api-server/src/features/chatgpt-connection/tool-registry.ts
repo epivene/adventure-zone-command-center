@@ -188,6 +188,22 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       call: ({ requestKey, ...a }) => s.updates.apply(p, { requestKey }, a),
     },
     {
+      name: "list_app_drafts",
+      scope: "crm:read",
+      description: "List this connection's saved app drafts for a profile. Continue with nextCursor. These are not Gmail drafts.",
+      schema: z.object({ profileId: id, cursor }).strict(),
+      readOnly: true,
+      call: (a) => s.drafts.listDrafts(p, a),
+    },
+    {
+      name: "read_app_draft",
+      scope: "crm:read",
+      description: "Read this connection's full saved app draft and exact revision. Use that revision with save_app_draft to update the same draft. Does not read Gmail drafts or send email.",
+      schema: z.object({ profileId: id, draftId: id }).strict(),
+      readOnly: true,
+      call: (a) => s.drafts.readDraft(p, a),
+    },
+    {
       name: "save_app_draft",
       scope: "drafts:write",
       description:

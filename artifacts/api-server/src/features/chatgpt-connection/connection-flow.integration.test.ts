@@ -186,6 +186,17 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
     expect(drafts.body.items[0].content.text).toBe("Hello");
     expect((await f.db.query("SELECT * FROM follow_ups")).rows).toHaveLength(1);
     const existingReminder = (await call("list_followups", {profileId:f.profileId})).items[0];
+    const savedDraftPage = await call("list_app_drafts", { profileId: f.profileId });
+    expect(savedDraftPage.items).toHaveLength(1);
+    const reopened = await call("read_app_draft", { profileId: f.profileId, draftId: savedDraftPage.items[0].id });
+    expect(reopened.content.subject).toBe("Question");
+    const revised = await call("save_app_draft", {
+      requestKey: "revise-reopened", draftId: reopened.id,
+      expectedRevision: reopened.revision,
+      content: { ...reopened.content, subject: "Updated question" },
+    });
+    expect(revised.recordId).toBe(reopened.id);
+    expect((await call("read_app_draft", { profileId: f.profileId, draftId: reopened.id })).content.subject).toBe("Updated question");
     const completed = await call("complete_followup", {
       requestKey:"complete-reminder",profileId:f.profileId,followupId:existingReminder.id,
       expectedRevision:existingReminder.revision,reason:"Customer called and reviewed dates",
