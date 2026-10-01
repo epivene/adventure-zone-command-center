@@ -10,6 +10,12 @@ export type MasterWorkKind =
   | "cleanup";
 
 export type MasterWorkItem = {
+  gmailConnectionId?: string;
+  threadId?: string;
+  messageId?: string;
+  attentionState?: "needs_your_reply" | "waiting_for_their_reply";
+  eventYear?: number | null;
+  subject?: string;
   id: string;
   sourceId: string;
   sourceType: string;

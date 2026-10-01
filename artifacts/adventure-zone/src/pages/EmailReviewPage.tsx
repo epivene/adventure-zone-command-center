@@ -1,3 +1,4 @@
+import { EmailAttentionControls } from "@/components/google-workspace/email-attention-controls";
 import { useState } from "react";
 import { MailQuestion } from "lucide-react";
 
@@ -6,6 +7,8 @@ import { GoogleValidationReview } from "@/components/google-workspace/google-val
 export function EmailReviewPage() {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
 
+  const params = new URLSearchParams(window.location.search);
+  const messageId = params.get("attentionMessage"), profileId = params.get("profileId");
   return (
     <div className="mx-auto grid max-w-5xl gap-6 pb-10">
       <header>
@@ -26,6 +29,7 @@ export function EmailReviewPage() {
         </p>
       </header>
 
+      {messageId && profileId ? <EmailAttentionControls key={messageId + profileId} messageId={messageId} profileId={profileId} /> : null}
       <GoogleValidationReview
         onPendingCountChange={setPendingCount}
         showGmailActions

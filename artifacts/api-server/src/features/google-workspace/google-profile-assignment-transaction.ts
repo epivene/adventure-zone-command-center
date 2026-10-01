@@ -147,6 +147,7 @@ export class PostgresGoogleProfileAssignmentTransaction
 implements GoogleProfileAssignmentTransactionPort {
   constructor(
     private readonly pool: SqlPool = defaultPool as unknown as SqlPool,
+    private readonly pinned?: { tx: Pick<SqlClient, "query">; connectionId: string },
   ) {}
 
   async resolveReview(
@@ -343,7 +344,7 @@ implements GoogleProfileAssignmentTransactionPort {
   ): Promise<CommittedProfileAssignment> {
     let client: SqlClient;
     try {
-      client = await this.pool.connect();
+      client = this.pinned ? {query:this.pinned.tx.query.bind(this.pinned.tx),release() {}} : await this.pool.connect();
     } catch (cause) {
       throw new GoogleProfileAssignmentTransactionError({
         stage: "connection",
@@ -357,8 +358,8 @@ implements GoogleProfileAssignmentTransactionPort {
       },
     };
     try {
-      await client.query("BEGIN");
-      const connection = await client.query(
+      if (!this.pinned) await client.query("BEGIN");
+      const connection = this.pinned ? await client.query("SELECT id::text FROM google_workspace_connections WHERE id=$1 AND status='connected' FOR UPDATE", [this.pinned.connectionId]) : await client.query(
         `SELECT id::text
            FROM google_workspace_connections
           WHERE status IN ('connected', 'reauthorization_required')
@@ -371,6 +372,7 @@ implements GoogleProfileAssignmentTransactionPort {
         throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
       }
 
+      if (this.pinned && connectionId !== this.pinned.connectionId) throw new Error("GOOGLE_WORKSPACE_CONNECTION_CHANGED");
       stage.set("target");
       const target = await client.query(
         `SELECT id
@@ -384,10 +386,10 @@ implements GoogleProfileAssignmentTransactionPort {
       }
 
       const committed = await operation(client, connectionId, stage);
-      await client.query("COMMIT");
+      if (!this.pinned) await client.query("COMMIT");
       return committed;
     } catch (cause) {
-      await client.query("ROLLBACK").catch(() => undefined);
+      if (!this.pinned) await client.query("ROLLBACK").catch(() => undefined);
       throw new GoogleProfileAssignmentTransactionError({
         stage: currentStage,
         cause,

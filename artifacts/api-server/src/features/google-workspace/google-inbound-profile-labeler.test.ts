@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { GoogleInboundProfileLabeler } from "./google-inbound-profile-labeler";
 
 describe("GoogleInboundProfileLabeler", () => {
-  it("labels a new thread-inherited Inbox reply at message level", async () => {
+  it.each([{labels:["INBOX", "UNREAD"]}, {labels:[]}])("labels a verified reply regardless of inbox/read labels: $labels", async ({labels}) => {
     const labelInboundMessage = vi.fn(async () => ({
       mutationId: "mutation-1",
       state: "completed" as const,
@@ -26,7 +26,7 @@ describe("GoogleInboundProfileLabeler", () => {
     await labeler.labelNewThreadMatches([{
       id: "new-message",
       threadId: "thread-1",
-      labelIds: ["INBOX", "UNREAD"],
+      labelIds: labels as string[],
       evidenceCodes: ["existing_thread_association"],
       resolvedOrganization: { id: "org-1", name: "Elko County Fair" },
     }]);

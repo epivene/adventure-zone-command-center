@@ -1,3 +1,5 @@
+import { emailAttentionTools } from "./email-attention-tools";
+import type { EmailThreadAttentionService } from "../google-workspace/email-thread-attention-service";
 import { bookingWorkTools } from "./booking-work-tools";
 import type { BookingWorkService } from "../booking-work/service";
 import { mergeInputSchema, type ProfileMergeService } from "./profile-merge-service";
@@ -13,6 +15,7 @@ import type { ProfileUpdateService } from "./profile-update-service";
 import { closeFollowupSchema, type DraftFollowupService } from "./draft-followup-service";
 import type { OperationStore } from "./operation-store";
 export type ConnectionServices = {
+  attention?: EmailThreadAttentionService;
   work: BookingWorkService;
   reads: ConnectionReadService;
   notes: LeadNoteService;
@@ -290,6 +293,7 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
     call: a => s.reads.operational(p, a),
   });
   // Discovery must not cache a permission-dependent subset. Calls remain scope-checked.
+  tools.push(...emailAttentionTools(s.attention, p));
   tools.push(...bookingWorkTools(s.work, p));
   return tools;
 }

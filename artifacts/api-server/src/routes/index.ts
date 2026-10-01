@@ -1,3 +1,5 @@
+import { createEmailThreadAttentionRouter } from "./email-thread-attention";
+import { createEmailAttentionService } from "../features/google-workspace/email-thread-attention-runtime";
 import assistantWorkspaceRouter from "./assistant-workspace";
 import { createOutreachPlannerRouter } from "./outreach-planner";
 import { Router, type IRouter } from "express";
@@ -259,6 +261,7 @@ router.use(officeAdminAccountsRouter);
 router.use(marketingRouter);
 router.use(bossAdminAccountsRouter);
 router.use(officeAdminTasksRouter);
+router.use("/email-thread-attention", createEmailThreadAttentionRouter(createEmailAttentionService(pool)));
 router.use("/booking-work", createBookingWorkRouter(pool));
 router.use(officeAdminMailRouter);
 router.use(officeAdminEmailDraftsRouter);

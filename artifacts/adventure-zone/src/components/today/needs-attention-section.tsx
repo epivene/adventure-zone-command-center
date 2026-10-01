@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import type { MasterWorkItem } from "@/features/today/master-work-types";
 
 function profileHref(item: MasterWorkItem): string {
+  if (item.attentionState && item.messageId && item.organizationId) return "/email-review?" + new URLSearchParams({attentionMessage:item.messageId,profileId:item.organizationId}).toString();
   if (!item.organizationId) return "/today";
   const params = new URLSearchParams({ from: "today", workItemId: item.id });
   if (item.bookingId) params.set("bookingId", item.bookingId);
@@ -39,6 +40,7 @@ export function NeedsAttentionSection({
                 <p className="truncate font-bold text-slate-950">{item.eventName}</p>
                 <p className="text-sm text-slate-600">{[item.city, item.region].filter(Boolean).join(", ") || "Location not set"}</p>
                 <p className="mt-1 text-sm font-semibold text-rose-800">{item.reason}</p>
+                {item.attentionState ? <><p className="break-words text-sm">{item.subject}</p><p className="text-xs">{item.eventYear ?? "Year unconfirmed"}</p></> : null}
               </div>
               <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold capitalize text-slate-700">{item.kind.replaceAll("_", " ")}</span>
             </div>

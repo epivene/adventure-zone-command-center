@@ -80,6 +80,17 @@ export function createConnectionMcpServer(
     return { isError: true, content: [{type: "text" as const, text: "Owner consent is required for note editing and owner-reviewed profile updates. No access or records changed."}],
       _meta: { "mcp/www_authenticate": [`Bearer resource_metadata="${new URL(resource).origin}/.well-known/oauth-protected-resource/api/chatgpt/mcp", error="insufficient_scope", error_description="Owner approval required for CRM edits", scope="${editScopes.join(" ")}"`] } };
   });
+  const emailScopes: ConnectionScope[] = [...new Set<ConnectionScope>([...principal.scopes, "crm:read", "email:organize"])];
+  server.registerTool("request_email_organize_access", {
+    description: "When the owner asks: request consent to file email under profiles, import email history, change managed Gmail labels and archive filed threads from Inbox. Retains existing grants. Does not grant access, organize email or send anything itself.",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    _meta: { securitySchemes: [{type: "oauth2", scopes: ["crm:read", "email:organize"]}] },
+  }, async () => {
+    if (emailScopes.every(scope => principal.scopes.includes(scope)))
+      return {content:[{type:"text" as const,text:JSON.stringify({status:"authorized",scopes:emailScopes})}]};
+    return {isError:true,content:[{type:"text" as const,text:"Owner consent is required for email organization. Nothing changed or sent."}],
+      _meta:{"mcp/www_authenticate":[`Bearer resource_metadata="${new URL(resource).origin}/.well-known/oauth-protected-resource/api/chatgpt/mcp", error="insufficient_scope", scope="${emailScopes.join(" ")}"`]}};
+  });
   for (const tool of connectionTools(services, principal))
     server.registerTool(
       tool.name,

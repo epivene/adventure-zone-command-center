@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 export type ConnectionScope =
-  "crm:read" | "crm:append" | "crm:update" | "drafts:write" | "followups:write";
+  "crm:read" | "crm:append" | "crm:update" | "drafts:write" | "followups:write" | "email:organize";
 export const connectionScopes: ConnectionScope[] = [
   "crm:read",
   "crm:append",
   "crm:update",
   "drafts:write",
   "followups:write",
+  "email:organize",
 ];
 export type ConnectionPrincipal = {
   ownerId: string;

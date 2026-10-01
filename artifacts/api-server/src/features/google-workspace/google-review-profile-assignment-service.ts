@@ -1,3 +1,5 @@
+import type { AttentionSync } from "./email-thread-attention-service";
+import { attentionLabelHandler } from "./email-thread-attention-sync";
 import { pool as defaultPool } from "@workspace/db";
 
 import { PostgresGoogleConnectionRepository } from "./google-connection-repository";
@@ -143,6 +145,26 @@ export class GoogleReviewProfileAssignmentService {
     const committed = await this.assignmentPersistence.assignMatched(input);
     const result = await this.executeCommitted(input, committed);
     return this.withArchive(result, committed);
+  }
+
+  async synchronizeAttention(committed: CommittedProfileAssignment, authorize: () => Promise<void>, prior?: AttentionSync): Promise<AttentionSync> {
+    await authorize();
+    let gmailSync=prior?.gmailSync;
+    if(gmailSync?.state!=="completed") {
+      try { gmailSync=await this.retryGmailMutation(committed.mutation.id); }
+      catch(error){gmailSync={state:"retry_required",errorCode:gmailFailureCode(error)};}
+    }
+    await authorize();
+    let archiveSync=prior?.archiveSync;
+    if(archiveSync?.state!=="complete") {
+      try {
+        const archived=await this.archiver.archiveApprovedThread({organizationId:committed.organizationId,contactId:null,gmailThreadId:committed.threadId});
+        const covered=archived.messages.some(message=>message.gmailMessageId===committed.messageId);
+        const errorCode=archived.lastGmailErrorCode??(!covered?"GOOGLE_WORKSPACE_ARCHIVE_SOURCE_MISSING":null);
+        archiveSync={conversationId:archived.id,state:errorCode?"retry_required":archived.archiveState,errorCode};
+      }catch(error){archiveSync={conversationId:null,state:"retry_required",errorCode:gmailFailureCode(error)};}
+    }
+    return {gmailSync,archiveSync};
   }
 
   async retryGmailMutation(
@@ -360,6 +382,7 @@ export class GoogleReviewProfileAssignmentService {
         mutations,
         resolver,
         gmail: connection.client,
+        attention: attentionLabelHandler(this.pool as never, connection.client),
       }),
     };
   }

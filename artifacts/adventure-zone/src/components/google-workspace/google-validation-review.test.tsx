@@ -352,14 +352,9 @@ describe("GoogleValidationReview", () => {
     expect(await screen.findByText("County Fair application")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Assign to County Fair" }));
 
-    await waitFor(() =>
-      expect(client.resolveGoogleWorkspaceValidationReview).toHaveBeenCalledWith(
-        "m1",
-        "11111111-1111-4111-8111-111111111111",
-      ),
-    );
-    expect(await screen.findByText("Assigned to the profile and archived in Gmail."))
-      .toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Conversation filing" })).toBeInTheDocument();
+    expect(client.resolveGoogleWorkspaceValidationReview).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Preview filing" })).toBeInTheDocument();
   });
 
   it("can search for a different profile and assign it", async () => {
@@ -373,12 +368,8 @@ describe("GoogleValidationReview", () => {
 
     expect(await screen.findByText("Another Fair")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Assign to Another Fair" }));
-    await waitFor(() =>
-      expect(client.resolveGoogleWorkspaceValidationReview).toHaveBeenCalledWith(
-        "m1",
-        "22222222-2222-4222-8222-222222222222",
-      ),
-    );
+    expect(await screen.findByRole("region", { name: "Conversation filing" })).toBeInTheDocument();
+    expect(client.resolveGoogleWorkspaceValidationReview).not.toHaveBeenCalled();
   });
 
   it("can explicitly ignore an irrelevant review item", async () => {
@@ -393,39 +384,13 @@ describe("GoogleValidationReview", () => {
     )).toBeInTheDocument();
   });
 
-  it("offers an immediate retry when Gmail synchronization is retryable", async () => {
-    client.resolveGoogleWorkspaceValidationReview.mockResolvedValueOnce({
-      ok: true,
-      gmailSync: {
-        mutationId: "33333333-3333-4333-8333-333333333333",
-        state: "retryable_error",
-        gmailLabelId: null,
-        gmailLabelName: null,
-        errorCode: "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
-      },
-    });
-    client.retryGoogleWorkspaceGmailMutation.mockResolvedValueOnce({
-      ok: true,
-      gmailSync: {
-        mutationId: "33333333-3333-4333-8333-333333333333",
-        state: "completed",
-        gmailLabelId: "Label_1",
-        gmailLabelName: "Z - AdventureZone/Profiles/County Fair",
-        errorCode: null,
-      },
-    });
+  it("can close a filing preview without changing Gmail", async () => {
     render(<GoogleValidationReview />);
     await screen.findByText("County Fair application");
-
-    fireEvent.click(screen.getByRole("button", { name: "Assign to County Fair" }));
-    expect(await screen.findByText(
-      "Profile assigned. Reconnect the company Google account in Settings, then retry Gmail.",
-    )).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Retry Gmail" }));
-
-    await waitFor(() => expect(client.retryGoogleWorkspaceGmailMutation)
-      .toHaveBeenCalledWith("33333333-3333-4333-8333-333333333333"));
-    expect(await screen.findByText("Assigned to the profile and archived in Gmail."))
-      .toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", {name:"Assign to County Fair"}));
+    expect(screen.getByLabelText("Conversation status")).toHaveValue("needs_your_reply");
+    fireEvent.click(screen.getByRole("button", {name:"Close"}));
+    expect(screen.queryByRole("region", {name:"Conversation filing"})).not.toBeInTheDocument();
+    expect(client.resolveGoogleWorkspaceValidationReview).not.toHaveBeenCalled();
   });
 });

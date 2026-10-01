@@ -27,6 +27,7 @@ describe("runRequiredSchemaStartup", () => {
     });
     await runRequiredSchemaStartup({
       run,
+      ensureEmailThreadAttention: async () => true,
       ensureBookingWork: async () => true,
       ensurePaperNotes: async () => false,
       ensureInboundCalling: async () => false,
@@ -61,6 +62,7 @@ describe("runRequiredSchemaStartup", () => {
     expect(timeoutHooks.get("required paper notes schema")).toBeUndefined();
     expect(calls).toEqual([
       "required booking work schema",
+      "required email thread attention schema",
       "required paper notes schema",
       "required inbound calling schema",
       "required Google Workspace schema",
@@ -93,6 +95,7 @@ describe("runRequiredSchemaStartup", () => {
 
     await runRequiredSchemaStartup({
       run,
+      ensureEmailThreadAttention: async () => true,
       ensureBookingWork: unchanged,
       ensurePaperNotes,
       ensureInboundCalling: unchanged,
@@ -134,6 +137,7 @@ describe("runRequiredSchemaStartup", () => {
     await runRequiredSchemaStartup({
       run,
       sleep,
+      ensureEmailThreadAttention: async () => true,
       ensureBookingWork: unchanged,
       ensurePaperNotes,
       ensureInboundCalling: unchanged,
