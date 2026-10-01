@@ -1,0 +1,386 @@
+import { z } from "zod";
+import {
+  activeConnection,
+  ConnectionError,
+  inputHash,
+  requireConnectionScope,
+  type ConnectionDatabase,
+  type ConnectionPrincipal,
+} from "./contracts";
+
+export const scheduleSections = [
+  "legs",
+  "bookings",
+  "leg_suggestions",
+  "holds",
+] as const;
+export const routeSections = ["trips", "stops", "segments", "anchors"] as const;
+export const resourceSections = [
+  "packages",
+  "resources",
+  "booking_packages",
+  "booking_resources",
+  "trip_resources",
+  "crew_history",
+  "demand",
+  "resource_tags",
+  "resource_attributions",
+] as const;
+const allSections = [
+  ...scheduleSections,
+  ...routeSections,
+  ...resourceSections,
+] as const;
+const day = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((s) => {
+    const d = new Date(s + "T00:00:00Z");
+    return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  }, "Use a real calendar date");
+export const operationalInput = z
+  .object({
+    section: z.enum(allSections),
+    eventYear: z.number().int().min(1900).max(2200).optional(),
+    dateFrom: day.optional(),
+    dateTo: day.optional(),
+    dateMode: z.enum(["all", "undated"]).optional(),
+    legId: z.string().uuid().optional(),
+    bookingId: z.string().uuid().optional(),
+    tripId: z.string().uuid().optional(),
+    resourceId: z.string().uuid().optional(),
+    cursor: z.string().max(2000).optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  })
+  .strict()
+  .superRefine((a, c) => {
+    if (
+      !!a.dateFrom !== !!a.dateTo ||
+      (a.dateFrom && a.dateTo && a.dateFrom > a.dateTo) ||
+      (a.eventYear !== undefined && a.dateFrom) ||
+      (a.dateMode === "undated" && (a.dateFrom || a.eventYear !== undefined))
+    )
+      c.addIssue({
+        code: "custom",
+        message:
+          "Use eventYear OR an inclusive dateFrom/dateTo range OR dateMode=undated.",
+      });
+  });
+type Input = z.infer<typeof operationalInput>;
+type Filter = "legId" | "bookingId" | "tripId" | "resourceId";
+type Query = {
+  select: string;
+  from: string;
+  filters: Partial<Record<Filter, string>>;
+  start?: string;
+  end?: string;
+  order?: string;
+};
+const bookingWindow = {
+  start: "COALESCE(w.starts_at,b.starts_at,b.ends_at)",
+  end: "COALESCE(w.ends_at,b.ends_at,b.starts_at)",
+};
+const bookingJoins =
+  " JOIN bookings b ON b.id=a.booking_id LEFT JOIN booking_operational_windows w ON w.booking_id=b.id";
+const bookingFilters = { bookingId: "b.id", legId: "b.travel_leg_id" };
+const bookingColumns =
+  "b.id AS booking_id,b.organization_id AS profile_id,b.name AS booking_name,b.status AS booking_status,b.travel_leg_id AS leg_id,b.starts_at,b.ends_at,w.starts_at AS operational_starts_at,w.ends_at AS operational_ends_at";
+const tripWindow = { start: "t.start_date", end: "t.end_date" };
+const tripFilters = { tripId: "t.id", legId: "t.travel_leg_id" };
+// All SQL identifiers and expressions are static; only values come from tool input.
+const queries: Record<Input["section"], Query> = {
+  legs: {
+    select:
+      "a.id,a.name,a.color,a.sort_order,a.archived_at,a.base_address,a.default_vehicle_name,a.updated_at",
+    from: "travel_legs a",
+    filters: { legId: "a.id" },
+    order: "a.sort_order",
+  },
+  bookings: {
+    select: `b.id,b.organization_id AS profile_id,b.name,b.status,b.probability,b.travel_leg_id AS leg_id,b.venue_name,b.address_1,b.city,b.region,b.postal_code,b.latitude,b.longitude,b.starts_at,b.ends_at,b.physical_attraction_total,b.attraction_total_approval_reason,b.updated_at,w.starts_at AS operational_starts_at,w.ends_at AS operational_ends_at,w.source AS operational_window_source,CASE WHEN b.travel_leg_id IS NULL THEN 'unassigned' ELSE 'assigned' END AS assignment_state`,
+    from: "bookings b LEFT JOIN booking_operational_windows w ON w.booking_id=b.id",
+    filters: bookingFilters,
+    ...bookingWindow,
+  },
+  leg_suggestions: {
+    select: `a.id,${bookingColumns},a.assigned_leg_id,a.suggested_leg_id,a.source,a.explanation,a.warning,a.previous_stop_drive_minutes,a.next_stop_drive_minutes,a.confidence,a.updated_at`,
+    from: "booking_leg_assignments a" + bookingJoins,
+    filters: bookingFilters,
+    ...bookingWindow,
+  },
+  holds: {
+    select:
+      "a.id,a.booking_id,b.organization_id AS profile_id,a.leg_id,a.event_starts_on::text,a.event_ends_on::text,a.starts_on::text,a.ends_on::text,a.quantities,a.resource_ids,a.state,a.expires_at,a.ended_at,a.revision,(a.expires_at<=now()) AS expired_by_clock",
+    from: "outreach_holds a JOIN bookings b ON b.id=a.booking_id",
+    filters: { bookingId: "a.booking_id", legId: "a.leg_id" },
+    start: "a.starts_on::timestamp AT TIME ZONE 'America/Denver'",
+    end: "(a.ends_on+1)::timestamp AT TIME ZONE 'America/Denver'",
+  },
+  trips: {
+    select:
+      "t.id,t.travel_leg_id AS leg_id,t.name,t.start_date,t.end_date,t.start_label,t.start_latitude,t.start_longitude,t.end_label,t.end_latitude,t.end_longitude,t.vehicle_name,t.route_confirmed_at,t.updated_at",
+    from: "trips t",
+    filters: tripFilters,
+    ...tripWindow,
+  },
+  stops: {
+    select: `a.id,a.trip_id,a.sort_order,t.travel_leg_id AS trip_leg_id,${bookingColumns},b.venue_name,b.address_1,b.city,b.region,b.latitude,b.longitude`,
+    from: "trip_stops a JOIN trips t ON t.id=a.trip_id" + bookingJoins,
+    filters: { ...tripFilters, bookingId: "b.id" },
+    ...tripWindow,
+    order: "a.sort_order",
+  },
+  segments: {
+    select:
+      "a.id,a.trip_id,a.sequence,a.from_key,a.to_key,a.from_label,a.to_label,a.miles,a.minutes,a.source,a.estimated_at,a.override_miles,a.override_minutes,a.updated_at",
+    from: "trip_segments a JOIN trips t ON t.id=a.trip_id",
+    filters: tripFilters,
+    ...tripWindow,
+    order: "a.sequence",
+  },
+  anchors: {
+    select:
+      "a.id,a.leg_id,a.resource_id,a.direction,a.latitude,a.longitude,a.available_at,a.valid_until,a.source,a.reason,a.revision,a.recorded_at,a.revoked_at",
+    from: "outreach_route_anchors a",
+    filters: { legId: "a.leg_id", resourceId: "a.resource_id" },
+    start: "a.available_at",
+    end: "a.valid_until",
+  },
+  packages: {
+    select:
+      "a.id,a.code,a.name,a.base_attraction_count,a.normal_capacity,a.temporary_unavailable_quantity,a.active,a.updated_at",
+    from: "package_templates a",
+    filters: {},
+  },
+  resources: {
+    select:
+      "a.id,a.code,a.name,a.category,a.counts_as_attraction,a.movable,a.normal_travel_leg_id,a.setup_minutes,a.teardown_minutes,a.minimum_transfer_minutes,a.status,a.updated_at",
+    from: "resources a",
+    filters: { resourceId: "a.id", legId: "a.normal_travel_leg_id" },
+  },
+  booking_packages: {
+    select: `a.id,${bookingColumns},a.package_template_id`,
+    from: "booking_package_selections a" + bookingJoins,
+    filters: bookingFilters,
+    ...bookingWindow,
+  },
+  booking_resources: {
+    select: `a.id,${bookingColumns},a.resource_id,a.attribution_source,a.updated_at`,
+    from: "booking_resource_assignments a" + bookingJoins,
+    filters: { ...bookingFilters, resourceId: "a.resource_id" },
+    ...bookingWindow,
+  },
+  trip_resources: {
+    select:
+      "a.id,a.trip_id,a.resource_id,t.travel_leg_id AS leg_id,t.start_date,t.end_date",
+    from: "trip_resource_assignments a JOIN trips t ON t.id=a.trip_id",
+    filters: { ...tripFilters, resourceId: "a.resource_id" },
+    ...tripWindow,
+  },
+  crew_history: {
+    select:
+      "a.id,a.worker_id,a.leg_id,a.booking_id,a.trip_id,a.role,a.started_at,a.ended_at,a.updated_at",
+    from: "crew_work_history a",
+    filters: {
+      legId: "a.leg_id",
+      bookingId: "a.booking_id",
+      tripId: "a.trip_id",
+    },
+    start: "a.started_at",
+    end: "COALESCE(a.ended_at,'infinity'::timestamptz)",
+  },
+  demand: {
+    select: `a.booking_id AS id,${bookingColumns},a.quantities,a.resource_ids,a.revision,a.updated_at`,
+    from: "outreach_booking_demand a" + bookingJoins,
+    filters: bookingFilters,
+    ...bookingWindow,
+  },
+  resource_tags: {
+    select: "a.id,a.resource_id,a.package_template_id",
+    from: "resource_package_tags a",
+    filters: { resourceId: "a.resource_id" },
+  },
+  resource_attributions: {
+    select:
+      "a.id,a.booking_resource_assignment_id,a.package_template_id,r.booking_id,r.resource_id",
+    from: "booking_resource_package_attributions a JOIN booking_resource_assignments r ON r.id=a.booking_resource_assignment_id JOIN bookings b ON b.id=r.booking_id LEFT JOIN booking_operational_windows w ON w.booking_id=b.id",
+    filters: {
+      bookingId: "r.booking_id",
+      resourceId: "r.resource_id",
+      legId: "b.travel_leg_id",
+    },
+    ...bookingWindow,
+  },
+};
+const limitations = [
+  "Saved records only; not a complete availability or conflict verdict. Follow every nextCursor and inspect adjacent dates before assigning resources.",
+  "Booking status, leg assignment, package selection and resource allocation are separate facts. Missing deposit evidence does not release signed commitments.",
+  "Operational windows are stored overall windows, not separate verified arrival/setup/teardown/departure times. Coordinates are saved venue/trip points, not verified load-in points.",
+  "Package capacity and resource status are not free inventory. Consider booking allocations, trip allocations and holds together; do not double-count a resource assigned to both a trip and its booking.",
+  "Date filters use stored booking/operational/trip windows, not calculated equipment buffers. Widen the range for setup, teardown and transfers; current resource status is not a historical maintenance calendar.",
+  "Crew work history is not a future crew availability roster. Route anchors and minimum transfer minutes are not a verified equipment movement itinerary.",
+  "This does not fetch Google Calendar-only events or refresh routing estimates. Reconcile calendar-only events and duplicate mirrors separately.",
+];
+const camel = (s: string) =>
+  s.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+function project(row: Record<string, any>) {
+  const out: Record<string, any> = {},
+    omittedFields: string[] = [];
+  for (const [key, value] of Object.entries(row)) {
+    if (key === "_order") continue;
+    const name = camel(key);
+    if (typeof value === "string" && value.length > 2000) {
+      out[name] = value.slice(0, 2000);
+      omittedFields.push(name);
+    } else if (
+      value &&
+      typeof value === "object" &&
+      !(value instanceof Date) &&
+      JSON.stringify(value).length > 12000
+    ) {
+      out[name] = null;
+      omittedFields.push(name);
+    } else out[name] = value instanceof Date ? value.toISOString() : value;
+  }
+  if (out.profileId) out.profileHref = `/profiles/${out.profileId}`;
+  if (out.bookingId) out.bookingHref = `/bookings/${out.bookingId}`;
+  if (out.tripId) out.tripHref = `/trips/${out.tripId}`;
+  if (omittedFields.length) out.truncatedFields = omittedFields;
+  return out;
+}
+export async function readOperational(
+  db: ConnectionDatabase,
+  p: ConnectionPrincipal,
+  raw: unknown,
+) {
+  requireConnectionScope(p, "crm:read");
+  await activeConnection(db, p);
+  const parsed = operationalInput.safeParse(raw);
+  if (!parsed.success)
+    throw new ConnectionError("CONNECTION_INVALID_OPERATIONAL_FILTER");
+  const a = parsed.data,
+    q = queries[a.section];
+  const from = a.eventYear ? `${a.eventYear}-01-01` : a.dateFrom;
+  const to = a.eventYear ? `${a.eventYear}-12-31` : a.dateTo;
+  if ((from || a.dateMode === "undated") && !q.start)
+    throw new ConnectionError("CONNECTION_INVALID_OPERATIONAL_FILTER");
+  const params: unknown[] = [],
+    where: string[] = [];
+  const bind = (v: unknown) => {
+    params.push(v);
+    return "$" + params.length;
+  };
+  for (const field of ["legId", "bookingId", "tripId", "resourceId"] as const)
+    if (a[field]) {
+      if (!q.filters[field])
+        throw new ConnectionError("CONNECTION_INVALID_OPERATIONAL_FILTER");
+      where.push(`${q.filters[field]}=${bind(a[field])}::uuid`);
+    }
+  if (from && to)
+    where.push(
+      `(${q.start}) < ((${bind(to)}::date+1)::timestamp AT TIME ZONE 'America/Denver') AND (${q.end}) >= (${bind(from)}::date::timestamp AT TIME ZONE 'America/Denver')`,
+    );
+  if (a.dateMode === "undated")
+    where.push(`(${q.start} IS NULL OR ${q.end} IS NULL)`);
+  const { cursor, limit: requestedLimit, ...filters } = a;
+  const scope = inputHash([p.connectionId, filters]);
+  let after: { id: string; order: number } | null = null;
+  if (cursor)
+    try {
+      const c = JSON.parse(Buffer.from(cursor, "base64url").toString());
+      if (
+        c.scope !== scope ||
+        !z.string().uuid().safeParse(c.id).success ||
+        !Number.isSafeInteger(c.order)
+      )
+        throw Error();
+      after = c;
+    } catch {
+      throw new ConnectionError("CONNECTION_INVALID_CURSOR");
+    }
+  const order = q.order ? `COALESCE(${q.order},0)` : "0";
+  const inner = `SELECT ${q.select},${order} AS _order FROM ${q.from}${where.length ? " WHERE " + where.join(" AND ") : ""}`;
+  const continuation = after
+    ? ` WHERE (_order,id)>(${bind(after.order)}::integer,${bind(after.id)}::uuid)`
+    : "";
+  const limit = requestedLimit ?? 20;
+  let rows: Record<string, any>[];
+  try {
+    rows = (
+      await db.query(
+        `SELECT * FROM (${inner}) operational${continuation} ORDER BY _order,id LIMIT ${bind(limit + 1)}`,
+        params,
+      )
+    ).rows;
+  } catch (error) {
+    if (["42P01", "42703"].includes((error as any).code))
+      return {
+        section: a.section,
+        availability: "unavailable",
+        items: [],
+        nextCursor: null,
+        truncated: false,
+        complete: false,
+        reason:
+          "Required operational storage is unavailable in this deployment; no conclusion about assignments can be drawn.",
+        limitations,
+      };
+    throw error;
+  }
+  const items: Record<string, any>[] = [],
+    taken: Record<string, any>[] = [];
+  let bytes = JSON.stringify(limitations).length + 1500;
+  for (const row of rows.slice(0, limit)) {
+    const item = project(row);
+    if (a.section === "bookings") item.bookingHref = `/bookings/${row.id}`;
+    if (a.section === "trips") item.tripHref = `/trips/${row.id}`;
+    if (a.section === "legs") item.legsHref = "/operations/legs";
+    const size = JSON.stringify(item).length;
+    if (items.length && bytes + size > 24000) break;
+    // A single unusually large row is explicitly incomplete, never silently dropped.
+    if (size > 20000) {
+      for (const k of Object.keys(item))
+        if (typeof item[k] === "object" && item[k] !== null) {
+          item[k] = null;
+          item.truncatedFields = [...(item.truncatedFields ?? []), k];
+        }
+    }
+    items.push(item);
+    taken.push(row);
+    bytes += JSON.stringify(item).length;
+  }
+  const more = rows.length > items.length,
+    last = taken.at(-1);
+  return {
+    section: a.section,
+    availability: "available",
+    items,
+    truncated: more,
+    nextCursor:
+      more && last
+        ? Buffer.from(
+            JSON.stringify({ scope, id: last.id, order: Number(last._order) }),
+          ).toString("base64url")
+        : null,
+    complete: !more && !items.some((i) => i.truncatedFields?.length),
+    dateFilter: from
+      ? {
+          from,
+          to,
+          timezone: "America/Denver",
+          basis:
+            "overlapping saved window; eventYear includes cross-year windows",
+        }
+      : a.dateMode === "undated"
+        ? { mode: "undated" }
+        : null,
+    limitations: [
+      ...limitations,
+      ...(from
+        ? [
+            "Undated records are excluded from this date filter. Run dateMode=undated separately; no records does not prove availability.",
+          ]
+        : []),
+    ],
+  };
+}
