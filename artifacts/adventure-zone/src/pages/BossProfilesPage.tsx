@@ -43,7 +43,7 @@ export default function BossProfilesPage() {
   }, [query, page]);
 
   return (
-    <div className="grid gap-5" data-testid="boss-profiles-page">
+    <div className="grid min-w-0 gap-5" data-testid="boss-profiles-page">
       <header>
         <p className="text-xs font-bold uppercase tracking-widest text-primary">Boss</p>
         <h1 className="mt-1 text-2xl font-bold">Profiles</h1>
@@ -51,7 +51,7 @@ export default function BossProfilesPage() {
       </header>
       <BossProfileDirectoryNav active="profiles" />
       <div className="relative">
-        <label className="relative min-w-0 flex-1">
+        <label className="relative block min-w-0 w-full">
           <span className="sr-only">Search profiles</span>
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input aria-label="Search profiles" className="w-full rounded-lg border border-input bg-background py-2 pr-10" onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search profiles, contacts, or cities" style={{ paddingLeft: "3rem" }} value={query} />
@@ -79,11 +79,11 @@ export default function BossProfilesPage() {
             {data.records.map((profile) => {
               const location = [profile.city, profile.region].filter(Boolean).join(", ");
               return (
-                <Link className="rounded-xl border border-border bg-card p-3 shadow-sm transition hover:border-primary/40" href={`/boss/profiles/${profile.id}`} key={profile.id}>
-                  <div className="grid grid-cols-[4rem_minmax(0,1fr)] items-center gap-3">
+                <Link className="block min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm transition hover:border-primary/40" href={`/boss/profiles/${profile.id}`} key={profile.id}>
+                  <div className="min-w-0 w-full">
                     <div className="min-w-0">
                       <h2 className="break-words text-lg font-bold">{profile.name}</h2>
-                      <p className="mt-1 text-sm text-muted-foreground">{location ? <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{location}</span> : "Location not set"}{profile.primaryContactName ? ` · ${profile.primaryContactName}` : ""}</p>
+                      <p className="mt-1 break-words text-sm text-muted-foreground">{location ? <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{location}</span> : "Location not set"}{profile.primaryContactName ? ` · ${profile.primaryContactName}` : ""}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{profile.contactCount} contacts · {profile.bookingCount} events · {profile.locationCount} locations</p>
                     </div>
                   </div>

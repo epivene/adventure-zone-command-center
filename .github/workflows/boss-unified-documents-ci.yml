@@ -50,6 +50,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Boss workspace tests
         run: pnpm --filter @workspace/adventure-zone test:boss
+      - name: Boss profile search and editing tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts src/pages/BossProfilesPage.search.test.tsx src/pages/BossProfileContactEditing.test.tsx
       - name: Business document route tests
         run: pnpm --filter @workspace/api-server exec vitest run src/routes/business-documents.test.ts src/routes/boss-business-documents.test.ts src/routes/office-documents.test.ts src/features/business-documents/business-document-ingestion.test.ts src/features/business-documents/business-document-repository.test.ts
       - name: Build API and frontend

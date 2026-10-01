@@ -34,8 +34,8 @@ function StatCard({ icon, value, label, active, onClick }: { icon: ReactNode; va
   return (
     <button aria-expanded={active} className={`group rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-ring ${active ? "border-primary/30 bg-secondary" : "border-border bg-card hover:border-primary/30 hover:bg-secondary/60"}`} onClick={onClick} type="button">
       <span className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-secondary text-primary">{icon}</span>
-      <span className="block text-2xl font-bold tracking-tight text-[#173b48]">{value}</span>
-      <span className="mt-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#72858a]">{label}<ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" /></span>
+      <span className="block text-2xl font-bold tracking-tight text-foreground">{value}</span>
+      <span className="mt-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}<ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" /></span>
     </button>
   );
 }
@@ -97,48 +97,48 @@ export default function BossProfilePage({ profileId }: { profileId: string }) {
   const toggle = (section: Exclude<OpenSection, null>) => setOpenSection((current) => current === section ? null : section);
 
   return (
-    <div className="profile-modern -mx-3 -my-4 min-h-[100dvh] bg-[#f3f5f0] px-3 py-4 text-[#173b48] md:-mx-8 md:-my-6 md:px-8 md:py-6" data-testid="boss-profile-page">
-      <div className="mx-auto grid w-full max-w-[1420px] gap-5">
+    <div className="profile-modern min-w-0 break-words -mx-3 -my-4 min-h-[100dvh] bg-background px-3 py-4 text-foreground md:-mx-8 md:-my-6 md:px-8 md:py-6" data-testid="boss-profile-page">
+      <div className="mx-auto grid min-w-0 w-full max-w-[1420px] grid-cols-[minmax(0,1fr)] gap-5">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3 text-sm">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#173b48] text-sm font-bold text-[#f8f5ee]">AZ</div>
-            <div><p className="font-bold tracking-tight">Adventure Zone</p><p className="text-xs text-[#71848a]">Relationships / Profiles</p></div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground">AZ</div>
+            <div><p className="font-bold tracking-tight">Adventure Zone</p><p className="text-xs text-muted-foreground">Relationships / Profiles</p></div>
           </div>
-          {primaryContact ? <Link className="inline-flex items-center gap-2 rounded-lg border border-[#d8e2dd] bg-[#fbfcf8] px-3 py-2 text-sm font-semibold text-[#526970]" href={`/boss/contacts/${primaryContact.id}`}><UserRound className="h-4 w-4" />{primaryContact.name}</Link> : null}
+          {primaryContact ? <Link className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-muted-foreground" href={`/boss/contacts/${primaryContact.id}`}><UserRound className="h-4 w-4" />{primaryContact.name}</Link> : null}
         </header>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#60747a]" href="/boss/profiles"><ArrowLeft className="h-3.5 w-3.5" /> Profiles</Link>
-          <button className="button-secondary !border-[#cad9d3] !bg-[#fbfcf8] !text-[#315b66]" onClick={() => setEditing((value) => !value)} type="button">{editing ? "Close Edit" : "Edit Profile"}</button>
+          <Link className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground" href="/boss/profiles"><ArrowLeft className="h-3.5 w-3.5" /> Profiles</Link>
+          <button className="button-secondary !border-border !bg-card !text-foreground" onClick={() => setEditing((value) => !value)} type="button">{editing ? "Close Edit" : "Edit Profile"}</button>
         </div>
 
         {editing ? <OfficeProfileEditor profile={profile} onCancel={() => setEditing(false)} onSaved={async () => { setEditing(false); await load(); }} saveProfile={(id, input) => bossPatch(`/boss/profiles/${id}`, input)} /> : (
           <>
-            <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] shadow-[0_12px_32px_rgba(32,71,77,0.06)]">
+            <section className="rounded-2xl border border-border bg-card shadow-[0_12px_32px_rgba(32,71,77,0.06)]">
               <div className="flex flex-col gap-6 p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex min-w-0 items-start gap-4">
-                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-[#bfd5ca] bg-[#e3eee8] sm:h-20 sm:w-20">
-                    <div className="flex h-full w-full items-center justify-center text-lg font-bold text-[#397064]">{initials(profile.name)}</div>
+                <div className="flex min-w-0 flex-1 items-start gap-4">
+                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border bg-secondary sm:h-20 sm:w-20">
+                    <div className="flex h-full w-full items-center justify-center text-lg font-bold text-primary">{initials(profile.name)}</div>
                   </div>
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2"><h1 className="break-words text-2xl font-bold tracking-[-0.03em] sm:text-3xl">{profile.name}</h1><span className="rounded-full bg-[#e2efe9] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-[#397064]">Active relationship</span></div>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[#688087]">
-                      {shortLocation ? <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[#4b8575]" />{shortLocation}</span> : null}
-                      <span className="inline-flex items-center gap-1.5"><Building2 className="h-4 w-4 text-[#4b8575]" />Organization</span>
-                      <span className="inline-flex items-center gap-1.5"><Check className="h-4 w-4 text-[#4b8575]" />Profile details</span>
+                    <div className="flex flex-wrap items-center gap-2"><h1 className="break-words text-2xl font-bold tracking-[-0.03em] sm:text-3xl">{profile.name}</h1><span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-primary">Active relationship</span></div>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                      {shortLocation ? <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-primary" />{shortLocation}</span> : null}
+                      <span className="inline-flex items-center gap-1.5"><Building2 className="h-4 w-4 text-primary" />Organization</span>
+                      <span className="inline-flex items-center gap-1.5"><Check className="h-4 w-4 text-primary" />Profile details</span>
                     </div>
-                    {website ? <a className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-[#397064]" href={website} rel="noreferrer noopener" target="_blank"><ExternalLink className="h-3.5 w-3.5" />Visit website</a> : null}
+                    {website ? <a className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-primary" href={website} rel="noreferrer noopener" target="_blank"><ExternalLink className="h-3.5 w-3.5" />Visit website</a> : null}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {(primaryContact?.phone ?? profile.phone) ? <a className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" href={`tel:${primaryContact?.phone ?? profile.phone}`}><Phone className="h-4 w-4" />Call</a> : null}
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  {(primaryContact?.phone ?? profile.phone) ? <a className="button-secondary inline-flex items-center gap-2 !border-border !bg-transparent !text-foreground" href={`tel:${primaryContact?.phone ?? profile.phone}`}><Phone className="h-4 w-4" />Call</a> : null}
                   {primaryContact?.email ? <a className="button-primary inline-flex items-center gap-2" href={`mailto:${primaryContact.email}`}><Mail className="h-4 w-4" />Email</a> : null}
                 </div>
               </div>
-              {profile.description?.trim() ? <div className="border-t border-[#e1e8e3] px-5 py-4 sm:px-7"><h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#75908b]">About</h2><p className="mt-2 whitespace-pre-line text-sm leading-6 text-[#4d666d]">{profile.description.trim()}</p></div> : null}
-              <div className="flex flex-col gap-3 border-t border-[#e1e8e3] px-5 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-7">
-                <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Organization record</p><p className="mt-2 text-xs leading-5 text-[#4d666d]">{fullAddress || "Address not recorded"}</p></div>
-                <span className="hidden items-center gap-1.5 pt-1 text-xs font-semibold text-[#809295] md:inline-flex"><Clock3 className="h-3.5 w-3.5" />Mountain Time (MT)</span>
+              {profile.description?.trim() ? <div className="border-t border-border px-5 py-4 sm:px-7"><h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">About</h2><p className="mt-2 whitespace-pre-line text-sm leading-6 text-foreground">{profile.description.trim()}</p></div> : null}
+              <div className="flex flex-col gap-3 border-t border-border px-5 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-7">
+                <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Organization record</p><p className="mt-2 text-xs leading-5 text-foreground">{fullAddress || "Address not recorded"}</p></div>
+                <span className="hidden items-center gap-1.5 pt-1 text-xs font-semibold text-muted-foreground md:inline-flex"><Clock3 className="h-3.5 w-3.5" />Mountain Time (MT)</span>
               </div>
             </section>
 
@@ -148,21 +148,21 @@ export default function BossProfilePage({ profileId }: { profileId: string }) {
               <StatCard active={openSection === "emails"} icon={<Mail className="h-4 w-4" />} label="Emails" onClick={() => toggle("emails")} value={emailCount} />
             </section>
 
-            {openSection === null ? <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.85fr)]">
-              <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 sm:p-6">
-                <div className="flex items-center justify-between gap-3"><div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship activity</p><h2 className="mt-1 text-xl font-bold">Recent history</h2></div><button className="inline-flex items-center gap-1.5 text-sm font-bold text-[#397064]" onClick={() => setOpenSection("notes")} type="button">View all <ArrowUpRight className="h-4 w-4" /></button></div>
-                <div className="mt-5 grid gap-4">{recentNotes.slice(0, 3).length ? recentNotes.slice(0, 3).map((note) => <article className="flex gap-3" key={note.id}><span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#e3eee8] text-[#397064]"><StickyNote className="h-4 w-4" /></span><div className="min-w-0 flex-1 border-b border-[#edf0eb] pb-4"><div className="flex flex-wrap justify-between gap-2"><p className="text-xs font-bold uppercase text-[#668078]">{note.kind}</p><time className="text-xs text-[#8b9a9b]">{displayDate(note.occurredAt)}</time></div><p className="mt-1 text-sm leading-6 text-[#4d666d]">{note.body}</p></div></article>) : <p className="text-sm text-[#71848a]">No relationship activity has been recorded yet.</p>}</div>
+            {openSection === null ? <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,0.85fr)]">
+              <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+                <div className="flex items-center justify-between gap-3"><div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Relationship activity</p><h2 className="mt-1 text-xl font-bold">Recent history</h2></div><button className="inline-flex items-center gap-1.5 text-sm font-bold text-primary" onClick={() => setOpenSection("notes")} type="button">View all <ArrowUpRight className="h-4 w-4" /></button></div>
+                <div className="mt-5 grid gap-4">{recentNotes.slice(0, 3).length ? recentNotes.slice(0, 3).map((note) => <article className="flex gap-3" key={note.id}><span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary"><StickyNote className="h-4 w-4" /></span><div className="min-w-0 flex-1 border-b border-border pb-4"><div className="flex flex-wrap justify-between gap-2"><p className="text-xs font-bold uppercase text-muted-foreground">{note.kind}</p><time className="text-xs text-muted-foreground">{displayDate(note.occurredAt)}</time></div><p className="mt-1 text-sm leading-6 text-foreground">{note.body}</p></div></article>) : <p className="text-sm text-muted-foreground">No relationship activity has been recorded yet.</p>}</div>
               </section>
-              <aside className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship health</p><span className="text-xs font-bold text-[#397064]">Profile active</span></div><p className="mt-4 text-sm leading-6 text-[#71848a]">{profile.contacts.length} contacts, {profile.bookings.length} events, and {profile.notes.length} history items are connected.</p></aside>
+              <aside className="rounded-2xl border border-border bg-card p-5"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Relationship health</p><span className="text-xs font-bold text-primary">Profile active</span></div><p className="mt-4 text-sm leading-6 text-muted-foreground">{profile.contacts.length} contacts, {profile.bookings.length} events, and {profile.notes.length} history items are connected.</p></aside>
             </div> : null}
 
-            {openSection === "contacts" ? <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 sm:p-6"><h2 className="text-xl font-bold">Contacts</h2><div className="mt-5 grid gap-3 md:grid-cols-2">{profile.contacts.length ? profile.contacts.map((contact) => <article className="rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4" key={contact.id}><Link className="flex items-center gap-3" href={`/boss/contacts/${contact.id}`}><span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#dbe9e4] text-xs font-bold text-[#397064]">{initials(contact.name)}</span><span><span className="block font-bold">{contact.name}</span><span className="block text-sm text-[#71848a]">{contact.role || contact.jobTitle || "Contact"}</span></span></Link><div className="mt-3 flex flex-wrap gap-3 text-sm">{contact.phone ? <a href={`tel:${contact.phone}`}>{contact.phone}</a> : null}{contact.email ? <a className="text-primary" href={`mailto:${contact.email}`}>{contact.email}</a> : null}</div></article>) : <p className="text-sm text-[#71848a]">No contacts are linked.</p>}</div></section> : null}
-            {openSection === "events" ? <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 sm:p-6"><h2 className="text-xl font-bold">Bookings</h2><div className="mt-5 grid gap-3">{profile.bookings.length ? profile.bookings.map((booking) => <article className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4" key={booking.id}><div><p className="font-bold">{booking.name}</p><p className="text-sm text-[#71848a]"><MapPin className="mr-1 inline h-4 w-4" />{address([booking.city, booking.region]) || "Location not set"}</p></div><div className="text-right text-sm"><p className="capitalize">{booking.status.replaceAll("_", " ")}</p>{booking.startsAt ? <p className="text-[#71848a]">{displayDate(booking.startsAt)}</p> : null}</div></article>) : <p className="text-sm text-[#71848a]">No events are recorded.</p>}</div></section> : null}
+            {openSection === "contacts" ? <section className="rounded-2xl border border-border bg-card p-5 sm:p-6"><h2 className="text-xl font-bold">Contacts</h2><div className="mt-5 grid gap-3 md:grid-cols-2">{profile.contacts.length ? profile.contacts.map((contact) => <article className="rounded-xl border border-border bg-muted p-4" key={contact.id}><Link className="flex min-w-0 items-center gap-3" href={`/boss/contacts/${contact.id}`}><span className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-xs font-bold text-primary">{initials(contact.name)}</span><span><span className="block font-bold">{contact.name}</span><span className="block text-sm text-muted-foreground">{contact.role || contact.jobTitle || "Contact"}</span></span></Link><div className="mt-3 flex flex-wrap gap-3 text-sm">{contact.phone ? <a href={`tel:${contact.phone}`}>{contact.phone}</a> : null}{contact.email ? <a className="text-primary" href={`mailto:${contact.email}`}>{contact.email}</a> : null}</div></article>) : <p className="text-sm text-muted-foreground">No contacts are linked.</p>}</div></section> : null}
+            {openSection === "events" ? <section className="rounded-2xl border border-border bg-card p-5 sm:p-6"><h2 className="text-xl font-bold">Bookings</h2><div className="mt-5 grid gap-3">{profile.bookings.length ? profile.bookings.map((booking) => <article className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border bg-muted p-4" key={booking.id}><div><p className="font-bold">{booking.name}</p><p className="text-sm text-muted-foreground"><MapPin className="mr-1 inline h-4 w-4" />{address([booking.city, booking.region]) || "Location not set"}</p></div><div className="text-right text-sm"><p className="capitalize">{booking.status.replaceAll("_", " ")}</p>{booking.startsAt ? <p className="text-muted-foreground">{displayDate(booking.startsAt)}</p> : null}</div></article>) : <p className="text-sm text-muted-foreground">No events are recorded.</p>}</div></section> : null}
             {openSection === "emails" ? <BossProfileEmails key={profile.id} organizationId={profile.id} /> : null}
-            {openSection === "notes" ? <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 sm:p-6"><h2 className="text-xl font-bold">Notes &amp; History</h2><div className="mt-5 grid gap-3">{recentNotes.length ? recentNotes.map((note) => <article className="rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4" key={note.id}><p className="whitespace-pre-wrap text-sm">{note.body}</p><p className="mt-2 text-xs text-[#71848a]">{displayDate(note.occurredAt)}</p></article>) : <p className="text-sm text-[#71848a]">No history is recorded.</p>}</div></section> : null}
+            {openSection === "notes" ? <section className="rounded-2xl border border-border bg-card p-5 sm:p-6"><h2 className="text-xl font-bold">Notes &amp; History</h2><div className="mt-5 grid gap-3">{recentNotes.length ? recentNotes.map((note) => <article className="rounded-xl border border-border bg-muted p-4" key={note.id}><p className="whitespace-pre-wrap text-sm">{note.body}</p><p className="mt-2 text-xs text-muted-foreground">{displayDate(note.occurredAt)}</p></article>) : <p className="text-sm text-muted-foreground">No history is recorded.</p>}</div></section> : null}
 
             <ConventionHistory profileId={profileId} boss />
-            <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5"><h2 className="text-lg font-bold">Locations / Venues ({profile.locations.length})</h2><div className="mt-3 grid gap-3 sm:grid-cols-2">{profile.locations.length ? profile.locations.map((location) => <article className="rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4" key={location.id}><p className="font-bold">{location.label}</p>{location.venueName ? <p className="text-sm text-[#71848a]">{location.venueName}</p> : null}<p className="mt-2 text-sm">{address([location.address1, location.address2, location.city, location.region, location.postalCode]) || "Address not set"}</p></article>) : <p className="text-sm text-[#71848a]">No separate locations are recorded.</p>}</div></section>
+            <section className="rounded-2xl border border-border bg-card p-5"><h2 className="text-lg font-bold">Locations / Venues ({profile.locations.length})</h2><div className="mt-3 grid gap-3 sm:grid-cols-2">{profile.locations.length ? profile.locations.map((location) => <article className="rounded-xl border border-border bg-muted p-4" key={location.id}><p className="font-bold">{location.label}</p>{location.venueName ? <p className="text-sm text-muted-foreground">{location.venueName}</p> : null}<p className="mt-2 text-sm">{address([location.address1, location.address2, location.city, location.region, location.postalCode]) || "Address not set"}</p></article>) : <p className="text-sm text-muted-foreground">No separate locations are recorded.</p>}</div></section>
           </>
         )}
       </div>
