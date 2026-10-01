@@ -1,4 +1,5 @@
-import { sql } from "drizzle-orm";
+import { eventFamilyMembers, eventFamilies, organizations, eventManagerReviews } from "@/db/schema";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import type { OrganizationListQuery } from "@/features/organizations/last-resort-input";
@@ -95,5 +96,51 @@ export async function loadBossGlance(db: typeof database, profile: EventProfile)
     pipelineStatus: decision?.pipelineStatus ?? nextBooking?.status ?? null,
     nextActionKind: decision?.nextActionKind ?? null,
     nextActionDueAt: decision?.nextActionDueAt ?? null,
+  });
+}
+
+export function projectBossPresentation(profile: EventProfile, familyContext: EventProfile["familyContext"], reviews: Array<{
+  id: string; bookingId: string; rating: number; feedback: string | null;
+  organizerSiteNotes: string | null; crewNotes: string | null; recommendReturn: string | null; createdAt: Date;
+}>, ratingSummary: { average: number | null; count: number }) {
+  return {
+    placeType: profile.place.placeType,
+    familyContext: familyContext ?? null,
+    followUps: profile.followUps.map((item) => ({
+      id: item.id, contactId: item.contactId, bookingId: item.bookingId,
+      kind: item.kind, dueAt: item.dueAt, completedAt: item.completedAt,
+    })),
+    bookingNotes: profile.bookings.map((booking) => ({ id: booking.id, notes: booking.notes })),
+    managerReviews: reviews.map((review) => ({
+      id: review.id, bookingId: review.bookingId, rating: review.rating,
+      feedback: review.feedback, organizerSiteNotes: review.organizerSiteNotes,
+      crewNotes: review.crewNotes, recommendReturn: review.recommendReturn, createdAt: review.createdAt,
+    })),
+    ratingSummary,
+  };
+}
+
+export async function loadBossPresentation(db: typeof database, profile: EventProfile) {
+  const [membership] = await db.select({ familyId: eventFamilyMembers.familyId, familyName: eventFamilies.name })
+    .from(eventFamilyMembers).innerJoin(eventFamilies, eq(eventFamilies.id, eventFamilyMembers.familyId))
+    .where(eq(eventFamilyMembers.organizationId, profile.id)).limit(1);
+  let familyContext: EventProfile["familyContext"] = membership
+    ? { kind: "event_family", id: membership.familyId, name: membership.familyName } : null;
+  if (!familyContext) {
+    const [organization] = await db.select({ parentId: organizations.consolidatedIntoId })
+      .from(organizations).where(eq(organizations.id, profile.id)).limit(1);
+    if (organization?.parentId) {
+      const [parent] = await db.select({ id: organizations.id, name: organizations.name })
+        .from(organizations).where(eq(organizations.id, organization.parentId)).limit(1);
+      if (parent) familyContext = { kind: "organization_group", id: parent.id, name: parent.name };
+    }
+  }
+  const bookingIds = profile.bookings.map((booking) => booking.id);
+  const reviews = bookingIds.length ? await db.select().from(eventManagerReviews)
+    .where(inArray(eventManagerReviews.bookingId, bookingIds)).orderBy(desc(eventManagerReviews.createdAt)) : [];
+  const details = await loadProfileCardDetailsWith([profile.id], (statement) => db.execute(statement as any));
+  const rating = details.get(profile.id);
+  return projectBossPresentation(profile, familyContext, reviews, {
+    average: rating?.ratingAverage ?? null, count: rating?.ratingCount ?? 0,
   });
 }

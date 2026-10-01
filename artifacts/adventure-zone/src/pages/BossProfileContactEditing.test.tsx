@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   bossGet: vi.fn(),
   bossPatch: vi.fn(),
   bossPut: vi.fn(),
+  navigate: vi.fn(),
 }));
 
 vi.mock("@/lib/boss-auth-context", () => ({
@@ -13,10 +14,9 @@ vi.mock("@/lib/boss-auth-context", () => ({
   bossPut: mocks.bossPut,
 }));
 vi.mock("@/components/profiles/convention-history", () => ({ ConventionHistory: () => null }));
-vi.mock("@/components/boss/boss-profile-emails", () => ({ BossProfileEmails: () => null, getBossProfileEmails: (id: string) => mocks.bossGet(`/boss/google-workspace/profiles/${id}/emails`) }));
 vi.mock("wouter", () => ({
   Link: ({ href, children, ...props }: any) => <a href={href} {...props}>{children}</a>,
-  useLocation: () => ["/boss", vi.fn()],
+  useLocation: () => ["/boss", mocks.navigate],
   useSearch: () => "returnTo=%2Fboss%2Fprofiles%3Fsort%3Dname_asc",
 }));
 
@@ -79,12 +79,17 @@ describe("Dave profile and contact pages", () => {
 
     expect(await screen.findByText("Relationships / Profiles")).toBeInTheDocument();
     expect(screen.getByText("At a glance")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Profiles" })).toHaveAttribute("href", "/boss/profiles?sort=name_asc");
+    fireEvent.click(screen.getByRole("button", { name: "Profiles" }));
+    expect(mocks.navigate).toHaveBeenCalledWith("/boss/profiles?sort=name_asc");
+    expect(screen.getByText("Next action")).toBeInTheDocument();
+    expect(screen.getByText("Relationship health")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "History" })).toBeInTheDocument();
+    expect(screen.getByTestId("boss-profile-page")).toHaveClass("bg-[#f3f5f0]", "md:py-7");
     expect(screen.queryByRole("link", { name: "Find next date" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Contacts/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Bookings/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Emails/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Ask Assistant/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Assistant|Follow up|Add note/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Add event|Create contract/i })).not.toBeInTheDocument();
   });
 

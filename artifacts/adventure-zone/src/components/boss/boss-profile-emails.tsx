@@ -8,8 +8,10 @@ type Draft = { id: string; subject: string; body: string; recipientEmail: string
 const stateLabels: Record<string, string> = { draft: "Draft — not sent", submitted: "Awaiting review — not sent", needs_changes: "Needs changes — not sent", sending: "Sending", sent: "Sent", cancelled: "Cancelled — not sent" };
 export const getBossProfileEmails = (id: string) =>
   bossGet<GoogleProfileEmailList>(`/boss/google-workspace/profiles/${encodeURIComponent(id)}/emails`);
-const getBossThread = (id: string, threadId: string) =>
+export const getBossThread = (id: string, threadId: string) =>
   bossGet<GoogleThreadDetail>(`/boss/google-workspace/profiles/${encodeURIComponent(id)}/emails/${encodeURIComponent(threadId)}`);
+export const getBossProfileDrafts = (id: string) =>
+  bossGet<{ drafts: import("@/components/profiles/profile-email-composer").ProfileEmailDraft[] }>(`/boss/profiles/${encodeURIComponent(id)}/email-drafts`);
 const noFilesCopied = () => {};
 
 type Props = { organizationId: string; state?: ProfileGoogleEmailState; compact?: boolean; onViewAll?: () => void };

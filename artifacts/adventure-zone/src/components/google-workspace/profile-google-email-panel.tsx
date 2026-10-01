@@ -339,14 +339,15 @@ function ProfileFiles({
   );
 }
 
-export function ProfileGoogleEmailPanel({ organizationId, state }: { organizationId: string; state?: ProfileGoogleEmailState }) {
-  return state ? <ProfileGoogleEmailView key={organizationId} organizationId={organizationId} state={state} /> : <ProfileGoogleEmailLoader key={organizationId} organizationId={organizationId} />;
+type EmailViewOptions = { readOnly?: boolean; getThread?: typeof getGoogleProfileEmailThread };
+export function ProfileGoogleEmailPanel({ organizationId, state, ...options }: { organizationId: string; state?: ProfileGoogleEmailState } & EmailViewOptions) {
+  return state ? <ProfileGoogleEmailView key={organizationId} organizationId={organizationId} state={state} {...options} /> : <ProfileGoogleEmailLoader key={organizationId} organizationId={organizationId} />;
 }
 function ProfileGoogleEmailLoader({organizationId}: {organizationId: string}) {
   const state = useProfileGoogleEmail(organizationId);
   return <ProfileGoogleEmailView organizationId={organizationId} state={state}/>;
 }
-function ProfileGoogleEmailView({organizationId, state}: {organizationId: string; state: ProfileGoogleEmailState}) {
+function ProfileGoogleEmailView({organizationId, state, readOnly = false, getThread}: {organizationId: string; state: ProfileGoogleEmailState} & EmailViewOptions) {
   const [tab, setTab] = useState<"emails" | "files">("emails");
   const [files, setFiles] = useState<GoogleProfileFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(true);
@@ -361,6 +362,7 @@ function ProfileGoogleEmailView({organizationId, state}: {organizationId: string
   } = state;
 
   useEffect(() => {
+    if (readOnly) { setFilesLoading(false); return; }
     let active = true;
     setFilesLoading(true);
     setFilesError(null);
@@ -384,7 +386,7 @@ function ProfileGoogleEmailView({organizationId, state}: {organizationId: string
     return () => {
       active = false;
     };
-  }, [organizationId]);
+  }, [organizationId, readOnly]);
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/20">
@@ -405,13 +407,13 @@ function ProfileGoogleEmailView({organizationId, state}: {organizationId: string
             >
               Emails
             </button>
-            <button
+            {!readOnly ? <button
               className={`px-3 py-2 text-sm font-semibold ${tab === "files" ? "border-b-2 border-orange-500 text-orange-700" : "text-slate-500"}`}
               onClick={() => setTab("files")}
               type="button"
             >
               Files
-            </button>
+            </button> : null}
           </div>
         </div>
       </div>
@@ -421,9 +423,9 @@ function ProfileGoogleEmailView({organizationId, state}: {organizationId: string
           {error === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED" ? (
             <>
               <p>Company Gmail needs to be reconnected before this profile can load its emails.</p>
-              <a className="button-secondary mt-2 inline-flex" href="/settings/google-workspace">
+              {!readOnly ? <a className="button-secondary mt-2 inline-flex" href="/settings/google-workspace">
                 Reconnect Google account
-              </a>
+              </a> : null}
             </>
           ) : (
             <>
@@ -458,6 +460,8 @@ function ProfileGoogleEmailView({organizationId, state}: {organizationId: string
                   conversation={conversation}
                   key={conversation.threadId}
                   onFilesCopied={setFiles}
+                  readOnly={readOnly}
+                  getThread={getThread}
                   organizationId={organizationId}
                 />
               ))}
@@ -477,6 +481,8 @@ function ProfileGoogleEmailView({organizationId, state}: {organizationId: string
                     conversation={conversation}
                     key={conversation.threadId}
                     onFilesCopied={setFiles}
+                  readOnly={readOnly}
+                  getThread={getThread}
                     organizationId={organizationId}
                   />
                 ))}

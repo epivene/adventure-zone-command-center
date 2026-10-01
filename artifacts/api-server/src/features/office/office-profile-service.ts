@@ -1,4 +1,4 @@
-import { loadBossGlance } from "@/features/boss/boss-profile-view";
+import { loadBossGlance, loadBossPresentation } from "@/features/boss/boss-profile-view";
 import { desc, eq, sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import { officeMailActivity } from "@/db/schema";
@@ -95,6 +95,7 @@ export type OfficeProfileView = {
   locations: OfficeLocationView[];
   mailActivity: OfficeMailActivityView[];
   atAGlance?: Awaited<ReturnType<typeof loadBossGlance>>;
+  presentation?: Awaited<ReturnType<typeof loadBossPresentation>>;
 };
 
 function dateIso(value: Date | string | null | undefined) {
@@ -379,7 +380,11 @@ export class OfficeProfileService {
     }));
 
     const view = projectOfficeProfile(profile, { description, profileImageDataUrl, locations, mailActivity, contactDetails });
-    if (includeGlance) view.atAGlance = await loadBossGlance(this.database, profile);
+    if (includeGlance) {
+      [view.atAGlance, view.presentation] = await Promise.all([
+        loadBossGlance(this.database, profile), loadBossPresentation(this.database, profile),
+      ]);
+    }
     return view;
   }
 }
