@@ -112,3 +112,55 @@ it("requires an explicit due date and preserves the existing single-active booki
   });
   expect(page.items).toHaveLength(2);
 });
+it("reopens a sanitized draft and revises the same record", async () => {
+  const saved = await service.saveDraft(f.principal, { requestKey: "read-save" }, { content: content() });
+  const page = await service.listDrafts(f.principal, { profileId: f.profileId });
+  expect(page.items.map((d: any) => d.id)).toEqual([saved.recordId]);
+  const draft = await service.readDraft(f.principal, { profileId: f.profileId, draftId: saved.recordId });
+  expect(draft.content.html).not.toContain("<script");
+  expect(draft.revision).toBe(saved.revision);
+  await service.saveDraft(f.principal, { requestKey: "read-update" }, {
+    draftId: draft.id, expectedRevision: draft.revision,
+    content: { ...draft.content, subject: "Updated question" },
+  });
+  const updated = await service.readDraft(f.principal, { profileId: f.profileId, draftId: draft.id });
+  expect(updated.content.subject).toBe("Updated question");
+  expect(updated.revision).not.toBe(draft.revision);
+  expect(await service.ownerDrafts("owner")).toHaveLength(1);
+});
+it("paginates tied timestamps and validates cursor bindings", async () => {
+  await f.db.query(
+    "INSERT INTO chatgpt_external_drafts(id,owner_id,connection_id,content,revision,updated_at) SELECT gen_random_uuid(),'owner',$1,$2,gen_random_uuid(),'2026-10-01' FROM generate_series(1,23)",
+    [f.principal.connectionId, JSON.stringify(content())],
+  );
+  const first = await service.listDrafts(f.principal, { profileId: f.profileId });
+  expect(first.items).toHaveLength(20);
+  const second = await service.listDrafts(f.principal, { profileId: f.profileId, cursor: first.nextCursor! });
+  expect(second.items).toHaveLength(3);
+  expect(new Set([...first.items, ...second.items].map((d: any) => d.id)).size).toBe(23);
+  expect(second.nextCursor).toBeNull();
+  await expect(service.listDrafts(f.principal, { profileId: f.profileId, cursor: "bad" })).rejects.toMatchObject({ code: "CONNECTION_INVALID_CURSOR" });
+  for (const patch of [{ connectionId: randomUUID() }, { profileId: randomUUID() }]) {
+    const decoded = { ...JSON.parse(Buffer.from(first.nextCursor!, "base64url").toString()), ...patch };
+    await expect(service.listDrafts(f.principal, { profileId: f.profileId, cursor: Buffer.from(JSON.stringify(decoded)).toString("base64url") })).rejects.toMatchObject({ code: "CONNECTION_INVALID_CURSOR" });
+  }
+});
+it("isolates drafts by owner, connection and profile and rejects revoked reads", async () => {
+  const saved = await service.saveDraft(f.principal, { requestKey: "private" }, { content: content() });
+  const otherConnection = randomUUID();
+  await f.db.query("INSERT INTO chatgpt_connections(id,owner_id,client_id,scopes) VALUES($1,'owner','other','[]')", [otherConnection]);
+  for (const [owner, connection, profile] of [
+    ["other", f.principal.connectionId, f.profileId],
+    ["owner", otherConnection, f.profileId],
+    ["owner", f.principal.connectionId, randomUUID()],
+  ]) {
+    await f.db.query("UPDATE chatgpt_external_drafts SET owner_id=$2,connection_id=$3,content=$4 WHERE id=$1", [saved.recordId, owner, connection, JSON.stringify({ ...content(), organizationId: profile })]);
+    expect((await service.listDrafts(f.principal, { profileId: f.profileId })).items).toEqual([]);
+    await expect(service.readDraft(f.principal, { profileId: f.profileId, draftId: saved.recordId })).rejects.toMatchObject({ code: "CONNECTION_ACCESS_DENIED" });
+  }
+  await expect(service.listDrafts({ ...f.principal, scopes: [] }, { profileId: f.profileId })).rejects.toThrow();
+  await expect(service.readDraft({ ...f.principal, scopes: [] }, { profileId: f.profileId, draftId: saved.recordId })).rejects.toThrow();
+  await f.db.query("UPDATE chatgpt_connections SET revoked_at=now() WHERE id=$1", [f.principal.connectionId]);
+  await expect(service.listDrafts(f.principal, { profileId: f.profileId })).rejects.toMatchObject({ code: "CONNECTION_REVOKED" });
+  await expect(service.readDraft(f.principal, { profileId: f.profileId, draftId: saved.recordId })).rejects.toMatchObject({ code: "CONNECTION_REVOKED" });
+});

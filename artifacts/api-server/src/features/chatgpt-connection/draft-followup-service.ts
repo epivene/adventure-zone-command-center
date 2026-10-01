@@ -233,6 +233,67 @@ export class DraftFollowupService {
       },
     );
   }
+  async listDrafts(
+    p: ConnectionPrincipal,
+    input: { profileId: string; cursor?: string },
+  ) {
+    requireConnectionScope(p, "crm:read");
+    await activeConnection(this.db, p);
+    await profileRow(this.db, input.profileId);
+    let c: { id: string; at: string; profileId: string; connectionId: string } | null = null;
+    if (input.cursor) {
+      try {
+        c = z.object({
+          id: z.string().uuid(), at: z.string().min(1).max(100),
+          profileId: z.literal(input.profileId),
+          connectionId: z.literal(p.connectionId),
+        }).strict().parse(JSON.parse(Buffer.from(input.cursor, "base64url").toString()));
+        if (!Number.isFinite(Date.parse(c.at))) throw Error();
+      } catch {
+        throw new ConnectionError("CONNECTION_INVALID_CURSOR");
+      }
+    }
+    const rows = (await this.db.query(
+      `SELECT id,content->>'subject' AS subject,revision,created_at,updated_at,
+        updated_at::text AS cursor_at FROM chatgpt_external_drafts
+       WHERE owner_id=$1 AND connection_id=$2 AND content->>'organizationId'=$3
+         AND ($4::timestamptz IS NULL OR (updated_at,id)<($4::timestamptz,$5::uuid))
+       ORDER BY updated_at DESC,id DESC LIMIT 21`,
+      [p.ownerId, p.connectionId, input.profileId, c?.at ?? null, c?.id ?? null],
+    )).rows;
+    const page = rows.slice(0, 20), last = page.at(-1);
+    return {
+      items: page.map((r) => ({
+        id: r.id, profileId: input.profileId, subject: r.subject,
+        revision: r.revision, createdAt: iso(r.created_at), updatedAt: iso(r.updated_at),
+        appPath: `/settings/chatgpt-connection?draft=${r.id}`,
+      })),
+      truncated: rows.length > 20,
+      nextCursor: rows.length > 20 ? Buffer.from(JSON.stringify({
+        id: last.id, at: last.cursor_at, profileId: input.profileId,
+        connectionId: p.connectionId,
+      })).toString("base64url") : null,
+    };
+  }
+  async readDraft(
+    p: ConnectionPrincipal,
+    input: { profileId: string; draftId: string },
+  ) {
+    requireConnectionScope(p, "crm:read");
+    await activeConnection(this.db, p);
+    await profileRow(this.db, input.profileId);
+    const r = (await this.db.query(
+      `SELECT id,content,revision,created_at,updated_at FROM chatgpt_external_drafts
+       WHERE id=$1 AND owner_id=$2 AND connection_id=$3 AND content->>'organizationId'=$4`,
+      [input.draftId, p.ownerId, p.connectionId, input.profileId],
+    )).rows[0];
+    if (!r) throw new ConnectionError("CONNECTION_ACCESS_DENIED", 403);
+    return {
+      id: r.id, profileId: input.profileId, content: r.content as StoredDraftContent,
+      revision: r.revision, createdAt: iso(r.created_at), updatedAt: iso(r.updated_at),
+      appPath: `/settings/chatgpt-connection?draft=${r.id}`,
+    };
+  }
   async ownerDrafts(ownerId: string) {
     return (
       await this.db.query(
