@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { randomUUID } from "node:crypto";
 import { ensureChatGPTConnectionSchema } from "../../db/chatgpt-connection-schema";
+import { ensureEmailThreadAttentionSchema } from "../../db/email-thread-attention-schema";
 import { OperationStore } from "./operation-store";
 import type { ConnectionPrincipal } from "./contracts";
 let db: PGlite;
@@ -10,6 +11,7 @@ let store: OperationStore;
 beforeEach(async () => {
   db = new PGlite();
   await ensureChatGPTConnectionSchema(db);
+  await ensureEmailThreadAttentionSchema(db);
   principal = {
     ownerId: "owner",
     connectionId: randomUUID(),
@@ -127,4 +129,59 @@ it("retains data when schema installation runs twice", async () => {
   expect(
     (await db.query("SELECT * FROM chatgpt_operations")).rows,
   ).toHaveLength(1);
+});
+
+it("returns only the owning connection's filing receipt without private retry data", async () => {
+  const attentionId = randomUUID(),
+    operationId = randomUUID();
+  await db.query(
+    `INSERT INTO email_thread_attention(id,gmail_connection_id,thread_id,profile_id,state,reason,subject,reviewed_message_id,revision,actor_id)
+ VALUES($1,$2,'thread',$3,'waiting_for_their_reply','Await reply','Fair','message',$4,'owner')`,
+    [attentionId, randomUUID(), randomUUID(), randomUUID()],
+  );
+  const receipt = {
+    operationId,
+    record: { id: attentionId, state: "waiting_for_their_reply" },
+    assignment: "committed",
+    gmailSync: { state: "completed" },
+    archiveSync: { state: "complete" },
+  };
+  await db.query(
+    `INSERT INTO email_thread_attention_operations(id,owner_id,actor_key,request_key,request_hash,preview_id,attention_id,result)
+ VALUES($1,$2,$3,'key','hash',$4,$5,$6)`,
+    [
+      operationId,
+      principal.ownerId,
+      principal.connectionId,
+      randomUUID(),
+      attentionId,
+      JSON.stringify({
+        ...receipt,
+        committed: { privateRetryData: "must not return" },
+      }),
+    ],
+  );
+  expect(await store.get(principal, operationId)).toEqual(receipt);
+  const other = { ...principal, connectionId: randomUUID() };
+  await db.query(
+    "INSERT INTO chatgpt_connections(id,owner_id,client_id,scopes) VALUES($1,$2,$3,$4::jsonb)",
+    [
+      other.connectionId,
+      other.ownerId,
+      other.clientId,
+      JSON.stringify(other.scopes),
+    ],
+  );
+  expect(await store.get(other, operationId)).toBeNull();
+  expect(await store.get(principal, randomUUID())).toBeNull();
+  await expect(
+    store.get({ ...principal, ownerId: "other-owner" }, operationId),
+  ).rejects.toMatchObject({ code: "CONNECTION_ACCESS_DENIED" });
+  await db.query(
+    "UPDATE chatgpt_connections SET revoked_at=now() WHERE id=$1",
+    [principal.connectionId],
+  );
+  await expect(store.get(principal, operationId)).rejects.toMatchObject({
+    code: "CONNECTION_REVOKED",
+  });
 });

@@ -1,3 +1,4 @@
+import type { AttentionResult } from "../google-workspace/email-thread-attention-service";
 import {
   activeConnection,
   ConnectionError,
@@ -60,13 +61,23 @@ export class OperationStore {
   async get(
     p: ConnectionPrincipal,
     id: string,
-  ): Promise<OperationReceipt<unknown> | null> {
+  ): Promise<OperationReceipt<unknown> | AttentionResult | null> {
     await activeConnection(this.db, p);
-    return (
+    const receipt =
       (
         await this.db.query(
           "SELECT receipt FROM chatgpt_operations WHERE id=$1 AND connection_id=$2",
           [id, p.connectionId],
+        )
+      ).rows[0]?.receipt ?? null;
+    if (receipt) return receipt;
+    // Filing receipts use a separate transactional store. Keep lookup scoped
+    // to this owner and connector, and never expose internal retry payloads.
+    return (
+      (
+        await this.db.query(
+          "SELECT result - 'committed' AS receipt FROM email_thread_attention_operations WHERE id=$1 AND owner_id=$2 AND actor_key=$3",
+          [id, p.ownerId, p.connectionId],
         )
       ).rows[0]?.receipt ?? null
     );
