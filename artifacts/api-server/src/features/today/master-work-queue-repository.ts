@@ -1,4 +1,6 @@
+import { attachVerifiedAttentionIdentity } from "./thread-attention-identity";
 import {
+  sql,
   and,
   eq,
   gte,
@@ -390,6 +392,21 @@ export async function loadMasterTodayQueue(
     );
   }
 
+  const attention = await database.execute(sql`SELECT a.*,o.name,o.city,o.region FROM email_thread_attention a JOIN organizations o ON o.id=a.profile_id WHERE a.state <> 'resolved' AND o.consolidated_into_id IS NULL`);
+  attachVerifiedAttentionIdentity(candidates, attention.rows as any[]);
+  for (const row of attention.rows as any[]) {
+    candidates.push({
+      id: "email-attention:" + row.id, sourceId: row.id, sourceType: "email_thread_attention",
+      opportunityId:null, organizationId:row.profile_id, bookingId:null,contactId:null,
+      eventName:row.name,city:row.city,region:row.region,
+      kind:row.state === "needs_your_reply" ? "reply" : "follow_up",
+      reason:row.state === "needs_your_reply" ? "Needs your reply" : "Waiting for their reply",
+      dueAt:row.due_at ? new Date(row.due_at) : null, opportunityStatus:null,priority:"normal",
+      pinned:false,manualOrder:null,completedAt:null,snoozedUntil:null,
+      gmailConnectionId:row.gmail_connection_id,threadId:row.thread_id,messageId:row.reviewed_message_id,
+      attentionState:row.state,eventYear:row.event_year,subject:row.subject,
+    });
+  }
   return buildMasterTodayQueue(
     applyEmailFailuresToCandidates(candidates, failuresByOpportunity),
     now,

@@ -1,3 +1,5 @@
+import { EmailThreadAttentionService } from "../google-workspace/email-thread-attention-service";
+import { ensureEmailThreadAttentionSchema } from "../../db/email-thread-attention-schema";
 import { BookingWorkService } from "../booking-work/service";
 import { ProfileMergeService } from "./profile-merge-service";
 import { randomUUID } from "node:crypto";
@@ -30,7 +32,17 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
   process.env.SESSION_SECRET = "integration-secret";
   const f = await fixture();
   try {
+    await ensureEmailThreadAttentionSchema(f.db);
+    await f.db.query("CREATE TABLE google_workspace_validation_mappings(connection_id uuid,thread_id text,organization_id uuid)");
+    const attentionAccount=randomUUID();
+    const attention=new EmailThreadAttentionService(f.db,{
+      authorize:async()=>{},
+      source:async()=>({gmailConnectionId:attentionAccount,threadId:"attention-thread",latestMessageId:"attention-message",sourceFingerprint:"v1",subject:"Fair question",from:"fair@example.com",to:"office@example.com",internalDateMs:1,hasAttachments:false}),
+      assign:async()=>({mutation:{id:"attention-mutation"}} as any),
+      sync:async()=>({gmailSync:{state:"completed",errorCode:null},archiveSync:{state:"complete",conversationId:"saved-thread",errorCode:null}}),
+    });
     const services = {
+      attention,
       work: new BookingWorkService(f.db),
       reads: new ConnectionReadService(f.db),
       notes: new LeadNoteService(f.db),
@@ -89,6 +101,12 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
       profileId: f.profileId,
       eventYear: 2027,
     });
+    const preview = await call("preview_email_profile_assignment", {messageId:"attention-message",profileId:f.profileId,eventYear:null,state:"needs_your_reply",reason:"Question awaiting reply"});
+    const filing={previewId:preview.id,expectedRevision:preview.expectedRevision,requestKey:"attention-save"};
+    const filed=await call("apply_email_profile_assignment",filing);
+    expect(filed.record.state).toBe("needs_your_reply");
+    expect(await call("apply_email_profile_assignment",filing)).toEqual(filed);
+    expect((await call("read_email_profile_assignment",{gmailConnectionId:attentionAccount,threadId:"attention-thread"})).operationId).toBe(filed.operationId);
     const sources = [
       {
         url: "https://fair.example",

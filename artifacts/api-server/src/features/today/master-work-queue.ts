@@ -19,6 +19,12 @@ export type MasterWorkKind =
   | "cleanup";
 
 export type MasterWorkItem = {
+  gmailConnectionId?: string;
+  threadId?: string;
+  messageId?: string;
+  attentionState?: "needs_your_reply" | "waiting_for_their_reply";
+  eventYear?: number | null;
+  subject?: string;
   id: string;
   sourceId: string;
   sourceType: string;
@@ -89,6 +95,7 @@ function isHotLead(item: MasterWorkItem): boolean {
 }
 
 function smartRank(item: MasterWorkItem, now: Date): number {
+  if (item.attentionState === "waiting_for_their_reply") return 3;
   if (item.kind === "reply") return 0;
   if (item.kind === "callback" && isDue(item, now)) return 1;
   if (isHotLead(item)) return 2;
@@ -138,6 +145,7 @@ function compareWorkItems(
 
 function needsAttention(item: MasterWorkItem, now: Date): boolean {
   return (
+    !!item.attentionState ||
     item.kind === "reply" ||
     item.kind === "review" ||
     (item.kind === "callback" && isDue(item, now)) ||
@@ -169,7 +177,9 @@ export function buildMasterTodayQueue(
       return completedDifference || left.id.localeCompare(right.id);
     });
 
+  const represented = new Set(candidates.filter(c => c.sourceType === "email_thread_attention" && c.gmailConnectionId && c.threadId && !c.completedAt).map(c => c.gmailConnectionId + ":" + c.threadId));
   const open = candidates
+    .filter(c => !(c.kind === "reply" && c.sourceType !== "email_thread_attention" && c.gmailConnectionId && c.threadId && represented.has(c.gmailConnectionId + ":" + c.threadId)))
     .filter(({ completedAt }) => completedAt === null)
     .filter(
       ({ snoozedUntil }) =>

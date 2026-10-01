@@ -85,6 +85,7 @@ implements GoogleProfileLabelSyncServicePort {
       labels: GoogleProfileLabelRepositoryPort;
       gmail: GoogleGmailLabelMutationClient;
       now?: () => Date;
+      attention?: (mutation: GoogleGmailMutationRecord, profileLabelId: string, oldProfileLabelIds: string[]) => Promise<string[] | null>;
     },
   ) {}
 
@@ -306,6 +307,8 @@ implements GoogleProfileLabelSyncServicePort {
         )
         .map((label) => label.id),
     ]);
+    const attentionResult = await this.dependencies.attention?.(input.mutation, input.targetLabelId, [...profileLabelIds]);
+    if (attentionResult != null) return attentionResult;
     const removeLabelIds = [...profileLabelIds]
       .filter((labelId) =>
         labelId !== input.targetLabelId && attached.has(labelId)

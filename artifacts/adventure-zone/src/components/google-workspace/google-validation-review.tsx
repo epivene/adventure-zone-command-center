@@ -1,3 +1,4 @@
+import { EmailAttentionControls } from "./email-attention-controls";
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Search } from "lucide-react";
 
@@ -13,7 +14,6 @@ import {
   getGoogleWorkspaceValidationReviewThread,
   getGoogleWorkspaceValidationReviewAttachment,
   ignoreGoogleWorkspaceValidationReview,
-  resolveGoogleWorkspaceValidationReview,
   retryGoogleWorkspaceGmailMutation,
   runGoogleWorkspaceRecentValidation,
   type GoogleProfileLabelCleanupCandidate,
@@ -246,21 +246,9 @@ export function GoogleValidationReview({
   const ignoredCount = items.filter((item) => item.state === "ignored").length;
   const history = items.filter((item) => item.state !== "pending");
 
-  async function assign(item: GoogleValidationReviewItem, organizationId: string) {
-    setBusyMessageId(item.messageId);
-    setError(null);
-    try {
-      const result = await resolveGoogleWorkspaceValidationReview(
-        item.messageId,
-        organizationId,
-      );
-      setGmailStatus(gmailNotice(result.gmailSync));
-      await load();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not assign this email.");
-    } finally {
-      setBusyMessageId(null);
-    }
+  const [attentionSelection, setAttentionSelection] = useState<{messageId:string;profileId:string}|null>(null);
+  function assign(item: GoogleValidationReviewItem, organizationId: string) {
+    setAttentionSelection({messageId:item.messageId,profileId:organizationId});
   }
 
   async function ignore(item: GoogleValidationReviewItem) {
@@ -492,6 +480,7 @@ export function GoogleValidationReview({
 
   return (
     <section className="grid gap-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+      {attentionSelection ? <EmailAttentionControls key={attentionSelection.messageId + attentionSelection.profileId} {...attentionSelection} onSaved={() => void load()} onCancel={() => setAttentionSelection(null)} /> : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">

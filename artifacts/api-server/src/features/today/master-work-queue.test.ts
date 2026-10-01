@@ -176,3 +176,12 @@ describe("buildMasterTodayQueue", () => {
     expect(queue.needsAttention).toEqual([]);
   });
 });
+it("keeps both conversation states visible and deduplicates only exact thread identity",()=>{
+ const reply=workItem("reply",{kind:"reply",gmailConnectionId:"account",threadId:"one"});
+ const own=workItem("own",{sourceType:"email_thread_attention",kind:"reply",attentionState:"needs_your_reply",gmailConnectionId:"account",threadId:"one"});
+ const waiting=workItem("waiting",{sourceType:"email_thread_attention",kind:"follow_up",attentionState:"waiting_for_their_reply",gmailConnectionId:"account",threadId:"two",dueAt:FUTURE});
+ const other=workItem("other",{kind:"reply",gmailConnectionId:"other-account",threadId:"one"});
+ const q=buildMasterTodayQueue([waiting,reply,own,other],NOW);
+ expect(ids(q.needsAttention)).toEqual(["own","other","waiting"]);
+ expect(q.active).toEqual([]);
+});

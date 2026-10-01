@@ -38,6 +38,7 @@ function baseInput() {
 }
 
 function harness(options?: {
+  archiver?: any;
   bootstrapError?: Error;
   projectionError?: Error;
   failWinner?: GoogleGmailMutationRecord;
@@ -79,6 +80,7 @@ function harness(options?: {
   });
   const service = new GoogleReviewProfileAssignmentService({
     assignmentPersistence,
+    ...(options?.archiver ? {archiver:options.archiver}:{}),
     mutations: {
       get: vi.fn(async () => mutation),
       fail,
@@ -209,4 +211,20 @@ describe("GoogleReviewProfileAssignmentService", () => {
     expect(h.assignmentPersistence.resolveReview).toHaveBeenCalledOnce();
     expect(h.retry).not.toHaveBeenCalled();
   });
+});
+
+it("keeps a failed refresh of previously complete history retryable",async()=>{
+ const archiver={archiveApprovedThread:vi.fn(async()=>({id:"archive",archiveState:"complete",lastGmailErrorCode:"GOOGLE_WORKSPACE_REFRESH_FAILED",messages:[]}))};
+ const {service}=harness({archiver});
+ const result=await service.synchronizeAttention(committed,async()=>{});
+ expect(result.archiveSync.state).toBe("retry_required");
+ expect(result.archiveSync.errorCode).toBe("GOOGLE_WORKSPACE_REFRESH_FAILED");
+});
+
+it("retries only Gmail when the same decision already has complete history",async()=>{
+ const archiver={archiveApprovedThread:vi.fn()};
+ const {service,retry}=harness({archiver});
+ const result=await service.synchronizeAttention(committed,async()=>{}, {gmailSync:{state:"retry_required",errorCode:"error"},archiveSync:{state:"complete",conversationId:"archive",errorCode:null}});
+ expect(retry).toHaveBeenCalledOnce();expect(archiver.archiveApprovedThread).not.toHaveBeenCalled();
+ expect(result.archiveSync.conversationId).toBe("archive");
 });

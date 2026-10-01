@@ -1,3 +1,4 @@
+import { attentionLabelHandler } from "./email-thread-attention-sync";
 import { pool as defaultPool } from "@workspace/db";
 
 import { PostgresGoogleConnectionRepository } from "./google-connection-repository";
@@ -64,6 +65,7 @@ export class GoogleInboundProfileLabeler {
           resolver,
           labels,
           gmail: connection.client,
+          attention: attentionLabelHandler(pool as never, connection.client),
         }),
       };
     });
@@ -75,7 +77,7 @@ export class GoogleInboundProfileLabeler {
     const candidates = messages.filter((message) =>
       message.resolvedOrganization &&
       message.evidenceCodes.includes("existing_thread_association") &&
-      (message.labelIds.includes("INBOX") || message.labelIds.includes("UNREAD"))
+      !message.labelIds.includes("SENT") && !message.labelIds.includes("DRAFT")
     );
     const dueMutationIds = await this.dueMutationIds();
     const sync = await this.syncFactory();

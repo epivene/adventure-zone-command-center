@@ -54,6 +54,9 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
   expect(list.status, list.text).toBe(200);
   expect(list.body.result.tools.map((t: any) => t.name).sort()).toEqual(
     [
+      "preview_email_profile_assignment",
+      "apply_email_profile_assignment",
+      "read_email_profile_assignment",
       "read_leg_schedule",
       "read_route_plan",
       "read_operational_resources",
@@ -77,6 +80,7 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
       "get_operation_receipt",
       "request_write_access",
       "request_edit_access",
+      "request_email_organize_access",
       "read_profile_note",
       "edit_profile_note",
     ].sort(),
@@ -195,4 +199,16 @@ it("advertises merge tools but blocks an ungranted merge before service access",
   const result=await rpc(app,"tools/call",{name:"apply_approved_profile_merge",arguments:{requestKey:"denied",proposalId:randomUUID(),approvalId:randomUUID()}});
   expect(result.body.result.isError).toBe(true);
   expect(JSON.parse(result.body.result.content[0].text).code).toBe("CONNECTION_ACCESS_DENIED");
+});
+it("requests email organization separately and retains existing grants", async () => {
+ const { app } = setup(["crm:read","crm:update","followups:write"]);
+ const result = await rpc(app,"tools/call",{name:"request_email_organize_access",arguments:{}});
+ expect(result.body.result.isError).toBe(true);
+ expect(result.body.result._meta["mcp/www_authenticate"][0]).toContain('scope="crm:read crm:update followups:write email:organize"');
+});
+it("denies email filing to a CRM-edit-only connection before calling services",async()=>{
+ const {app}=setup(["crm:read","crm:update"]);
+ const r=await rpc(app,"tools/call",{name:"apply_email_profile_assignment",arguments:{previewId:randomUUID(),expectedRevision:null,requestKey:"filing"}});
+ expect(r.body.result.isError).toBe(true);
+ expect(r.body.result._meta["mcp/www_authenticate"][0]).toContain("email:organize");
 });

@@ -1,3 +1,4 @@
+import { ensureEmailThreadAttentionSchemaBeforeListen } from "./email-thread-attention-schema";
 import { ensureBookingWorkSchemaBeforeListen } from "./booking-work-required-startup";
 import { ensureChatGPTConnectionSchemaBeforeListen } from "./chatgpt-connection-required-startup";
 import { runStartupStep } from "../lib/startup-step";
@@ -59,6 +60,7 @@ function systemSleep(delayMs: number): Promise<void> {
 
 export async function runRequiredSchemaStartup(dependencies?: {
   run?: RequiredStepRunner;
+  ensureEmailThreadAttention?: RequiredStep;
   ensureBookingWork?: RequiredStep;
   ensurePaperNotes?: RequiredStep;
   ensureGoogleWorkspace?: RequiredStep;
@@ -102,6 +104,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
     }
   };
   await runRequired("required booking work schema", dependencies?.ensureBookingWork ?? ensureBookingWorkSchemaBeforeListen);
+  await runRequired("required email thread attention schema", dependencies?.ensureEmailThreadAttention ?? ensureEmailThreadAttentionSchemaBeforeListen);
   if (process.env.CHATGPT_CONNECTION_ENABLED === "true" || dependencies?.ensureChatGPTConnection) {
     await runRequired("required ChatGPT connection schema", dependencies?.ensureChatGPTConnection ?? ensureChatGPTConnectionSchemaBeforeListen);
   }

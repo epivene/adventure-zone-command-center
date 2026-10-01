@@ -400,3 +400,14 @@ describe("PostgresGoogleProfileAssignmentTransaction", () => {
     }
   });
 });
+it("participates in an outer transaction without committing it and binds the account", async () => {
+ const f=await fixture();
+ try {
+ await expect(f.db.transaction(async tx=>{
+  const repo=new PostgresGoogleProfileAssignmentTransaction(undefined,{tx:tx as any,connectionId});
+  await repo.assignMatched({...assignment(organizationA,"2026-10-01"),threadId:"thread-1",subject:"Verified",from:"sender@example.com",to:"office@example.com",internalDateMs:1,hasAttachments:false});
+  throw new Error("outer failure");
+ })).rejects.toThrow("outer failure");
+ expect((await f.db.query("SELECT * FROM google_workspace_validation_mappings")).rows).toHaveLength(0);
+ } finally {await f.db.close();}
+});

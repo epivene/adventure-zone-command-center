@@ -10,7 +10,8 @@ export const consentScript = String.raw`
     'crm:append':'Create researched leads and append notes',
     'crm:update':'Edit note text with saved history; propose profile changes and apply exact owner-approved changes',
     'drafts:write':'Save and edit app drafts',
-    'followups:write':'Create and edit follow-up reminders'
+    'followups:write':'Create and edit follow-up reminders',
+    'email:organize':'File email under profiles, import profile email history, apply Gmail labels and archive from Inbox; cannot send email'
   };
   async function request(path, body, csrf) {
     const headers = {};

@@ -1,3 +1,4 @@
+import { createEmailAttentionService } from "../google-workspace/email-thread-attention-runtime";
 import { BookingWorkService } from "../booking-work/service";
 import { ProfileMergeService } from "./profile-merge-service";
 import { randomBytes } from "node:crypto";
@@ -148,6 +149,7 @@ export function mountChatGPTConnection(
         });
       },
       services: {
+        attention: createEmailAttentionService(db),
         work: new BookingWorkService(db),
         reads: new ConnectionReadService(db),
         notes: new LeadNoteService(db),
