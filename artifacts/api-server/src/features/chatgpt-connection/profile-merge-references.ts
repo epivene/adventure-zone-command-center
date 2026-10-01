@@ -52,6 +52,7 @@ export const legacyMergeTables = new Set([
 // Preserve newer references without rewriting signed documents, amounts or source text.
 // A uniqueness/consistency conflict aborts the whole operation; no rows are discarded.
 export const extraMergeReferences: Record<string, string> = {
+  booking_work_activities: "profile_id",
   contract_agreements: "organization_id",
   invoices: "organization_id",
   early_bird_promo_enrollments: "organization_id",

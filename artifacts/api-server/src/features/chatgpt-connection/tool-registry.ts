@@ -1,3 +1,5 @@
+import { bookingWorkTools } from "./booking-work-tools";
+import type { BookingWorkService } from "../booking-work/service";
 import { mergeInputSchema, type ProfileMergeService } from "./profile-merge-service";
 import { operationalInput, scheduleSections, routeSections, resourceSections } from "./operational-reads";
 import { z } from "zod";
@@ -11,6 +13,7 @@ import type { ProfileUpdateService } from "./profile-update-service";
 import type { DraftFollowupService } from "./draft-followup-service";
 import type { OperationStore } from "./operation-store";
 export type ConnectionServices = {
+  work: BookingWorkService;
   reads: ConnectionReadService;
   notes: LeadNoteService;
   updates: ProfileUpdateService;
@@ -253,5 +256,6 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
     call: a => s.reads.operational(p, a),
   });
   // Discovery must not cache a permission-dependent subset. Calls remain scope-checked.
+  tools.push(...bookingWorkTools(s.work, p));
   return tools;
 }

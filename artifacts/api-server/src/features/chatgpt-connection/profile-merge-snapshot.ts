@@ -125,6 +125,12 @@ export async function mergeSnapshot(
     digest: string;
   }[] = [];
   const blockers: string[] = [];
+  if (tables.has("booking_work_activities")) {
+    const collisions = await tx.query(`SELECT event_year FROM booking_work_activities
+      WHERE profile_id=ANY($1::uuid[]) AND status NOT IN ('completed','cancelled')
+      GROUP BY event_year HAVING count(*)>1 ORDER BY event_year`, [ids]);
+    for (const row of collisions.rows) blockers.push(`Resolve active booking work for ${row.event_year} before merging; both activities will be preserved.`);
+  }
   for (const [table, fields] of [...tables].sort(([a], [b]) =>
     a.localeCompare(b),
   )) {

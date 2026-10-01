@@ -1,3 +1,4 @@
+import { BookingWorkService } from "../booking-work/service";
 import { ProfileMergeService } from "./profile-merge-service";
 import { randomBytes } from "node:crypto";
 import { consentHtml } from "./consent-page";
@@ -147,6 +148,7 @@ export function mountChatGPTConnection(
         });
       },
       services: {
+        work: new BookingWorkService(db),
         reads: new ConnectionReadService(db),
         notes: new LeadNoteService(db),
         updates: new ProfileUpdateService(db),

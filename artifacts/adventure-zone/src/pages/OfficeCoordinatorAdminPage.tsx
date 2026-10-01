@@ -1,3 +1,4 @@
+import { WorkQueue } from "@/features/booking-work/WorkQueue";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/auth-token";
@@ -105,6 +106,7 @@ export default function OfficeCoordinatorAdminPage() {
       {([['tasks', 'Work Queue'], ['emails', 'Email Review'], ['mail', 'Mail & History'], ['messages', 'Messages'], ['account', 'Account'], ['boss', 'Boss Account']] as Array<[Tab, string]>).map(([key, label]) => <button key={key} className={tab === key ? "button-primary" : "button-secondary"} type="button" onClick={() => setTab(key)}>{label}{key === 'emails' && emails.length ? ` (${emails.length})` : key === 'tasks' && activeTasks.filter((task) => task.needsHelp).length ? ` (${activeTasks.filter((task) => task.needsHelp).length} help)` : ''}</button>)}
     </div>
     {!account && tab !== "account" ? <div className="rounded-xl border border-dashed bg-white p-8 text-center"><p className="font-semibold">No Office Coordinator account yet.</p><button className="button-primary mt-3" type="button" onClick={() => setTab("account")}>Create account</button></div> : null}
+    {tab === "tasks" ? <WorkQueue /> : null}
     {tab === "tasks" && account ? <TaskManager account={account} tasks={tasks} onChanged={refreshTasks} onReorder={reorder} /> : null}
     {tab === "emails" ? <EmailReview emails={emails} onChanged={async () => { await loadEmails(); setNotice("Email review updated."); }} /> : null}
     {tab === "mail" && account ? <MailHistory mail={mail} /> : null}

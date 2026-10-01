@@ -1,3 +1,4 @@
+import { ProfileWorkActivity } from "@/features/booking-work/ProfileWorkActivity";
 import { ProfilePageFrame } from "@/components/profiles/profile-page-frame";
 import { useWorkspaceSession } from "@/features/assistant-workspace/WorkspaceSessionProvider";
 import { FollowUpDialog } from "@/components/follow-ups/follow-up-dialog";
@@ -235,6 +236,7 @@ export default function EventProfilePage() {
           />
         ) : null}
 
+        {!profileEditing && profileId ? <ProfileWorkActivity profileId={profileId} /> : null}
         {!profileEditing && profileId ? <OutreachProfileSummary organizationId={profileId} /> : null}
 
         {!profileEditing && profileSection === "documents" && profileId ? <ProfileDocuments profileId={profileId} /> : null}
