@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { BookingLegOperationsCard } from '@/components/bookings/leg-operations-panel';
+import { createOperationsReadClient } from '@/features/bookings/booking-leg-operations-client';
 import { ManagerScopedMap } from "@/components/manager/manager-scoped-map";
 import { ManagerTravelPlanningPanel } from "@/components/manager/manager-travel-planning-panel";
 import { MileageForm } from "@/components/manager/mileage-form";
@@ -15,6 +17,10 @@ export default function ManagerOperationsPage() {
   const [rollup, setRollup] = useState<any>(null);
   const [yearEndInspection, setYearEndInspection] = useState<YearEndInspectionDto | null>(null);
   const map = useManagerScopedMap();
+  const operationsClient = useMemo(() => createOperationsReadClient(managerApi, 'manager'), [managerApi]);
+  const [selectedBooking, setSelectedBooking] = useState('');
+  const assignedEvents = map.data?.events ?? [];
+  const bookingId = assignedEvents.some(event => event.bookingId === selectedBooking) ? selectedBooking : null;
 
   useEffect(() => {
     managerApi<ManagerDashboardResponse>("/manager/dashboard").then(async (data) => {
@@ -49,6 +55,15 @@ export default function ManagerOperationsPage() {
       </Link>
 
       {map.error ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{map.error}</p> : null}
+      {assignedEvents.length > 0 ? <section className="grid gap-3" aria-label="Assigned event operations">
+        <label className="text-sm font-semibold">Assigned event
+          <select className="mt-1 block w-full rounded border bg-white p-2" value={bookingId ?? ''} onChange={event => setSelectedBooking(event.target.value)}>
+            <option value="">Choose an assigned event</option>
+            {assignedEvents.map(event => <option key={event.bookingId} value={event.bookingId}>{event.bookingName}</option>)}
+          </select>
+        </label>
+        {bookingId ? <BookingLegOperationsCard bookingId={bookingId} client={operationsClient} role="manager" /> : null}
+      </section> : null}
       {map.data ? (
         <ManagerScopedMap data={map.data} variant="operations" mode="on-road" />
       ) : map.loading ? <p className="text-sm text-slate-500">Loading map…</p> : null}
@@ -72,4 +87,3 @@ export default function ManagerOperationsPage() {
     </div>
   );
 }
-

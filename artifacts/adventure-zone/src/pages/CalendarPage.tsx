@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { eventMatchesOperationsSeason } from '@/features/bookings/operations-navigation';
+import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
 import { apiGet, apiPost, apiPut } from "@/lib/auth-token";
 import { EventCalendar, type CalendarEvent } from "@/components/calendar/event-calendar";
 import { HistorySuggestions } from "@/components/calendar/history-suggestions";
@@ -250,6 +252,7 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
   const currentYear = todayKey.slice(0, 4);
   const initialMonth = calendarInitialMonth(season, todayKey);
   const [activeMonth, setActiveMonth] = useState(initialMonth);
+  const revision = useBookingOperationsRevision();
 
   useEffect(() => {
     apiGet<ScheduleDisplayColors>("/calendar/display-settings")
@@ -266,6 +269,7 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
   }, [season, currentYear, todayKey]);
 
   useEffect(() => {
+    let active = true;
     const { from, to } = season && /^\d{4}$/.test(season)
       ? { from: `${season}-01-01`, to: `${season}-12-31` }
       : buildDateWindow(activeMonth);
@@ -275,6 +279,7 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
       apiGet<OperationalCalendarStatus>("/google-workspace/operational-calendar").catch(() => ({ reviewEvents: [], reviews: [] })),
     ])
       .then(([calendarData, operationalStatus]) => {
+        if (!active) return;
         const combined = dedupeOperationalReviews([
           ...(calendarData ?? []),
           ...((operationalStatus.reviewEvents ?? []) as unknown as CalendarEvent[]),
@@ -296,9 +301,10 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
         setReviews(operationalStatus.reviews ?? []);
         setError(null);
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [activeMonth, season]);
+      .catch((e) => { if (active) setError(e.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [activeMonth, season, revision]);
 
   async function resolveReview(reviewId: string, resolution: "link_existing" | "create_new", bookingId?: string) {
     setBusyReviewId(reviewId);
@@ -322,7 +328,7 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
         : String(event.status ?? "").toLowerCase() === status.toLowerCase();
       if (!matchesStatus) return false;
     }
-    if (season && event.startsAt && new Date(event.startsAt).getFullYear().toString() !== season) return false;
+    if (season && !eventMatchesOperationsSeason(event, Number(season))) return false;
     return true;
   }) as CalendarEvent[], [events, legId, status, season]);
 
@@ -400,6 +406,7 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
           <HistorySuggestions />
         </section>
       ) : null}
+      {!loading && !error && filteredEvents.some(event => !event.startsAt) ? <section aria-label="Needs dates" className="rounded-xl border bg-white p-3 text-sm"><h3 className="font-semibold">Needs dates</h3>{filteredEvents.filter(event => !event.startsAt).map(event => <p key={event.id}><a className="text-blue-700 underline" href={'organizationId' in event && event.organizationId ? `/profiles/${event.organizationId}?bookingId=${event.id}${season ? `&season=${season}` : ''}` : `/bookings/${event.id}`}>{'name' in event ? event.name : event.displaySubject}</a></p>)}</section> : null}
       {loading ? <p className="text-slate-500">Loading calendar…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : <EventCalendar colors={scheduleColors} events={filteredEvents} initialMonth={activeMonth} onMonthChange={handleMonthChange} />}
     </div>
   );

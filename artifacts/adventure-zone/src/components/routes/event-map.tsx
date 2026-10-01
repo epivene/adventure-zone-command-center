@@ -2,6 +2,8 @@
 
 import { Link } from "wouter";
 import { useEffect, useMemo, useState } from "react";
+import { eventMatchesOperationsSeason, operationsDateKey, operationsProfileHref } from '@/features/bookings/operations-navigation';
+import { currentOperationsSeason } from '@/features/bookings/select-profile-operations-booking';
 
 import { apiPost } from "@/lib/auth-token";
 import type { EquipmentHandoffView } from "@/components/routes/equipment-handoffs";
@@ -43,7 +45,7 @@ function formatLabel(value: string) {
 }
 
 function eventSeasonYear(event: MapEvent) {
-  return event.seasonYear ?? event.startsAt?.getUTCFullYear() ?? null;
+  return event.startsAt && Number.isFinite(event.startsAt.getTime()) ? Number(operationsDateKey(event.startsAt).slice(0, 4)) : null;
 }
 
 function mappingReason(state?: RouteMappingState) {
@@ -60,9 +62,7 @@ function canRetryMapping(state?: RouteMappingState) {
 }
 
 function eventDetailsHref(event: MapEvent, profileBasePath: string) {
-  if (event.organizationId) {
-    return `${profileBasePath}/${encodeURIComponent(event.organizationId)}`;
-  }
+  if (event.organizationId) return operationsProfileHref(profileBasePath, event.organizationId, event.id, event.startsAt, event.travelLegId, event.dateOnly);
   return profileBasePath === "/profiles" ? `/bookings/${encodeURIComponent(event.id)}` : null;
 }
 
@@ -169,6 +169,9 @@ function EventRows({
                   {[event.city, event.region].filter(Boolean).join(", ")}
                   {event.travelLegName ? ` · ${event.travelLegName}` : ""}
                 </p>
+                {!event.startsAt ? <p className="text-xs font-semibold text-amber-700">Needs dates</p> : null}
+                {!event.travelLegId ? <p className="text-xs font-semibold text-amber-700">Needs leg</p> : null}
+                {unmapped ? <p className="text-xs font-semibold text-amber-700">Needs mapping</p> : null}
                 {!unmapped && onFocus ? (
                   <button className="button-secondary mt-2" onClick={() => onFocus(event)} type="button">
                     {focusedEventId === event.id ? "Focused on map" : "Focus on map"}
@@ -309,6 +312,8 @@ export function EventMap({
   onClearTripFocus,
   readOnly = false,
   requestedSeasonYear,
+  controlledSeasonYear,
+  onSeasonYearChange,
   profileBasePath = "/profiles",
 }: {
   events: MapEvent[];
@@ -319,25 +324,32 @@ export function EventMap({
   onClearTripFocus?: () => void;
   readOnly?: boolean;
   requestedSeasonYear?: number;
+  controlledSeasonYear?: number;
+  onSeasonYearChange?: (year: number) => void;
   profileBasePath?: string;
 }) {
-  const currentYear = new Date().getFullYear();
+  const currentYear = currentOperationsSeason();
   const [filters, setFilters] = useState<MapFilters>(initialFilters);
   const [mode, setMode] = useState<RouteViewMode>("full");
-  const [seasonYear, setSeasonYear] = useState(requestedSeasonYear ?? currentYear);
+  const [localSeasonYear, setLocalSeasonYear] = useState(requestedSeasonYear ?? currentYear);
+  const seasonYear = controlledSeasonYear ?? localSeasonYear;
+  function setSeasonYear(year: number) {
+    if (controlledSeasonYear === undefined) setLocalSeasonYear(year);
+    onSeasonYearChange?.(year);
+  }
   const [focusedLegId, setFocusedLegId] = useState<string | null>(null);
   const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
-  const [eventOverrides, setEventOverrides] = useState<Record<string, MapEvent>>({});
+  const [eventOverrides, setEventOverrides] = useState<Record<string, Pick<MapEvent, "latitude" | "longitude" | "mappingState" | "locationQuality" | "locationLabel">>>({});
   const [retryError, setRetryError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (requestedSeasonYear) setSeasonYear(requestedSeasonYear);
-  }, [requestedSeasonYear]);
+    if (requestedSeasonYear && controlledSeasonYear === undefined) setLocalSeasonYear(requestedSeasonYear);
+  }, [requestedSeasonYear, controlledSeasonYear]);
 
   const effectiveEvents = useMemo(
-    () => events.map((event) => eventOverrides[event.id] ?? event),
+    () => events.map((event) => Number.isFinite(event.latitude) && Number.isFinite(event.longitude) ? event : ({ ...event, ...eventOverrides[event.id] })),
     [eventOverrides, events],
   );
 
@@ -345,7 +357,7 @@ export function EventMap({
     setRetryingId(event.id);
     setRetryError(null);
     try {
-      const response = await apiPost<{ event: Omit<MapEvent, "startsAt" | "endsAt"> & { startsAt: string | Date | null; endsAt: string | Date | null } }>(
+      const response = await apiPost<{ event: Omit<MapEvent, "startsAt" | "endsAt" | "reservedStartsAt" | "reservedEndsAt"> & { startsAt: string | Date | null; endsAt: string | Date | null; reservedStartsAt?: string | Date | null; reservedEndsAt?: string | Date | null } }>(
         `/routes/events/${event.id}/retry-location`,
         {},
       );
@@ -353,8 +365,10 @@ export function EventMap({
         ...response.event,
         startsAt: response.event.startsAt ? new Date(response.event.startsAt) : null,
         endsAt: response.event.endsAt ? new Date(response.event.endsAt) : null,
+        reservedStartsAt: response.event.reservedStartsAt ? new Date(response.event.reservedStartsAt) : null,
+        reservedEndsAt: response.event.reservedEndsAt ? new Date(response.event.reservedEndsAt) : null,
       };
-      setEventOverrides((current) => ({ ...current, [event.id]: refreshed }));
+      setEventOverrides((current) => ({ ...current, [event.id]: { latitude: refreshed.latitude, longitude: refreshed.longitude, mappingState: refreshed.mappingState, locationQuality: refreshed.locationQuality, locationLabel: refreshed.locationLabel } }));
     } catch (error) {
       setRetryError(error instanceof Error ? error.message : "Could not retry this location.");
     } finally {
@@ -368,14 +382,14 @@ export function EventMap({
   );
 
   const seasonYears = useMemo(() => {
-    const years = new Set<number>([currentYear]);
+    const years = new Set<number>([currentYear, seasonYear]);
     for (const event of effectiveEvents) {
       const year = eventSeasonYear(event);
       if (year !== null) years.add(year);
     }
     for (const handoff of handoffs) years.add(new Date(handoff.windowStartsAt).getFullYear());
     return [...years].sort((a, b) => b - a);
-  }, [currentYear, effectiveEvents, handoffs]);
+  }, [currentYear, seasonYear, effectiveEvents, handoffs]);
 
   const filteredEvents = useMemo(
     () => filterMapEvents(effectiveEvents, filters),
@@ -385,7 +399,7 @@ export function EventMap({
   const planningEvents = useMemo(() => {
     const result: UnnumberedPlanningEvent[] = [];
     for (const event of filteredEvents) {
-      if (eventSeasonYear(event) !== seasonYear) continue;
+      if (!eventMatchesOperationsSeason(event, seasonYear)) continue;
       const bucket = event.routeBucket ?? classifyRouteBucket(event.status, event.probability);
       const emphasis = routeEmphasis({ bucket, mode, eventLegId: event.travelLegId, focusedLegId });
       if (emphasis === "hidden") continue;
@@ -445,7 +459,7 @@ export function EventMap({
   function resetScope() {
     setFilters(initialFilters);
     setMode("full");
-    setSeasonYear(currentYear);
+    if (controlledSeasonYear === undefined) setSeasonYear(currentYear);
     setFocusedLegId(null);
     setFocusedEventId(null);
     onClearTripFocus?.();
@@ -692,7 +706,8 @@ export function EventMap({
       <ManagerTripNavigationActions trip={focusedTrip} mode="on-road" />
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <EventList events={mappedEvents} title="Route events · travel order" groupByLeg legOrderById={legOrderById} focusedEventId={focusedEventId} onFocus={(event) => setFocusedEventId(event.id)} profileBasePath={profileBasePath} showBookingLinks />
+        <EventList events={mappedEvents.filter(event => event.startsAt)} title="Route events · travel order" groupByLeg legOrderById={legOrderById} focusedEventId={focusedEventId} onFocus={(event) => setFocusedEventId(event.id)} profileBasePath={profileBasePath} showBookingLinks />
+        {mappedEvents.some(event => !event.startsAt) ? <EventList events={mappedEvents.filter(event => !event.startsAt)} title="Dates not recorded" profileBasePath={profileBasePath} showBookingLinks /> : null}
         <EventList
           events={unmappedEvents}
           title="Location needs mapping"

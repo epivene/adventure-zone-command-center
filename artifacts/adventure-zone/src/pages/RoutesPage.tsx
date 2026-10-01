@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
 import { apiFetch, apiGet, apiPut } from "@/lib/auth-token";
 import { EventMap } from "@/components/routes/event-map";
 import { RouteConflictWarning } from "@/components/routes/route-conflict-warning";
@@ -14,8 +15,9 @@ import { updateTravelLegAction, reorderTravelLegsAction, addTravelLegAction, arc
 import type { TravelLegDetails, TravelLegOrder } from "@/features/routes/travel-leg-input";
 import { findSameLegDateConflicts } from "@/features/routes/route-conflicts";
 import { isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
+import { eventMatchesOperationsSeason } from '@/features/bookings/operations-navigation';
 
-export type RouteScheduleFilters = { season?: string; legId?: string; status?: string; embedded?: boolean; managementOnly?: boolean };
+export type RouteScheduleFilters = { season?: string; legId?: string; status?: string; embedded?: boolean; managementOnly?: boolean; onSeasonYearChange?: (year: number) => void };
 
 type TripFocusDetail = {
   trip: { id: string; name: string; startLabel: string; startLatitude: number | null; startLongitude: number | null; endLabel: string; endLatitude: number | null; endLongitude: number | null };
@@ -33,7 +35,7 @@ function focusedTripMapData(detail: TripFocusDetail): FocusedTripMapData {
   return { id: detail.trip.id, name: detail.trip.name, points };
 }
 
-export function RoutesContent({ season, legId, status, embedded = false, managementOnly = false }: RouteScheduleFilters) {
+export function RoutesContent({ season, legId, status, embedded = false, managementOnly = false, onSeasonYearChange }: RouteScheduleFilters) {
   const [data, setData] = useState<any>(null);
   const [handoffs, setHandoffs] = useState<EquipmentHandoffView[]>([]);
   const [focusedTrip, setFocusedTrip] = useState<FocusedTripMapData | null>(null);
@@ -41,24 +43,29 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
   const [previewLegId, setPreviewLegId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const revision = useBookingOperationsRevision();
+  const readGeneration = useRef(0);
 
   function loadData() {
+    const generation = ++readGeneration.current;
     return Promise.all([apiGet<any>("/routes"), apiGet<{ legs: LegManagerAccessStatus[] }>("/manager-admin/legs/access"), apiGet<any>("/manager-admin/year-end-inspections").catch(() => ({ inspections: [] }))])
       .then(([routes, access, annual]) => {
+        if (generation !== readGeneration.current) return;
+        setError(null);
         const currentYear = new Date().getFullYear();
         const summaries = new Map((annual.inspections ?? []).filter((inspection: any) => inspection.inspectionYear === currentYear).map((inspection: any) => [inspection.legId, { status: inspection.status, inspected: inspection.progress.inspected + inspection.progress.notPresent, total: inspection.progress.total, needsAttention: inspection.progress.needsAttention }]));
         const next = {
-          events: (routes.events ?? []).map((event: any) => ({ ...event, startsAt: event.startsAt ? new Date(event.startsAt) : null, endsAt: event.endsAt ? new Date(event.endsAt) : null })),
+          events: (routes.events ?? []).map((event: any) => ({ ...event, startsAt: event.startsAt ? new Date(event.startsAt) : null, endsAt: event.endsAt ? new Date(event.endsAt) : null, reservedStartsAt: event.reservedStartsAt ? new Date(event.reservedStartsAt) : null, reservedEndsAt: event.reservedEndsAt ? new Date(event.reservedEndsAt) : null })),
           travelLegs: routes.travelLegs ?? [], legResources: (routes.legResources ?? []).map((resource: any) => ({ ...resource, yearEndInspectionSummary: summaries.get(resource.legId) })), managerAccess: access.legs ?? [],
         };
         setData(next);
         setPreviewLegId((current) => current || next.travelLegs.find((leg: any) => !leg.archivedAt)?.id || "");
         setLoading(false);
       })
-      .catch((e) => { setError(e.message); setLoading(false); });
+      .catch((e) => { if (generation === readGeneration.current) { setError(e.message); setLoading(false); } });
   }
 
-  useEffect(() => { void loadData(); }, []);
+  useEffect(() => { void loadData(); return () => { readGeneration.current++; }; }, [revision]);
 
   async function handleSaveLeg(id: string, input: TravelLegDetails) {
     const result = await updateTravelLegAction(id, input);
@@ -83,7 +90,7 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
         : String(event.status ?? "").toLowerCase() === status.toLowerCase();
       if (!matchesStatus) return false;
     }
-    if (season && event.startsAt && new Date(event.startsAt).getFullYear().toString() !== season) return false;
+    if (season && !eventMatchesOperationsSeason(event, Number(season))) return false;
     return true;
   }), [data?.events, legId, status, season]);
   const routeConflicts = useMemo(() => findSameLegDateConflicts(filteredEvents), [filteredEvents]);
@@ -101,7 +108,7 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
       <RouteConflictWarning conflicts={routeConflicts} />
       {mapView === "manager-preview" ? (
         <div className="grid gap-3"><label className="grid max-w-sm gap-1 text-sm font-semibold">Preview manager<select aria-label="Preview manager" value={previewLegId} onChange={(event) => setPreviewLegId(event.target.value)}>{activeLegs.map((leg: any) => <option key={leg.id} value={leg.id}>{leg.name}</option>)}</select></label><ManagerPreviewMap legId={previewLegId} /></div>
-      ) : <EventMap events={filteredEvents} travelLegs={data.travelLegs} handoffs={handoffs} focusedTrip={focusedTrip} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTrip(null)} />}
+      ) : <EventMap events={filteredEvents} travelLegs={data.travelLegs} handoffs={handoffs} focusedTrip={focusedTrip} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTrip(null)} controlledSeasonYear={embedded && season ? Number(season) : undefined} requestedSeasonYear={season ? Number(season) : undefined} onSeasonYearChange={onSeasonYearChange} />}
     </section>
   );
 
@@ -143,4 +150,3 @@ export function LegManagementPage() {
 export default function RoutesPage() {
   return <div className="mx-auto max-w-7xl"><RoutesContent /></div>;
 }
-

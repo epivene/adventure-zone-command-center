@@ -1,9 +1,10 @@
+import { operationsDateKey } from '@/features/bookings/booking-leg-operations-history';
 import type {
   BookingStatus,
   Probability,
 } from "@/features/bookings/booking-types";
 import type { RouteBucket } from "@/features/routes/route-view";
-import { businessDateKey, parseBusinessDate } from "@/lib/business-date";
+import { parseBusinessDate } from "@/lib/business-date";
 
 export type LocationQuality = "coordinates" | "address" | "city" | "missing";
 
@@ -30,6 +31,12 @@ export type MapEvent = {
   travelLegColor: string | null;
   startsAt: Date | null;
   endsAt: Date | null;
+  dateOnly?: boolean;
+  reservedDateOnly?: boolean;
+  reservedEndExclusive?: boolean;
+  actualDateOnly?: boolean;
+  reservedStartsAt?: Date | null;
+  reservedEndsAt?: Date | null;
   routeBucket?: RouteBucket;
   locationQuality?: LocationQuality;
   locationLabel?: string | null;
@@ -96,13 +103,14 @@ function validBusinessDate(value: string | null): string | null {
 }
 
 export function eventOverlapsBusinessWindow(
-  event: Pick<MapEvent, "startsAt" | "endsAt">,
+  event: Pick<MapEvent, "startsAt" | "endsAt" | "reservedStartsAt" | "reservedEndsAt" | "dateOnly" | "reservedDateOnly" | "reservedEndExclusive">,
   from: string | null,
   to: string | null,
 ): boolean {
-  if (!event.startsAt) return false;
-  const startsOn = businessDateKey(event.startsAt);
-  const endsOn = businessDateKey(event.endsAt ?? event.startsAt);
+  const fields: Array<[Date | null | undefined, boolean | undefined, boolean?]> = [[event.startsAt, event.dateOnly], [event.endsAt, event.dateOnly], [event.reservedStartsAt, event.reservedDateOnly], [event.reservedEndsAt, event.reservedDateOnly, event.reservedEndExclusive]];
+  const dates = fields.filter(([value]) => value && Number.isFinite(value.getTime())).map(([value, dateOnly, exclusive]) => operationsDateKey(exclusive ? new Date(value!.getTime() - (dateOnly ? 86400000 : 1)) : value!, dateOnly)).sort();
+  if (!dates.length) return false;
+  const startsOn = dates[0]!, endsOn = dates.at(-1)!;
   if (from !== null && endsOn < from) return false;
   if (to !== null && startsOn > to) return false;
   return true;

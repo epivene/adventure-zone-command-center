@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { apiPost } from "@/lib/auth-token";
+import { notifyBookingOperationsChanged } from '@/features/bookings/booking-operations-changes';
 
 export function ProfileBookingCreator({ profileId, city, region, onCreated }: {
   profileId: string;
@@ -20,12 +21,13 @@ export function ProfileBookingCreator({ profileId, city, region, onCreated }: {
     setSaving(true);
     setError("");
     try {
-      await apiPost(`/event-profiles/${profileId}/bookings`, {
+      const created = await apiPost<{ bookingId?: string }>(`/event-profiles/${profileId}/bookings`, {
         name, city, region, startsAt, endsAt,
         status: "pending_contract",
         nextActionKind: "contract",
         nextActionDueAt,
       });
+      notifyBookingOperationsChanged(created.bookingId ?? '*');
       await onCreated();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The booking could not be created.");

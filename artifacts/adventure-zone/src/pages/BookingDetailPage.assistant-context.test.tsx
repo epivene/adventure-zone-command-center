@@ -34,7 +34,7 @@ const mocks = vi.hoisted(() => ({
   clearPageContext: vi.fn(),
 }));
 
-vi.mock("@/lib/auth-token", () => ({ apiGet: mocks.apiGet }));
+vi.mock("@/lib/auth-token", () => ({ apiGet: mocks.apiGet, apiFetch: vi.fn(async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })) }));
 vi.mock("@/features/assistant/assistant-context", () => ({
   useAssistantContext: () => ({
     openAssistant: mocks.openAssistant,

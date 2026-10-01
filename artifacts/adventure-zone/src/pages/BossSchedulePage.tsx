@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
+import { Link, useSearch, useLocation } from "wouter";
+import { currentOperationsSeason } from '@/features/bookings/select-profile-operations-booking';
+import { eventMatchesOperationsSeason } from '@/features/bookings/operations-navigation';
 import { RefreshCw } from "lucide-react";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
@@ -114,6 +117,11 @@ function asMapEvent(booking: BossBooking): MapEvent {
     seasonYear: booking.seasonYear ?? null,
     startsAt: booking.startsAt ? new Date(booking.startsAt) : null,
     endsAt: booking.endsAt ? new Date(booking.endsAt) : null,
+    reservedStartsAt: booking.reservedStartsAt ? new Date(booking.reservedStartsAt) : null,
+    reservedEndsAt: booking.reservedEndsAt ? new Date(booking.reservedEndsAt) : null,
+    dateOnly: booking.dateOnly,
+    reservedDateOnly: booking.reservedDateOnly,
+    reservedEndExclusive: booking.reservedEndExclusive,
   };
 }
 
@@ -131,7 +139,9 @@ function asTravelLeg(leg: ScheduleLeg, index: number): TravelLeg {
 }
 
 export default function BossSchedulePage() {
-  const currentYear = String(new Date().getFullYear());
+  const currentYear = String(currentOperationsSeason());
+  const search = useSearch();
+  const [, navigate] = useLocation();
   const [schedule, setSchedule] = useState<BossSchedule | null>(null);
   const [view, setView] = useState<ScheduleView>("calendar");
   const [season, setSeason] = useState(currentYear);
@@ -141,25 +151,36 @@ export default function BossSchedulePage() {
   const [activeMonth, setActiveMonth] = useState(`${currentYear}-${String(new Date().getMonth() + 1).padStart(2, "0")}`);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const revision = useBookingOperationsRevision();
+  const readGeneration = useRef(0);
+  useEffect(() => {
+    const query = new URLSearchParams(search);
+    setView(query.get('view') === 'map' ? 'map' : 'calendar');
+    const year = /^\d{4}$/.test(query.get('season') ?? '') ? query.get('season')! : currentYear;
+    setSeason(year); setLegId(query.get('leg') ?? ''); setStatus(query.get('status') ?? 'all');
+    setActiveMonth(month => month.startsWith(`${year}-`) ? month : `${year}-01`);
+  }, [search, currentYear]);
 
   async function load() {
+    const generation = ++readGeneration.current;
     setLoading(true);
     setError(null);
     try {
       const data = await bossGet<{ legs: ScheduleLeg[]; bookings?: BossBooking[]; displaySettings?: BossSchedule["displaySettings"] }>("/boss/legs");
+      if (generation !== readGeneration.current) return;
       setSchedule({
         legs: Array.isArray(data.legs) ? data.legs : [],
         bookings: Array.isArray(data.bookings) ? data.bookings : [],
         displaySettings: data.displaySettings,
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load schedule.");
+      if (generation === readGeneration.current) setError(cause instanceof Error ? cause.message : "Could not load schedule.");
     } finally {
-      setLoading(false);
+      if (generation === readGeneration.current) setLoading(false);
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); return () => { readGeneration.current++; }; }, [revision]);
 
   const mapEvents = useMemo(
     () => dedupeCalendarBookings((schedule?.bookings ?? []).map(asMapEvent) as any[]) as MapEvent[],
@@ -172,7 +193,7 @@ export default function BossSchedulePage() {
     if (status !== "all") {
       if (status === "confirmed" ? !isBookedForSchedule(event) : event.status !== status) return false;
     }
-    if (!event.startsAt || String(event.startsAt.getFullYear()) !== season) return false;
+    if (!eventMatchesOperationsSeason(event, Number(season))) return false;
     return true;
   }), [legId, mapEvents, season, status]);
   const potentialCount = scopedEvents.filter((event) => !isBookedForSchedule(event)).length;
@@ -188,8 +209,17 @@ export default function BossSchedulePage() {
     return visible.map((event) => asScheduleCalendarEvent(event)) as CalendarEvent[];
   }, [scopedEvents, showPotential, status]);
 
+  function changeFilters(next: { season?: string; view?: ScheduleView; legId?: string; status?: string }) {
+    const nextSeason = next.season ?? season, nextView = next.view ?? view, nextLeg = next.legId ?? legId, nextStatus = next.status ?? status;
+    setSeason(nextSeason); setView(nextView); setLegId(nextLeg); setStatus(nextStatus);
+    const query = new URLSearchParams(search);
+    query.set('season', nextSeason); query.set('view', nextView);
+    if (nextLeg) query.set('leg', nextLeg); else query.delete('leg');
+    if (nextStatus !== 'all') query.set('status', nextStatus); else query.delete('status');
+    navigate(`/boss/schedule?${query}`, { replace: true });
+  }
   function changeSeason(nextSeason: string) {
-    setSeason(nextSeason);
+    changeFilters({ season: nextSeason });
     const nextMonth = nextSeason === currentYear
       ? `${currentYear}-${String(new Date().getMonth() + 1).padStart(2, "0")}`
       : `${nextSeason}-01`;
@@ -200,7 +230,7 @@ export default function BossSchedulePage() {
     <div className="mx-auto grid max-w-7xl gap-4" data-testid="boss-schedule-page">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-3xl font-bold tracking-tight">Schedule</h1>
-        <ScheduleViewToggle view={view} onChange={setView} />
+        <ScheduleViewToggle view={view} onChange={view => changeFilters({ view })} />
       </header>
 
       <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
@@ -219,13 +249,13 @@ export default function BossSchedulePage() {
             </summary>
             <div className="mt-2 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2">
               <label className="grid gap-1 text-sm font-semibold">Leg
-                <select aria-label="Leg" value={legId} onChange={(event) => setLegId(event.target.value)}>
+                <select aria-label="Leg" value={legId} onChange={(event) => changeFilters({ legId: event.target.value })}>
                   <option value="">All legs</option>
                   {activeLegs.map((leg) => <option key={leg.id} value={leg.id}>{leg.name}</option>)}
                 </select>
               </label>
               <label className="grid gap-1 text-sm font-semibold">Status
-                <select aria-label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
+                <select aria-label="Status" value={status} onChange={(event) => changeFilters({ status: event.target.value })}>
                   <option value="all">All statuses</option>
                   <option value="confirmed">Confirmed</option>
                   <option value="possible">Possible</option>
@@ -264,6 +294,7 @@ export default function BossSchedulePage() {
                   </button>
                 </div>
               ) : null}
+              {calendarEvents.some(event => !event.startsAt) ? <section aria-label="Needs dates" className="rounded-xl border bg-white p-3 text-sm"><h3 className="font-semibold">Needs dates</h3>{calendarEvents.filter(event => !event.startsAt).map(event => <p key={event.id}>{'organizationId' in event && event.organizationId ? <Link href={`/boss/profiles/${event.organizationId}?bookingId=${event.id}`}>{'name' in event ? event.name : 'Event'}</Link> : 'name' in event ? event.name : 'Event'}</p>)}</section> : null}
               <EventCalendar colors={schedule?.displaySettings} events={calendarEvents} initialMonth={activeMonth} onMonthChange={setActiveMonth} profileBasePath="/boss/profiles" readOnly />
             </section>
           ) : (
@@ -273,7 +304,7 @@ export default function BossSchedulePage() {
                 <p className="mt-1 text-sm text-slate-600">Confirmed and potential route context across the selected season and leg.</p>
               </div>
               <RouteConflictWarning conflicts={routeConflicts} readOnly />
-              <EventMap events={scopedEvents} profileBasePath="/boss/profiles" readOnly requestedSeasonYear={Number(season)} travelLegs={travelLegs} />
+              <EventMap events={scopedEvents} profileBasePath="/boss/profiles" readOnly controlledSeasonYear={Number(season)} onSeasonYearChange={year => changeSeason(String(year))} travelLegs={travelLegs} />
             </section>
           )}
 

@@ -6,9 +6,12 @@ const { apiPost } = vi.hoisted(() => ({ apiPost: vi.fn().mockResolvedValue({ boo
 vi.mock("@/lib/auth-token", () => ({ apiPost }));
 
 import { ProfileBookingCreator } from "./profile-booking-creator";
+import { subscribeBookingOperationsChanges } from '@/features/bookings/booking-operations-changes';
 
 it("creates a dated booking on the current profile", async () => {
   const onCreated = vi.fn();
+  const changed = vi.fn();
+  const dispose = subscribeBookingOperationsChanges(changed);
   render(<ProfileBookingCreator city="Holyoke" onCreated={onCreated} profileId="profile-1" region="CO" />);
 
   fireEvent.click(screen.getByText("Add booking"));
@@ -28,4 +31,6 @@ it("creates a dated booking on the current profile", async () => {
     nextActionDueAt: "2026-10-12",
   })));
   expect(onCreated).toHaveBeenCalled();
+  expect(changed).toHaveBeenCalledWith('booking-1');
+  dispose();
 });

@@ -27,7 +27,7 @@ describe("EventCalendar profile navigation", () => {
   it("opens the event profile from an admin calendar event", () => {
     const { container } = render(<EventCalendar events={[linkedEvent]} initialMonth="2026-09" />);
 
-    expect(container.querySelector('a[href="/profiles/profile-1"]')).not.toBeNull();
+    expect(Array.from(container.querySelectorAll('a')).some(link => link.getAttribute('href') === '/profiles/profile-1?bookingId=booking-1&season=2026&leg=leg-1')).toBe(true);
   });
 
   it("opens the Boss profile from a read-only Boss calendar event", () => {
@@ -40,7 +40,7 @@ describe("EventCalendar profile navigation", () => {
 
     const { container } = render(<EventCalendar {...props} />);
 
-    expect(container.querySelector('a[href="/boss/profiles/profile-1"]')).not.toBeNull();
+    expect(Array.from(container.querySelectorAll('a')).some(link => link.getAttribute('href') === '/boss/profiles/profile-1?bookingId=booking-1&season=2026&leg=leg-1')).toBe(true);
   });
 
   it("falls back to booking details for an unlinked Admin event", () => {

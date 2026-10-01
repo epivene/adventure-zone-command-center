@@ -35,6 +35,12 @@ export type MapEvent = {
   legAssignmentExplanation?: string | null;
   startsAt: Date | null;
   endsAt: Date | null;
+  dateOnly?: boolean;
+  reservedDateOnly?: boolean;
+  reservedEndExclusive?: boolean;
+  actualDateOnly?: boolean;
+  reservedStartsAt?: Date | null;
+  reservedEndsAt?: Date | null;
   routeBucket?: RouteBucket;
   locationQuality?: LocationQuality;
   locationLabel?: string | null;

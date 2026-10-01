@@ -110,6 +110,27 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+it('embedded_2027_never_defaults_2026 and embedded_reset_keeps_parent_season', () => {
+  const changeYear = vi.fn();
+  const future = { ...confirmedMapped, name: '2027 Stop', seasonYear: 2027, startsAt: new Date('2027-06-20T18:00:00Z'), endsAt: new Date('2027-06-21T18:00:00Z') };
+  render(<EventMap events={[confirmedMapped, future]} travelLegs={[leg]} controlledSeasonYear={2027} onSeasonYearChange={changeYear} />);
+  expect(screen.getByText('2027 Stop')).toBeInTheDocument();
+  expect(screen.queryByText('Confirmed Stop')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+  expect(screen.getByText('2027 Stop')).toBeInTheDocument();
+  expect(changeYear).not.toHaveBeenCalledWith(2026);
+});
+it('unmapped_unassigned_still_listed and zero_coordinates_are_valid', () => {
+  const undated = { ...unresolved, id: 'undated', name: 'Undated event', startsAt: null, endsAt: null, seasonYear: null, travelLegId: null, travelLegName: null };
+  const zero = { ...confirmedMapped, id: 'zero', name: 'Zero coordinates', latitude: 0, longitude: 0 };
+  render(<EventMap events={[undated, zero]} travelLegs={[leg]} requestedSeasonYear={2026} />);
+  expect(screen.getByText('Undated event')).toBeInTheDocument();
+  expect(screen.getByText('Needs dates')).toBeInTheDocument();
+  expect(screen.getByText('Needs leg')).toBeInTheDocument();
+  expect(mocks.layers.mock.calls.at(-1)?.[0].events.map((event: any) => event.id)).toContain('zero');
+  expect(mocks.post).not.toHaveBeenCalled();
+});
+
 describe("EventMap unresolved locations", () => {
   it("shows Miles City with a clear mapping failure and retry action", () => {
     render(<EventMap events={[unresolved]} travelLegs={[leg]} />);
@@ -130,6 +151,8 @@ describe("EventMap unresolved locations", () => {
         longitude: -105.8406,
         locationQuality: "city",
         mappingState: "mapped_city",
+        reservedStartsAt: "2026-08-16T00:00:00.000Z",
+        reservedEndsAt: "2026-08-23T00:00:00.000Z",
         startsAt: "2026-08-18T12:00:00.000Z",
         endsAt: "2026-08-21T12:00:00.000Z",
       },
@@ -199,8 +222,25 @@ describe("EventMap unresolved locations", () => {
 
     expect(screen.getByRole("link", { name: "Confirmed Stop" })).toHaveAttribute(
       "href",
-      "/boss/profiles/profile-1",
+      "/boss/profiles/profile-1?bookingId=confirmed-mapped&season=2026&leg=leg-kristy",
     );
   });
 
+});
+
+it('profile record links return to the originating map filters', () => {
+  window.history.replaceState(null, '', '/schedule?view=map&season=2026&leg=leg-kristy&status=confirmed');
+  render(<EventMap events={[{ ...confirmedMapped, organizationId: 'profile' }]} travelLegs={[leg]} requestedSeasonYear={2026} />);
+  const link = screen.getByRole('link', { name: 'Confirmed Stop' });
+  expect(new URLSearchParams(link.getAttribute('href')!.split('?')[1]).get('returnTo')).toBe('/schedule?view=map&season=2026&leg=leg-kristy&status=confirmed');
+  window.history.replaceState(null, '', '/');
+});
+it('canonical assignment refresh supersedes a prior location retry snapshot', async () => {
+  mocks.post.mockResolvedValue({ event: { ...unresolved, latitude: 46.4, longitude: -105.8, mappingState: 'mapped_city', startsAt: unresolved.startsAt!.toISOString(), endsAt: unresolved.endsAt!.toISOString() } });
+  const { rerender } = render(<EventMap events={[unresolved]} travelLegs={[leg, hulkLeg]} requestedSeasonYear={2026} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Retry location' }));
+  await waitFor(() => expect(mocks.layers.mock.calls.at(-1)?.[0].events[0]?.latitude).toBe(46.4));
+  rerender(<EventMap events={[{ ...unresolved, travelLegId: hulkLeg.id, travelLegName: hulkLeg.name, startsAt: new Date('2026-08-25T18:00:00Z') }]} travelLegs={[leg, hulkLeg]} requestedSeasonYear={2026} />);
+  await waitFor(() => expect(mocks.layers.mock.calls.at(-1)?.[0].events[0]?.travelLegId).toBe(hulkLeg.id));
+  expect(mocks.layers.mock.calls.at(-1)?.[0].events[0]?.startsAt.toISOString()).toBe('2026-08-25T18:00:00.000Z');
 });
