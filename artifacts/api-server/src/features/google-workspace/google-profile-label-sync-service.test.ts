@@ -292,3 +292,14 @@ describe("GoogleProfileLabelSyncService", () => {
     expect(h.mutations.complete).toHaveBeenCalledTimes(2);
   });
 });
+
+
+it("schedules rate-limited label work no earlier than Gmail Retry-After", async () => {
+  const h = harness();
+  vi.mocked(h.resolver.resolve).mockRejectedValueOnce(Object.assign(new Error("rate limited"), {
+    code: "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED", retryAfterSeconds: 120,
+  }));
+  await h.service.assignThread({ connectionId: "conn-1", messageId: "message-1", threadId: "thread-1", organizationId: "org-1", actorId: "owner-1", decisionRevision: "revision-1" });
+  expect(h.mutations.fail).toHaveBeenCalledWith(expect.objectContaining({ nextAttemptAt: new Date("2026-09-08T12:02:00.000Z") }));
+  expect(h.gmail.modifyThreadLabels).not.toHaveBeenCalled();
+});

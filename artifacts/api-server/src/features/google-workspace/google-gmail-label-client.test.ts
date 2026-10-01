@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createGoogleWorkspaceReadClient } from "./google-api-client";
 import type { GoogleWorkspaceEnvironment } from "./google-workspace-env";
@@ -246,4 +246,76 @@ describe("Google Gmail label mutation client", () => {
     expect(tokenCalls).toBe(2);
     expect(mutationCalls).toBe(2);
   });
+});
+
+
+describe("Gmail label lookup efficiency", () => {
+  it("coalesces concurrent reads, caches copies, and invalidates after a label mutation", async () => {
+    let reads = 0;
+    const client = createGoogleWorkspaceReadClient({
+      environment, refreshToken: "one-account",
+      fetcher: async (input, init) => {
+        if (String(input).includes("oauth2")) return json({ access_token: "token" });
+        if (init?.method === "POST") return json({ id: "new", name: "New label", type: "user" });
+        reads++;
+        return json({ labels: [{ id: "old", name: "Original", type: "user" }] });
+      },
+    });
+    const [a, b] = await Promise.all([client.listLabels(), client.listLabels()]);
+    expect(reads).toBe(1);
+    a[0].name = "Modified by caller";
+    expect(b[0].name).toBe("Original");
+    expect((await client.listLabels())[0].name).toBe("Original");
+    expect(reads).toBe(1);
+    await client.createLabel!("New label");
+    await client.listLabels();
+    expect(reads).toBe(2);
+  });
+
+  it("does not cache failed reads and preserves Gmail Retry-After", async () => {
+    let reads = 0;
+    const client = createGoogleWorkspaceReadClient({
+      environment, refreshToken: "one-account",
+      fetcher: async input => {
+        if (String(input).includes("oauth2")) return json({ access_token: "token" });
+        reads++;
+        if (reads === 1) return new Response("{}", { status: 429, headers: { "Retry-After": "95" } });
+        return json({ labels: [] });
+      },
+    });
+    await expect(client.listLabels()).rejects.toMatchObject({ code: "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED", retryAfterSeconds: 95 });
+    await expect(client.listLabels()).resolves.toEqual([]);
+    expect(reads).toBe(2);
+  });
+
+  it("keeps account caches separate", async () => {
+    const make = (id: string) => createGoogleWorkspaceReadClient({
+      environment, refreshToken: id,
+      fetcher: async input => String(input).includes("oauth2") ? json({ access_token: id }) : json({ labels: [{ id, name: id }] }),
+    });
+    expect((await make("a").listLabels())[0].id).toBe("a");
+    expect((await make("b").listLabels())[0].id).toBe("b");
+  });
+});
+
+it("expires cached label lists after 30 seconds", async () => {
+  let now = 100_000;
+  const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+  let reads = 0;
+  try {
+    const client = createGoogleWorkspaceReadClient({ environment, refreshToken: "account",
+      fetcher: async input => {
+        if (String(input).includes("oauth2")) return json({ access_token: "token", expires_in: 3600 });
+        reads++;
+        return json({ labels: [] });
+      },
+    });
+    await client.listLabels();
+    now += 29_999;
+    await client.listLabels();
+    expect(reads).toBe(1);
+    now++;
+    await client.listLabels();
+    expect(reads).toBe(2);
+  } finally { clock.mockRestore(); }
 });

@@ -59,10 +59,19 @@ type TokenResponse = {
   error_description?: unknown;
 };
 
-type GoogleWorkspaceClientError = Error & { code: string };
+type GoogleWorkspaceClientError = Error & { code: string; retryAfterSeconds?: number };
 
 function clientError(code: string): GoogleWorkspaceClientError {
   return Object.assign(new Error(code), { code });
+}
+
+function retryableClientError(code: string, response: Response): GoogleWorkspaceClientError {
+  const header = response.headers.get("retry-after");
+  const numeric = header === null ? NaN : Number(header);
+  const seconds = Number.isFinite(numeric) ? numeric : (Date.parse(header ?? "") - Date.now()) / 1000;
+  return Object.assign(clientError(code), {
+    retryAfterSeconds: Number.isFinite(seconds) ? Math.max(1, Math.ceil(seconds)) : 60,
+  });
 }
 
 function gmailHeader(value: string): string {
@@ -327,6 +336,16 @@ export function createGoogleWorkspaceReadClient(input: {
   let refreshToken = input.refreshToken?.trim() || null;
   let accessToken: { value: string; expiresAtMs: number } | null = null;
 
+  // Cache only within this account-bound client; never share labels across accounts.
+  let labelCache: { labels: GoogleLabelSummary[]; expiresAt: number } | null = null;
+  let labelRead: Promise<GoogleLabelSummary[]> | null = null;
+  let labelGeneration = 0;
+  function invalidateLabels() {
+    labelGeneration++;
+    labelCache = null;
+    labelRead = null;
+  }
+
   async function requestToken(
     body: URLSearchParams,
     signal?: AbortSignal,
@@ -398,13 +417,18 @@ export function createGoogleWorkspaceReadClient(input: {
       throw clientError("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
     }
     if (response.status === 403) {
-      throw clientError(googleForbiddenCode(
-        await responseJson(response),
-        "GOOGLE_WORKSPACE_API_REQUEST_FAILED",
-      ));
+      const code = googleForbiddenCode(await responseJson(response), "GOOGLE_WORKSPACE_API_REQUEST_FAILED");
+      throw code === "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED"
+        ? retryableClientError(code, response) : clientError(code);
     }
     if (response.status === 404) {
       throw clientError("GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND");
+    }
+    if (response.status === 429) {
+      throw retryableClientError("GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED", response);
+    }
+    if (response.status >= 500) {
+      throw retryableClientError("GOOGLE_WORKSPACE_GMAIL_RETRYABLE_FAILURE", response);
     }
     if (!response.ok) {
       throw clientError("GOOGLE_WORKSPACE_API_REQUEST_FAILED");
@@ -419,6 +443,8 @@ export function createGoogleWorkspaceReadClient(input: {
     body?: Record<string, unknown>,
     retryUnauthorized = true,
   ): Promise<Record<string, unknown>> {
+    const changesLabels = url === labelsEndpoint || url.startsWith(`${labelsEndpoint}/`);
+    if (changesLabels) invalidateLabels();
     const token = await currentAccessToken(!retryUnauthorized);
     const response = await fetcher(url, {
       method,
@@ -429,7 +455,7 @@ export function createGoogleWorkspaceReadClient(input: {
           }
         : { authorization: `Bearer ${token}` },
       body: body ? JSON.stringify(body) : undefined,
-    });
+    }).finally(() => { if (changesLabels) invalidateLabels(); });
     if (response.status === 401 && retryUnauthorized) {
       accessToken = null;
       return authorizedMutation(url, method, body, false);
@@ -438,10 +464,9 @@ export function createGoogleWorkspaceReadClient(input: {
       throw clientError("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
     }
     if (response.status === 403) {
-      throw clientError(googleForbiddenCode(
-        await responseJson(response),
-        "GOOGLE_WORKSPACE_GMAIL_MUTATION_FAILED",
-      ));
+      const code = googleForbiddenCode(await responseJson(response), "GOOGLE_WORKSPACE_GMAIL_MUTATION_FAILED");
+      throw code === "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED"
+        ? retryableClientError(code, response) : clientError(code);
     }
     if (response.status === 404) {
       throw clientError("GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND");
@@ -450,10 +475,10 @@ export function createGoogleWorkspaceReadClient(input: {
       throw clientError("GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT");
     }
     if (response.status === 429) {
-      throw clientError("GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED");
+      throw retryableClientError("GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED", response);
     }
     if (response.status >= 500) {
-      throw clientError("GOOGLE_WORKSPACE_GMAIL_RETRYABLE_FAILURE");
+      throw retryableClientError("GOOGLE_WORKSPACE_GMAIL_RETRYABLE_FAILURE", response);
     }
     if (!response.ok) {
       throw clientError("GOOGLE_WORKSPACE_GMAIL_MUTATION_FAILED");
@@ -811,6 +836,7 @@ export function createGoogleWorkspaceReadClient(input: {
       );
       cacheAccessToken(payload);
       if (typeof payload.refresh_token === "string" && payload.refresh_token.trim()) {
+        invalidateLabels();
         refreshToken = payload.refresh_token.trim();
       }
       if (!refreshToken) {
@@ -957,6 +983,11 @@ export function createGoogleWorkspaceReadClient(input: {
     },
 
     async listLabels(): Promise<GoogleLabelSummary[]> {
+      const copy = (labels: GoogleLabelSummary[]) => labels.map(label => ({ ...label }));
+      if (labelCache && Date.now() < labelCache.expiresAt) return copy(labelCache.labels);
+      if (labelRead) return copy(await labelRead);
+      const generation = labelGeneration;
+      const pending = (async () => {
       const payload = await authorizedJson(labelsEndpoint);
       const labels = Array.isArray(payload.labels) ? payload.labels : [];
       return labels.flatMap((value) => {
@@ -971,6 +1002,15 @@ export function createGoogleWorkspaceReadClient(input: {
           type: label.type === "system" ? "system" as const : "user" as const,
         }];
       });
+      })();
+      labelRead = pending;
+      try {
+        const labels = await pending;
+        if (generation === labelGeneration) labelCache = { labels, expiresAt: Date.now() + 30_000 };
+        return copy(labels);
+      } finally {
+        if (labelRead === pending) labelRead = null;
+      }
     },
 
 
@@ -1396,4 +1436,5 @@ export type {
   GoogleThreadDetail,
   GoogleWorkspaceReadClient,
 } from "./google-api-types";
+
 

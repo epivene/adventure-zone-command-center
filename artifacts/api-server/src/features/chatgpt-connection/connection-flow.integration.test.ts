@@ -7,7 +7,7 @@ import { LeadNoteService } from "./lead-note-service";
 import { ProfileUpdateService } from "./profile-update-service";
 import { DraftFollowupService } from "./draft-followup-service";
 import { OperationStore } from "./operation-store";
-import { createChatGPTMcpRouter } from "../../routes/chatgpt-mcp";
+import { createChatGPTMcpRouter, connectionRequestsPerMinute } from "../../routes/chatgpt-mcp";
 import { createChatGPTConnectionRouter } from "../../routes/chatgpt-connection";
 import { issueToken } from "../../lib/auth";
 import { profileRow } from "./read-service";
@@ -184,7 +184,7 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
       (await f.db.query("SELECT * FROM chatgpt_external_drafts")).rows,
     ).toHaveLength(1);
     await f.db.query(
-      "UPDATE chatgpt_rate_windows SET calls=60,window_start=date_trunc('minute',clock_timestamp()) WHERE connection_id=$1",
+      "UPDATE chatgpt_rate_windows SET calls=300,window_start=date_trunc('minute',clock_timestamp()) WHERE connection_id=$1",
       [f.principal.connectionId],
     );
     const limited = await request(app)
@@ -194,6 +194,10 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
       .auth("test-connection", { type: "bearer" })
       .send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
     expect(limited.status).toBe(429);
+    expect(Number(limited.headers["retry-after"])).toBeGreaterThanOrEqual(1);
+    expect(Number(limited.headers["retry-after"])).toBeLessThanOrEqual(60);
+    expect(limited.body.retryAfterSeconds).toBe(Number(limited.headers["retry-after"]));
+    expect(limited.headers["x-ratelimit-remaining"]).toBe("0");
     await f.db.query("UPDATE chatgpt_rate_windows SET calls=0");
     await f.db.query(
       "UPDATE chatgpt_connections SET revoked_at=now() WHERE id=$1",
@@ -204,5 +208,15 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
     ).rejects.toThrow("CONNECTION_REVOKED");
   } finally {
     await f.db.close();
+  }
+});
+
+
+it("bounds the configurable connector allowance", () => {
+  expect(connectionRequestsPerMinute("120")).toBe(120);
+  expect(connectionRequestsPerMinute("60")).toBe(60);
+  expect(connectionRequestsPerMinute("300")).toBe(300);
+  for (const value of ["", "0", "-1", "Infinity", "301", "1.5", "garbage"]) {
+    expect(connectionRequestsPerMinute(value)).toBe(120);
   }
 });
