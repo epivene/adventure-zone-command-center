@@ -1,0 +1,366 @@
+import { beforeEach, afterEach, it, expect } from "vitest";
+import { randomUUID } from "node:crypto";
+import { fixture } from "./test-database";
+import { ProfileMergeService } from "./profile-merge-service";
+import { ProfileUpdateService } from "./profile-update-service";
+import type { SqlQuery } from "./contracts";
+
+let f: Awaited<ReturnType<typeof fixture>>,
+  service: ProfileMergeService,
+  duplicateId: string;
+const sources = [
+  {
+    url: "https://fair.example/about",
+    retrievedAt: "2026-10-01T16:00:00Z",
+    eventYear: 2027,
+    claim: "Same event and venue",
+    verification: "verified" as const,
+  },
+];
+// The legacy merge executor is tested in the organization merge suites. Here a
+// real SQL executor isolates the connector's approval, snapshot and transaction boundary.
+async function coreMerge(tx: SqlQuery, primaryId: string, ids: string[]) {
+  for (const table of ["activities", "contacts", "bookings", "follow_ups"])
+    await tx.query(
+      `UPDATE ${table} SET organization_id=$1 WHERE organization_id=ANY($2::uuid[])`,
+      [primaryId, ids],
+    );
+  await tx.query("DELETE FROM organizations WHERE id=ANY($1::uuid[])", [ids]);
+}
+beforeEach(async () => {
+  f = await fixture();
+  duplicateId = randomUUID();
+  await f.db.query(
+    "INSERT INTO organizations(id,name,city,region,phone) VALUES($1,'County Fair old','Town','UT','801-555-0100')",
+    [duplicateId],
+  );
+  await f.db.query(
+    "INSERT INTO activities(organization_id,kind,subject,body,timeline_sort_at) VALUES($1,'note','Original history','Keep my wording',now())",
+    [duplicateId],
+  );
+  service = new ProfileMergeService(f.db, coreMerge);
+});
+afterEach(async () => f.db.close());
+const preview = () =>
+  service.preview(
+    f.principal,
+    { requestKey: "preview" },
+    {
+      primaryId: f.profileId,
+      duplicateIds: [duplicateId],
+      reason: "Verified duplicate event",
+      sources,
+    },
+  );
+async function approved() {
+  const p = await preview();
+  const a = await service.approve(
+    "owner",
+    p.recordId,
+    p.value.contentHash,
+    true,
+  );
+  return { proposalId: p.recordId, approvalId: a.approvalId };
+}
+it("previews actual profiles, field conflicts and linked notes without merging", async () => {
+  const p = await preview();
+  expect(p.value.kind).toBe("profile_merge");
+  expect(p.value.primary.id).toBe(f.profileId);
+  expect(p.value.duplicates[0].id).toBe(duplicateId);
+  expect(p.value.conflicts).toContainEqual({
+    field: "phone",
+    primaryValue: null,
+    duplicateId,
+    duplicateValue: "801-555-0100",
+  });
+  expect(p.value.references.find((r) => r.table === "activities")?.count).toBe(
+    1,
+  );
+  expect((await f.db.query("SELECT id FROM organizations")).rows).toHaveLength(
+    2,
+  );
+  await expect(
+    service.approve("owner", p.recordId, p.value.contentHash, false),
+  ).rejects.toMatchObject({ code: "CONNECTION_MERGE_CONFIRMATION_REQUIRED" });
+});
+it("requires owner approval and keeps connector links, source fields, note history and a retry receipt", async () => {
+  await f.db.query(
+    "INSERT INTO chatgpt_lead_identities(identity_hash,profile_id) VALUES('source',$1)",
+    [duplicateId],
+  );
+  const draftId = randomUUID();
+  await f.db.query(
+    "INSERT INTO chatgpt_external_drafts(id,owner_id,connection_id,content,revision) VALUES($1,'owner',$2,$3,$4)",
+    [
+      draftId,
+      f.principal.connectionId,
+      JSON.stringify({
+        organizationId: duplicateId,
+        text: "Preserve owner edits",
+      }),
+      randomUUID(),
+    ],
+  );
+  const input = await approved();
+  await expect(
+    service.apply(
+      f.principal,
+      { requestKey: "forged" },
+      { ...input, approvalId: randomUUID() },
+    ),
+  ).rejects.toMatchObject({ code: "CONNECTION_APPROVAL_REQUIRED" });
+  const r = await service.apply(f.principal, { requestKey: "apply" }, input);
+  expect(r.value.primaryId).toBe(f.profileId);
+  expect((await f.db.query("SELECT * FROM organizations")).rows).toHaveLength(
+    1,
+  );
+  expect(
+    (
+      await f.db.query(
+        "SELECT organization_id,body FROM activities WHERE subject='Original history'",
+      )
+    ).rows[0],
+  ).toEqual({ organization_id: f.profileId, body: "Keep my wording" });
+  expect(
+    (
+      await f.db.query<{ profile_id: string }>(
+        "SELECT profile_id FROM chatgpt_lead_identities",
+      )
+    ).rows[0].profile_id,
+  ).toBe(f.profileId);
+  expect(
+    (
+      await f.db.query<{ content: { organizationId: string; text: string } }>(
+        "SELECT content FROM chatgpt_external_drafts WHERE id=$1",
+        [draftId],
+      )
+    ).rows[0].content,
+  ).toEqual({ organizationId: f.profileId, text: "Preserve owner edits" });
+  const audit = (
+    await f.db.query<{ body: string }>(
+      "SELECT body FROM activities WHERE subject='Duplicate profiles merged'",
+    )
+  ).rows[0].body;
+  expect(audit).toContain("801-555-0100");
+  expect(audit).toContain(duplicateId);
+  expect(
+    await service.apply(f.principal, { requestKey: "apply" }, input),
+  ).toEqual(r);
+  await expect(
+    service.apply(f.principal, { requestKey: "again" }, input),
+  ).rejects.toMatchObject({ code: "CONNECTION_APPROVAL_REQUIRED" });
+});
+it.each(["profile", "note", "new booking", "draft"])(
+  "rejects changed %s after approval",
+  async (kind) => {
+    const input = await approved();
+    if (kind === "profile")
+      await f.db.query(
+        "UPDATE organizations SET website='https://changed.example' WHERE id=$1",
+        [duplicateId],
+      );
+    if (kind === "note")
+      await f.db.query("UPDATE activities SET body='New owner correction'");
+    if (kind === "new booking")
+      await f.db.query(
+        "INSERT INTO bookings(organization_id,name,status) VALUES($1,'New booking','confirmed')",
+        [duplicateId],
+      );
+    if (kind === "draft")
+      await f.db.query(
+        "INSERT INTO chatgpt_external_drafts(id,owner_id,connection_id,content,revision) VALUES($1,'owner',$2,$3,$4)",
+        [
+          randomUUID(),
+          f.principal.connectionId,
+          JSON.stringify({ organizationId: duplicateId, text: "new" }),
+          randomUUID(),
+        ],
+      );
+    await expect(
+      service.apply(f.principal, { requestKey: "apply" }, input),
+    ).rejects.toMatchObject({ code: "CONNECTION_STALE_MERGE" });
+    expect(
+      (await f.db.query("SELECT id FROM organizations")).rows,
+    ).toHaveLength(2);
+  },
+);
+it("blocks different locations and retired or missing profiles", async () => {
+  await f.db.query("UPDATE organizations SET city='Other city' WHERE id=$1", [
+    duplicateId,
+  ]);
+  const p = await preview();
+  expect(p.value.blockers.length).toBeGreaterThan(0);
+  await expect(
+    service.approve("owner", p.recordId, p.value.contentHash, true),
+  ).rejects.toMatchObject({ code: "CONNECTION_MERGE_BLOCKED" });
+  await f.db.query(
+    "UPDATE organizations SET consolidated_into_id=$1 WHERE id=$2",
+    [f.profileId, duplicateId],
+  );
+  await expect(
+    service.preview(
+      f.principal,
+      { requestKey: "retired" },
+      {
+        primaryId: f.profileId,
+        duplicateIds: [duplicateId],
+        reason: "Duplicate",
+        sources,
+      },
+    ),
+  ).rejects.toThrow();
+});
+it.each(["expired", "tampered", "revoked", "wrong owner", "scope"])(
+  "rejects %s authorization",
+  async (kind) => {
+    const p = await preview();
+    if (kind === "wrong owner") {
+      await expect(
+        service.approve("other", p.recordId, p.value.contentHash, true),
+      ).rejects.toThrow();
+      return;
+    }
+    const a = await service.approve(
+      "owner",
+      p.recordId,
+      p.value.contentHash,
+      true,
+    );
+    if (kind === "expired")
+      await f.db.query(
+        "UPDATE chatgpt_update_proposals SET approval_expires_at=now()-interval '1 second'",
+      );
+    if (kind === "tampered")
+      await f.db.query(
+        "UPDATE chatgpt_update_proposals SET content=jsonb_set(content,'{reason}','\"changed\"')",
+      );
+    if (kind === "revoked")
+      await f.db.query("UPDATE chatgpt_connections SET revoked_at=now()");
+    const principal =
+      kind === "scope"
+        ? { ...f.principal, scopes: ["crm:read" as const] }
+        : f.principal;
+    await expect(
+      service.apply(
+        principal,
+        { requestKey: "apply" },
+        { proposalId: p.recordId, approvalId: a.approvalId },
+      ),
+    ).rejects.toThrow();
+    expect(
+      (await f.db.query("SELECT id FROM organizations")).rows,
+    ).toHaveLength(2);
+  },
+);
+it("rolls back the entire merge on executor failure and permits a safe retry", async () => {
+  const input = await approved();
+  const failing = new ProfileMergeService(f.db, async (tx, primary, ids) => {
+    await coreMerge(tx, primary, ids);
+    throw Error("constraint failure");
+  });
+  await expect(
+    failing.apply(f.principal, { requestKey: "apply" }, input),
+  ).rejects.toThrow("constraint failure");
+  expect(
+    (
+      await f.db.query<{ organization_id: string }>(
+        "SELECT organization_id FROM activities",
+      )
+    ).rows[0].organization_id,
+  ).toBe(duplicateId);
+  expect((await f.db.query("SELECT id FROM organizations")).rows).toHaveLength(
+    2,
+  );
+  await service.apply(f.principal, { requestKey: "apply" }, input);
+  expect((await f.db.query("SELECT id FROM organizations")).rows).toHaveLength(
+    1,
+  );
+});
+it("does not allow a merge proposal through the field-update approval route", async () => {
+  const p = await preview();
+  await expect(
+    new ProfileUpdateService(f.db).approve(
+      "owner",
+      p.recordId,
+      p.value.contentHash,
+    ),
+  ).rejects.toMatchObject({ code: "CONNECTION_WRONG_PROPOSAL_TYPE" });
+});
+it("preserves signed agreement and invoice links without altering their terms", async () => {
+  await f.db.exec(
+    "CREATE TABLE contract_agreements(id uuid primary key,organization_id uuid REFERENCES organizations(id),terms text); CREATE TABLE invoices(id uuid primary key,organization_id uuid REFERENCES organizations(id),amount integer)",
+  );
+  await f.db.query(
+    "INSERT INTO contract_agreements VALUES($1,$2,'Signed original terms')",
+    [randomUUID(), duplicateId],
+  );
+  await f.db.query("INSERT INTO invoices VALUES($1,$2,9000)", [
+    randomUUID(),
+    duplicateId,
+  ]);
+  const input = await approved();
+  await service.apply(f.principal, { requestKey: "merge" }, input);
+  expect(
+    (await f.db.query("SELECT organization_id,terms FROM contract_agreements"))
+      .rows[0],
+  ).toEqual({ organization_id: f.profileId, terms: "Signed original terms" });
+  expect(
+    (await f.db.query("SELECT organization_id,amount FROM invoices")).rows[0],
+  ).toEqual({ organization_id: f.profileId, amount: 9000 });
+});
+it("blocks an unknown cascading reference instead of deleting its records", async () => {
+  await f.db.exec(
+    "CREATE TABLE future_records(id uuid primary key,unusual_profile_link uuid REFERENCES organizations(id) ON DELETE CASCADE)",
+  );
+  await f.db.query("INSERT INTO future_records VALUES($1,$2)", [
+    randomUUID(),
+    duplicateId,
+  ]);
+  const p = await preview();
+  expect(p.value.blockers.join(" ")).toContain("future_records");
+  await expect(
+    service.approve("owner", p.recordId, p.value.contentHash, true),
+  ).rejects.toMatchObject({ code: "CONNECTION_MERGE_BLOCKED" });
+  expect((await f.db.query("SELECT * FROM future_records")).rows).toHaveLength(
+    1,
+  );
+});
+it("normalizes UUID case and rejects the survivor repeated as a duplicate", async () => {
+  await expect(
+    service.preview(
+      f.principal,
+      { requestKey: "self" },
+      {
+        primaryId: f.profileId.toUpperCase(),
+        duplicateIds: [f.profileId],
+        reason: "Duplicate",
+        sources,
+      },
+    ),
+  ).rejects.toMatchObject({ code: "CONNECTION_INVALID_MERGE" });
+  const p = await service.preview(
+    f.principal,
+    { requestKey: "upper" },
+    {
+      primaryId: f.profileId.toUpperCase(),
+      duplicateIds: [duplicateId.toUpperCase()],
+      reason: "Duplicate",
+      sources,
+    },
+  );
+  expect(p.value.primary.id).toBe(f.profileId);
+});
+it("blocks in-app assistant drafts that require their own send-review reconciliation", async () => {
+  await f.db.exec(
+    "CREATE TABLE assistant_workspace_drafts(id uuid,content jsonb)",
+  );
+  await f.db.query("INSERT INTO assistant_workspace_drafts VALUES($1,$2)", [
+    randomUUID(),
+    JSON.stringify({
+      organizationId: duplicateId,
+      text: "Do not lose this draft",
+    }),
+  ]);
+  const p = await preview();
+  expect(p.value.blockers.join(" ")).toContain("assistant_workspace_drafts");
+});

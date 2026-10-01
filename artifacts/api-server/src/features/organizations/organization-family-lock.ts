@@ -6,7 +6,7 @@ import {
   organizations,
 } from "@/db/schema";
 
-const organizationFamilyReviewAdvisoryLockKey = 734_802_341;
+export const organizationFamilyReviewAdvisoryLockKey = 734_802_341;
 
 type LockTransaction = {
   execute(query: unknown): Promise<unknown>;

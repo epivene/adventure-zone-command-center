@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { MergePreview } from "@/features/chatgpt-connection/merge-preview";
 import {
   connectionRequest,
   scopeLabels,
@@ -216,8 +217,9 @@ export default function SettingsChatGPTConnectionPage() {
           <section className="grid gap-3 rounded border p-4">
             <h2 className="text-lg font-semibold">Proposed profile changes</h2>
             <p>
-              Approval covers only the fields shown, expires after 15 minutes,
-              and is valid only while the profile stays unchanged.
+              Approval covers only the changes shown and expires after 15
+              minutes. Changed profiles or merge-related records require a fresh
+              preview.
             </p>
             {!proposals.length && <p>No proposals to review.</p>}
             {proposals.map((p) => (
@@ -227,20 +229,32 @@ export default function SettingsChatGPTConnectionPage() {
                 className="grid min-w-0 gap-2 border-t pt-3"
               >
                 <h3 className="font-semibold">{p.content.profileName}</h3>
-                {Object.entries(p.content.values).map(([field, value]) => (
-                  <div
-                    key={field}
-                    className="grid gap-1 rounded bg-muted p-2 sm:grid-cols-3"
-                  >
-                    <strong>{field}</strong>
-                    <span className="break-words">
-                      Current: {p.content.oldValues[field] ?? "(empty)"}
-                    </span>
-                    <span className="break-words">
-                      Proposed: {String(value ?? "(empty)")}
-                    </span>
-                  </div>
-                ))}
+                {p.content.kind === "profile_merge" && (
+                  <MergePreview
+                    key={p.content_hash}
+                    proposal={p}
+                    disabled={busy || !settings.enabled}
+                    approve={(body) =>
+                      void act(`/proposals/${p.id}/approve-merge`, body)
+                    }
+                  />
+                )}
+                {Object.entries(p.content.values ?? {}).map(
+                  ([field, value]) => (
+                    <div
+                      key={field}
+                      className="grid gap-1 rounded bg-muted p-2 sm:grid-cols-3"
+                    >
+                      <strong>{field}</strong>
+                      <span className="break-words">
+                        Current: {p.content.oldValues[field] ?? "(empty)"}
+                      </span>
+                      <span className="break-words">
+                        Proposed: {String(value ?? "(empty)")}
+                      </span>
+                    </div>
+                  ),
+                )}
                 <details>
                   <summary>Source evidence</summary>
                   {p.content.sources.map((s: any, i: number) => (
@@ -269,7 +283,7 @@ export default function SettingsChatGPTConnectionPage() {
                     Mountain time. Approval ID:{" "}
                     <code className="break-all">{p.approval_id}</code>
                   </p>
-                ) : (
+                ) : p.content.kind !== "profile_merge" ? (
                   <button
                     className={connectionButton}
                     disabled={busy || !settings.enabled}
@@ -281,7 +295,7 @@ export default function SettingsChatGPTConnectionPage() {
                   >
                     Approve these exact changes
                   </button>
-                )}
+                ) : null}
               </article>
             ))}
             {proposalCursor && (

@@ -1,3 +1,4 @@
+import { ProfileMergeService } from "./profile-merge-service";
 import { randomBytes } from "node:crypto";
 import { consentHtml } from "./consent-page";
 import express, { type Express } from "express";
@@ -149,6 +150,7 @@ export function mountChatGPTConnection(
         reads: new ConnectionReadService(db),
         notes: new LeadNoteService(db),
         updates: new ProfileUpdateService(db),
+        merges: new ProfileMergeService(db),
         drafts: new DraftFollowupService(db),
         operations: new OperationStore(db),
       },

@@ -1,3 +1,4 @@
+import { ProfileMergeService } from "../features/chatgpt-connection/profile-merge-service";
 import { ProfileUpdateService } from "../features/chatgpt-connection/profile-update-service";
 import { Router, type Request } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -193,6 +194,17 @@ export function createChatGPTConnectionRouter(deps: OwnerConnectionDeps) {
       });
     });
   }
+  router.post("/proposals/:id/approve-merge", async (req, res) => {
+    if (!deps.enabled) throw new ConnectionError("CONNECTION_DISABLED", 503);
+    res.json(
+      await new ProfileMergeService(deps.db).approve(
+        "owner",
+        String(req.params.id),
+        req.body.contentHash,
+        req.body.confirmedSameEvent,
+      ),
+    );
+  });
   router.post("/proposals/:id/approve", async (req, res) => {
     if (!deps.enabled) throw new ConnectionError("CONNECTION_DISABLED", 503);
     res.json(

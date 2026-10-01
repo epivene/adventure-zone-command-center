@@ -1,0 +1,30 @@
+name: Profile merge connector
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/chatgpt-connection/**"
+      - "artifacts/api-server/src/features/organizations/organization-merge*"
+      - "artifacts/api-server/src/features/organizations/organization-family-lock.ts"
+      - "artifacts/api-server/src/routes/chatgpt-connection.ts"
+      - "artifacts/adventure-zone/src/features/chatgpt-connection/**"
+      - "artifacts/adventure-zone/src/pages/SettingsChatGPTConnectionPage*"
+      - ".github/workflows/profile-merge-connector-ci.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/api-server exec vitest run src/features/chatgpt-connection --maxWorkers=1
+      - run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/SettingsChatGPTConnectionPage.test.tsx src/pages/SettingsChatGPTConnectionPage.integration.test.tsx --maxWorkers=1
+      - run: pnpm --filter @workspace/api-server --filter @workspace/adventure-zone build
