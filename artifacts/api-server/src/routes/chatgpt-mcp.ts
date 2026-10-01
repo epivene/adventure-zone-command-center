@@ -7,6 +7,11 @@ import type {
   SqlQuery,
 } from "../features/chatgpt-connection/contracts";
 import type { ConnectionServices } from "../features/chatgpt-connection/tool-registry";
+export function connectionRequestsPerMinute(value = process.env.CHATGPT_CONNECTION_REQUESTS_PER_MINUTE): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 30 && parsed <= 300 ? parsed : 120;
+}
+
 export function createChatGPTMcpRouter(deps: {
   enabled: boolean;
   resource: string;
@@ -16,6 +21,7 @@ export function createChatGPTMcpRouter(deps: {
   services: ConnectionServices;
 }) {
   const router = Router();
+  const requestLimit = connectionRequestsPerMinute();
   router.use((_req, res, next) => {
     res.set("Cache-Control", "no-store");
     if (!deps.enabled)
@@ -52,15 +58,18 @@ export function createChatGPTMcpRouter(deps: {
     }
     const rate = (
       await deps.db.query(
-        `INSERT INTO chatgpt_rate_windows(connection_id,window_start,calls) VALUES($1,date_trunc('minute',clock_timestamp()),1) ON CONFLICT(connection_id) DO UPDATE SET calls=CASE WHEN chatgpt_rate_windows.window_start=excluded.window_start THEN chatgpt_rate_windows.calls+1 ELSE 1 END,window_start=excluded.window_start RETURNING calls`,
-        [p.connectionId],
+        `INSERT INTO chatgpt_rate_windows(connection_id,window_start,calls) VALUES($1,date_trunc('minute',clock_timestamp()),1) ON CONFLICT(connection_id) DO UPDATE SET calls=CASE WHEN chatgpt_rate_windows.window_start=excluded.window_start THEN LEAST(chatgpt_rate_windows.calls+1,$2+1) ELSE 1 END,window_start=excluded.window_start RETURNING calls, GREATEST(1,CEIL(EXTRACT(EPOCH FROM (window_start + interval '1 minute' - clock_timestamp()))))::integer AS retry_after_seconds`,
+        [p.connectionId, requestLimit],
       )
     ).rows[0];
-    if (rate.calls > 60)
+    const retryAfterSeconds = Math.max(1, Math.min(60, Number(rate.retry_after_seconds) || 60));
+    res.set("X-RateLimit-Limit", String(requestLimit));
+    res.set("X-RateLimit-Remaining", String(Math.max(0, requestLimit - rate.calls)));
+    if (rate.calls > requestLimit)
       return res
         .status(429)
-        .set("Retry-After", "60")
-        .json({ error: "CONNECTION_RATE_LIMITED" });
+        .set("Retry-After", String(retryAfterSeconds))
+        .json({ error: "CONNECTION_RATE_LIMITED", retryAfterSeconds });
     const server = createConnectionMcpServer(deps.services, p, deps.resource),
       transport = new NodeStreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
@@ -83,3 +92,4 @@ export function createChatGPTMcpRouter(deps: {
   });
   return router;
 }
+
