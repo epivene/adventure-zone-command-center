@@ -1,3 +1,4 @@
+import { getBossProfileEmails, getBossProfileDrafts, getBossThread } from "@/components/boss/boss-profile-emails";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 import { useProfileGoogleEmail } from "@/components/google-workspace/use-profile-google-email";
 import { ProfileWorkspaceActions } from "./profile-workspace-actions";
@@ -51,7 +52,7 @@ import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 import { getPaperNoteActivitySource } from "@/features/paper-notes/paper-note-client";
 
 export type OpenSection = "contacts" | "events" | "notes" | "emails" | "documents" | null;
-type ProfileManagerReview = {
+export type ProfileManagerReview = {
   id: string;
   bookingId: string;
   rating: number;
@@ -131,8 +132,10 @@ export function SimpleFullProfile({
   originLabel = "Profiles",
   editing,
   onEditingChange,
+  role = "admin",
+  editor,
 }: {
-  profile: EventProfile;
+  profile: EventProfile & { place: EventProfile["place"] & { description?: string | null }; managerReviews?: ProfileManagerReview[] };
   onProfileSaved?: () => Promise<void> | void;
   ratingSummary?: { average: number | null; count: number };
   onAskAssistant?: () => void;
@@ -142,6 +145,8 @@ export function SimpleFullProfile({
   originLabel?: string;
   editing?: boolean;
   onEditingChange?: (editing: boolean) => void;
+  role?: "admin" | "boss";
+  editor?: ReactNode;
 }) {
   const [internalEditing, setInternalEditing] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSection>(() =>
@@ -162,7 +167,9 @@ export function SimpleFullProfile({
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
   const [optimisticActivities, setOptimisticActivities] = useState<ActivityTimelineItem[]>([]);
-  const gmail = useProfileGoogleEmail(profile.id);
+  const boss = role === "boss";
+  const routePrefix = boss ? "/boss" : "";
+  const gmail = useProfileGoogleEmail(profile.id, undefined, boss ? getBossProfileEmails : undefined);
   const emailConversations = gmail.conversations;
   const search = useSearch();
   const [,navigate] = useLocation();
@@ -335,6 +342,7 @@ export function SimpleFullProfile({
   }
 
   if (isEditing) {
+    if (boss) return editor ?? null;
     return (
       <ProfileInlineEditor
         profile={profile as any}
@@ -357,8 +365,9 @@ export function SimpleFullProfile({
   const callQuery = new URLSearchParams({ organizationId: profile.id });
   if (primaryContact?.id) callQuery.set("contactId", primaryContact.id);
   const visiblePhone = primaryContact?.phone ?? profile.place.phone ?? null;
-  const callHref = visiblePhone ? `/calls/new?${callQuery.toString()}` : null;
+  const callHref = visiblePhone ? (boss ? `tel:${visiblePhone}` : `/calls/new?${callQuery.toString()}`) : null;
 
+  const CallLink = boss ? "a" : Link;
   return (
     <div className="profile-modern grid gap-5">
       <header className="flex flex-wrap items-center justify-between gap-4">
@@ -441,7 +450,7 @@ export function SimpleFullProfile({
                     {primaryContact.email ? <a className="inline-flex items-center gap-2 rounded-lg bg-[#f1f6f2] px-3 py-2.5 text-sm font-semibold text-[#315b66]" href={`mailto:${primaryContact.email}`}><Mail className="h-4 w-4 text-[#397064]" />{primaryContact.email}</a> : null}
                   </div>
                   <div className="border-t border-[#e4ebe5] px-4 py-3">
-                    <Link className="button-primary inline-flex w-full items-center justify-center gap-2" href={`/contacts/${primaryContact.id}`}>
+                    <Link className="button-primary inline-flex w-full items-center justify-center gap-2" href={`${routePrefix}/contacts/${primaryContact.id}`}>
                       Open contact profile <ArrowUpRight className="h-4 w-4" />
                     </Link>
                   </div>
@@ -458,19 +467,19 @@ export function SimpleFullProfile({
             <button className="inline-flex items-center gap-1.5 text-[#60747a] hover:text-[#173b48]" onClick={onBack} type="button">
               <ArrowLeft className="h-3.5 w-3.5" /> {originLabel}
             </button>
-          ) : <Link href="/profiles" className="hover:text-[#315b66]">{originLabel}</Link>}
+          ) : <Link href={`${routePrefix}/profiles`} className="hover:text-[#315b66]">{originLabel}</Link>}
           <span className="text-[#a8b5b4]">/</span>
           <span className="text-[#315b66]">{profile.place.name}</span>
         </div>
         <div className="flex w-full items-center gap-2 sm:w-auto">
-          <ProfileActionsMenu
+          {boss ? <button className="button-secondary" type="button" onClick={() => setEditing(true)}>Edit Profile</button> : <ProfileActionsMenu
             profileId={profile.id}
             contactId={primaryContact?.id ?? null}
             showAddNote={false}
             showFollowUp={false}
             onEdit={() => setEditing(true)}
             triggerLabel="More"
-          />
+          />}
         </div>
       </div>
 
@@ -530,12 +539,12 @@ export function SimpleFullProfile({
 
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {callHref ? (
-              <Link className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" href={callHref}>
+              <CallLink className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" href={callHref}>
                 <Phone className="h-4 w-4" />
                 Call
-              </Link>
+              </CallLink>
             ) : null}
-            <ProfileWorkspaceActions onFollowUp={onFollowUp ?? (() => navigate(`/profiles/${profile.id}?action=follow-up`))} onOpenEmails={() => setOpenSection("emails")} onAddNote={openNoteComposer} onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))} />
+            <ProfileWorkspaceActions readOnly={boss} emailCount={boss ? emailConversations.length : undefined} onFollowUp={onFollowUp ?? (() => navigate(`/profiles/${profile.id}?action=follow-up`))} onOpenEmails={() => setOpenSection("emails")} onAddNote={openNoteComposer} onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))} />
           </div>
         </div>
 
@@ -575,13 +584,13 @@ export function SimpleFullProfile({
         </div>
       </section>
 
-      <ProfileAtAGlance profile={profile} />
+      <ProfileAtAGlance profile={profile} allowDateManagement={!boss} />
 
       <nav aria-label="Profile sections" className="flex flex-wrap gap-2 border-b pb-3">
-        {([[null,"Overview"],["contacts","Contacts"],["events","Bookings"],["notes","History"],["documents","Documents"]] as const).map(([section,label]) => <button key={label} type="button" aria-current={openSection === section ? "page" : undefined} className={openSection === section ? "button-primary" : "button-secondary"} onClick={() => setOpenSection(section)}>{label}</button>)}
+        {([[null,"Overview"],["contacts","Contacts"],["events","Bookings"],["notes","History"],["documents","Documents"]] as const).filter(([section]) => !boss || section !== "documents").map(([section,label]) => <button key={label} type="button" aria-current={openSection === section ? "page" : undefined} className={openSection === section ? "button-primary" : "button-secondary"} onClick={() => setOpenSection(section)}>{label}</button>)}
       </nav>
       <div id="profile-section-content" className="scroll-mt-4" />
-      {openSection === "documents" ? <ProfileDesignDocuments organizationId={profile.id} contactId={primaryContact?.id ?? null} bookingId={currentBooking?.id ?? null} documentYear={profileDocumentYear} /> : null}
+      {!boss && openSection === "documents" ? <ProfileDesignDocuments organizationId={profile.id} contactId={primaryContact?.id ?? null} bookingId={currentBooking?.id ?? null} documentYear={profileDocumentYear} /> : null}
 
       {openSection === null ? (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.85fr)]">
@@ -620,7 +629,7 @@ export function SimpleFullProfile({
                       <span className="font-semibold">{primaryContact.name}</span>
                     </span>
                   </div>
-                  <ProfileActionsMenu profileId={profile.id} contactId={primaryContact.id} showAddNote={false} />
+                  {!boss ? <ProfileActionsMenu profileId={profile.id} contactId={primaryContact.id} showAddNote={false} /> : null}
                 </div>
               ) : null}
             </section>
@@ -693,17 +702,17 @@ export function SimpleFullProfile({
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">People at this organization</p>
               <h2 className="mt-1 text-xl font-bold text-[#173b48]">Contacts</h2>
             </div>
-            <Link className="button-primary inline-flex items-center gap-2" href="/contacts/new">
+            {!boss ? <Link className="button-primary inline-flex items-center gap-2" href="/contacts/new">
               <Plus className="h-4 w-4" />
               Add contact
-            </Link>
+            </Link> : null}
           </div>
           {profile.contacts.length ? (
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               {profile.contacts.map((contact) => (
                 <article className="rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4" key={contact.id}>
                   <div className="flex items-start justify-between gap-3">
-                    <Link className="flex min-w-0 items-center gap-3" href={`/contacts/${contact.id}`}>
+                    <Link className="flex min-w-0 items-center gap-3" href={`${routePrefix}/contacts/${contact.id}`}>
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dbe9e4] text-xs font-bold text-[#397064]">
                         {initials(contact.name)}
                       </span>
@@ -734,7 +743,7 @@ export function SimpleFullProfile({
                         Email
                       </a>
                     ) : null}
-                    <Link className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80" href={`/contacts/${contact.id}`}>
+                    <Link className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80" href={`${routePrefix}/contacts/${contact.id}`}>
                       Details
                       <ArrowUpRight className="h-3.5 w-3.5" />
                     </Link>
@@ -770,7 +779,7 @@ export function SimpleFullProfile({
                   return (
                     <article className="rounded-lg border border-[#dce6e0] bg-[#fbfcf8] p-3" key={review.id}>
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Link className="font-bold text-[#315b66] hover:text-[#244f47]" href={`/bookings/${review.bookingId}`}>
+                        <Link className="font-bold text-[#315b66] hover:text-[#244f47]" href={`${routePrefix}/bookings/${review.bookingId}`}>
                           Review for {booking?.name ?? "event"}
                         </Link>
                         <span aria-label={`${review.rating} out of 5 stars`} className="font-bold tracking-[0.08em] text-[#d4874f]">
@@ -791,7 +800,7 @@ export function SimpleFullProfile({
           {profile.bookings.length ? (
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               {profile.bookings.map((booking) => (
-                <Link className="group rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4 transition hover:border-[#9ab6a9] hover:bg-[#f3f8f3]" href={`/bookings/${booking.id}`} key={booking.id}>
+                <Link className="group rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4 transition hover:border-[#9ab6a9] hover:bg-[#f3f8f3]" href={`${routePrefix}/bookings/${booking.id}`} key={booking.id}>
                   <div className="flex items-start justify-between gap-3">
                     <span>
                       <span className="block font-bold text-[#173b48]">{booking.name}</span>
@@ -824,10 +833,10 @@ export function SimpleFullProfile({
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship history</p>
               <h2 className="mt-1 text-xl font-bold text-[#173b48]">Activity history</h2>
             </div>
-            <button className="button-primary inline-flex items-center gap-2" onClick={openNoteComposer} type="button">
+            {!boss ? <button className="button-primary inline-flex items-center gap-2" onClick={openNoteComposer} type="button">
               <Plus className="h-4 w-4" />
               Add note
-            </button>
+            </button> : null}
           </div>
           <label className="relative mt-5 block max-w-xl">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8da09d]" />
@@ -867,11 +876,11 @@ export function SimpleFullProfile({
             ) : (
               <ActivityTimeline
                 activities={filteredActivities}
-                editActivity={editActivityAction}
-                deleteActivity={deleteActivityAction}
-                loadRevisions={listActivityRevisionsAction}
-                loadPage={normalizedSearch ? undefined : loadSimpleNotesPage}
-                openPaperNoteSource={openOriginalPaperNote}
+                editActivity={boss ? undefined : editActivityAction}
+                deleteActivity={boss ? undefined : deleteActivityAction}
+                loadRevisions={boss ? async () => ({ ok: true, revisions: [] }) : listActivityRevisionsAction}
+                loadPage={boss || normalizedSearch ? undefined : loadSimpleNotesPage}
+                openPaperNoteSource={boss ? undefined : openOriginalPaperNote}
                 collapseLongBodies
               />
             )}
@@ -879,11 +888,11 @@ export function SimpleFullProfile({
         </section>
       ) : null}
 
-      {emailComposerOpen ? <ProfileEmailComposer key={`${profile.id}:${emailDraft?.id ?? "new"}`} organizationId={profile.id} profileName={profile.place.name} contacts={profile.contacts} draft={emailDraft} onClose={() => setEmailComposerOpen(false)} onSaved={() => { setEmailComposerOpen(false); setOpenSection("emails"); setDraftRevision((value) => value + 1); setEmailSaved(true); }} /> : null}
+      {!boss && emailComposerOpen ? <ProfileEmailComposer key={`${profile.id}:${emailDraft?.id ?? "new"}`} organizationId={profile.id} profileName={profile.place.name} contacts={profile.contacts} draft={emailDraft} onClose={() => setEmailComposerOpen(false)} onSaved={() => { setEmailComposerOpen(false); setOpenSection("emails"); setDraftRevision((value) => value + 1); setEmailSaved(true); }} /> : null}
       {emailSaved ? <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Email draft saved. Nothing was sent. Find it in Emails below.</p> : null}
       {openSection === "emails" ? <div className="grid gap-4">
-        <ProfileEmailDrafts organizationId={profile.id} revision={draftRevision} onCreate={createEmail} onEdit={(draft) => { setEmailDraft(draft); setEmailSaved(false); setEmailComposerOpen(true); }} />
-        <ProfileGoogleEmailPanel organizationId={profile.id} state={gmail} />
+        <ProfileEmailDrafts readOnly={boss} getDrafts={boss ? getBossProfileDrafts : undefined} organizationId={profile.id} revision={draftRevision} onCreate={createEmail} onEdit={(draft) => { setEmailDraft(draft); setEmailSaved(false); setEmailComposerOpen(true); }} />
+        <ProfileGoogleEmailPanel organizationId={profile.id} state={gmail} readOnly={boss} getThread={boss ? getBossThread : undefined} />
       </div> : null}
 
       <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">

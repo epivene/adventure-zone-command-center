@@ -48,3 +48,15 @@ describe("Booking email composer", () => {
     expect(props.onSaved).not.toHaveBeenCalled();
   });
 });
+
+it("uses the Boss draft loader and preserves the shared layout while hiding write controls", async () => {
+  const getDrafts = vi.fn(async () => ({ drafts: [draft] }));
+  const onEdit = vi.fn();
+  render(<ProfileEmailDrafts organizationId="profile-1" revision={0} readOnly getDrafts={getDrafts} onCreate={vi.fn()} onEdit={onEdit} />);
+  expect(await screen.findByText("Hello Kellie")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Email drafts" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Create Email" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /Next year's fair/ }));
+  expect(onEdit).not.toHaveBeenCalled();
+  expect(api.apiGet).not.toHaveBeenCalled();
+});

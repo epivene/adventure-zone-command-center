@@ -3,26 +3,30 @@ export function ProfileWorkspaceActions({
   onOpenEmails,
   onAddNote,
   onAssistant,
+  readOnly = false,
+  emailCount,
 }: {
   onFollowUp(): void;
   onOpenEmails(): void;
   onAddNote(): void;
   onAssistant(): void;
+  readOnly?: boolean;
+  emailCount?: number;
 }) {
   return (
     <div aria-label="Profile actions" className="flex flex-wrap gap-2">
-      <button type="button" className="button-primary" onClick={onFollowUp}>
+      {!readOnly ? <button type="button" className="button-primary" onClick={onFollowUp}>
         Follow up
-      </button>
-      <button type="button" className="button-secondary" onClick={onOpenEmails}>
+      </button> : null}
+      <button type="button" className="button-secondary" onClick={onOpenEmails} aria-label={emailCount === undefined ? undefined : `${emailCount} Emails`}>
         Open emails
       </button>
-      <button type="button" className="button-secondary" onClick={onAddNote}>
+      {!readOnly ? <button type="button" className="button-secondary" onClick={onAddNote}>
         Add note
-      </button>
-      <button type="button" className="button-secondary" onClick={onAssistant}>
+      </button> : null}
+      {!readOnly ? <button type="button" className="button-secondary" onClick={onAssistant}>
         Assistant
-      </button>
+      </button> : null}
     </div>
   );
 }
