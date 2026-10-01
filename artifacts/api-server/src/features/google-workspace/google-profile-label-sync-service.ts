@@ -67,8 +67,12 @@ function failureState(code: string): "retryable_error" | "permanent_error" | "co
   return "retryable_error";
 }
 
-export function gmailMutationRetryDelayMs(attempt: number): number {
-  return Math.min(60 * 60_000, 30_000 * 2 ** Math.max(0, attempt - 1));
+export function gmailMutationRetryDelayMs(attempt: number, error?: unknown): number {
+  const seconds = error && typeof error === "object" && "retryAfterSeconds" in error
+    ? (error as { retryAfterSeconds?: unknown }).retryAfterSeconds : undefined;
+  const providerDelay = typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0
+    ? seconds * 1000 : 0;
+  return Math.max(providerDelay, Math.min(60 * 60_000, 30_000 * 2 ** Math.max(0, attempt - 1)));
 }
 
 export class GoogleProfileLabelSyncService
@@ -229,7 +233,7 @@ implements GoogleProfileLabelSyncServicePort {
         errorCode: code,
         nextAttemptAt:
           state === "retryable_error"
-            ? new Date(now.getTime() + gmailMutationRetryDelayMs(claimed.attemptCount))
+            ? new Date((this.dependencies.now?.() ?? new Date()).getTime() + gmailMutationRetryDelayMs(claimed.attemptCount, error))
             : null,
         now,
       });
