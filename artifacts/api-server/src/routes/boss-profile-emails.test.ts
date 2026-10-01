@@ -2,11 +2,13 @@ import express from "express";
 import request from "supertest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ session: vi.fn(), select: vi.fn(), where: vi.fn(), mappings: vi.fn(), owns: vi.fn(), thread: vi.fn() }));
+const mocks = vi.hoisted(() => ({ session: vi.fn(), select: vi.fn(), where: vi.fn(), mappings: vi.fn(), owns: vi.fn(), thread: vi.fn(), listProfiles: vi.fn() }));
 vi.mock("@workspace/db", () => ({ db: { select: mocks.select }, pool: {} }));
 vi.mock("@/features/boss/boss-account-repository", () => ({ DrizzleBossAccountRepository: class { getActiveSession = mocks.session; } }));
 vi.mock("@/features/office/office-profile-service", () => ({ OfficeProfileService: class {} }));
-vi.mock("@/features/google-workspace/google-connection-repository", () => ({ PostgresGoogleConnectionRepository: class { async createReadClient() { return { getThreadDetail: mocks.thread }; } } }));
+vi.mock("@/features/google-workspace/google-profile-email-archive-service", () => ({ GoogleProfileEmailArchiveService: class { archiveApprovedThread = mocks.thread; } }));
+vi.mock("@/features/google-workspace/google-profile-label-validation-import", () => ({ GoogleProfileLabelValidationImportService: class { async reconcileOrganization() { return []; } } }));
+vi.mock("@/features/boss/boss-profile-view", () => ({ listBossProfileDirectory: mocks.listProfiles }));
 vi.mock("@/features/google-workspace/google-validation-repository", () => ({ PostgresGoogleValidationRepository: class { listApprovedForOrganization = mocks.mappings; organizationOwnsApprovedThread = mocks.owns; } }));
 import { issueBossToken } from "@/features/boss/boss-auth";
 import router from "./boss-profiles";
@@ -22,7 +24,8 @@ beforeEach(() => {
   mocks.where.mockReturnValue({ orderBy: async () => [{ id: "draft-1", subject: "Fair plans", body: "Draft body", state: "draft" }] });
   mocks.mappings.mockResolvedValue([]);
   mocks.owns.mockResolvedValue(true);
-  mocks.thread.mockResolvedValue({ id: "thread-1", messages: [] });
+  mocks.thread.mockResolvedValue({ id: "saved-thread-1", subject: "Fair plans", archiveState: "complete", messages: [] });
+  mocks.listProfiles.mockResolvedValue({ records: [], families: [], travelLegs: [], total: 0, page: 1, pageSize: 50, pageCount: 1 });
 });
 afterEach(() => vi.unstubAllEnvs());
 it("requires an active Boss session for both drafts and conversations", async () => {
@@ -51,9 +54,20 @@ it("reuses approved profile matching and rejects unrelated threads", async () =>
   mocks.owns.mockResolvedValueOnce(false);
   expect((await request(app).get(`${base}/other-thread`).set("Authorization", auth())).status).toBe(404);
   expect(mocks.thread).toHaveBeenCalledTimes(1);
+  expect(mocks.thread).toHaveBeenCalledWith({ organizationId: profileId, contactId: null, gmailThreadId: "thread-1" });
 });
 it("does not expose file writes through the Boss read-only router", async () => {
   expect((await request(app).post(`/boss/google-workspace/profiles/${profileId}/threads/thread-1/copy-files`).set("Authorization", auth())).status).toBe(404);
   expect((await request(app).get('/boss/profiles/invalid/email-drafts').set("Authorization", auth())).status).toBe(400);
   expect(mocks.select).not.toHaveBeenCalled();
+});
+
+it("uses admin directory sorting and filters within the Boss role", async () => {
+  expect((await request(app).get("/boss/profiles?sort=name_desc")).status).toBe(401);
+  expect(mocks.listProfiles).not.toHaveBeenCalled();
+  const response = await request(app).get("/boss/profiles?sort=name_desc&page=2&pageSize=12&type=fair&lastResort=only&activity=filler").set("Authorization", auth());
+  expect(response.status).toBe(200);
+  expect(mocks.listProfiles).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+    sort: "name_desc", page: 2, pageSize: 12, placeType: "fair", lastResort: "all", filler: "all", includeRetired: false,
+  }));
 });
