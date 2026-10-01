@@ -12,7 +12,7 @@ const client = vi.hoisted(() => ({
 
 vi.mock("@/features/google-workspace/google-workspace-client", () => client);
 
-import { ProfileGoogleEmailPanel } from "./profile-google-email-panel";
+import { ProfileGoogleEmailPanel, ProfileGoogleConversationCard } from "./profile-google-email-panel";
 
 const storedFile = {
   id: "file-1",
@@ -256,5 +256,21 @@ describe("ProfileGoogleEmailPanel", () => {
       "_blank",
       "noopener,noreferrer",
     );
+  });
+});
+
+describe("Boss read-only conversation transport", () => {
+  it("opens the shared reader through Boss without exposing email mutations", async () => {
+    const getBossThread = vi.fn(async () => client.getGoogleProfileEmailThread.getMockImplementation()!());
+    render(<ProfileGoogleConversationCard organizationId="org-1" conversation={conversation("thread-1", 2026)}
+      readOnly getThread={getBossThread} onFilesCopied={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "2026 Twin Falls County Fair thread-1" }));
+    expect(await screen.findByText("We would like to book you again.")).toBeInTheDocument();
+    expect(getBossThread).toHaveBeenCalledWith("org-1", "thread-1");
+    expect(client.getGoogleProfileEmailThread).not.toHaveBeenCalled();
+    expect(screen.getByText("application.pdf")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save attachments to Files" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send reply" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 });

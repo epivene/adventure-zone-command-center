@@ -34,11 +34,13 @@ function ThreadDetail({
   thread,
   onFilesCopied,
   onThreadUpdated,
+  readOnly = false,
 }: {
   organizationId: string;
   thread: GoogleThreadDetail;
   onFilesCopied(files: GoogleProfileFile[]): void;
   onThreadUpdated(thread: GoogleThreadDetail): void;
+  readOnly?: boolean;
 }) {
   const [copying, setCopying] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -49,6 +51,7 @@ function ThreadDetail({
   const savedLabel = savedCopyLabel(thread);
 
   async function saveAttachments() {
+    if (readOnly) return;
     setCopying(true);
     setCopyError(null);
     try {
@@ -63,7 +66,7 @@ function ThreadDetail({
 
   async function sendReply() {
     const bodyText = replyText.trim();
-    if (!bodyText || !thread.conversationId) return;
+    if (readOnly || !bodyText || !thread.conversationId) return;
     setReplying(true);
     setReplyError(null);
     try {
@@ -92,7 +95,7 @@ function ThreadDetail({
           Complete conversation · {thread.messages.length} message{thread.messages.length === 1 ? "" : "s"}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          {attachments.length > 0 ? (
+          {!readOnly && attachments.length > 0 ? (
             <button
               className="button-secondary px-3 py-1.5 text-xs"
               disabled={copying}
@@ -158,7 +161,7 @@ function ThreadDetail({
           ) : null}
         </article>
       ))}
-      {thread.conversationId ? (
+      {!readOnly && thread.conversationId ? (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/50">
           <label
             className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300"
@@ -200,11 +203,15 @@ export function ProfileGoogleConversationCard({
   conversation,
   onFilesCopied,
   compact = false,
+  getThread = getGoogleProfileEmailThread,
+  readOnly = false,
 }: {
   organizationId: string;
   conversation: GoogleProfileEmailConversation;
   onFilesCopied(files: GoogleProfileFile[]): void;
   compact?: boolean;
+  getThread?: typeof getGoogleProfileEmailThread;
+  readOnly?: boolean;
 }) {
   const [thread, setThread] = useState<GoogleThreadDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -219,7 +226,7 @@ export function ProfileGoogleConversationCard({
     setError(null);
     try {
       setThread(
-        await getGoogleProfileEmailThread(organizationId, conversation.threadId),
+        await getThread(organizationId, conversation.threadId),
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not open Gmail thread.");
@@ -229,7 +236,7 @@ export function ProfileGoogleConversationCard({
   }
 
   return (
-    <article className={`${compact ? "rounded-md border-[#d8d1c4] bg-[#f6f2e9] p-2" : "rounded-xl border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40"} border`}>
+    <article className={`${compact ? "rounded-md border-border bg-muted p-2" : "rounded-xl border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40"} border`}>
       <button
         aria-expanded={Boolean(thread)}
         aria-label={conversation.subject || "Open email conversation"}
@@ -262,6 +269,7 @@ export function ProfileGoogleConversationCard({
         <ThreadDetail
           onFilesCopied={onFilesCopied}
           onThreadUpdated={setThread}
+          readOnly={readOnly}
           organizationId={organizationId}
           thread={thread}
         />

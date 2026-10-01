@@ -1,105 +1,79 @@
 import { useEffect, useState } from "react";
-import { Link, useSearch } from "wouter";
-import { LoaderCircle, MapPin, Search } from "lucide-react";
+import { useSearch } from "wouter";
 import { bossGet } from "@/lib/boss-auth-context";
 import { BossProfileDirectoryNav } from "@/components/boss/boss-profile-directory-nav";
+import { OrganizationList } from "@/components/organizations/organization-list";
+import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
+import type { OrganizationListPage } from "@/features/organizations/organization-repository";
+import { readProfileReturnState } from "@/lib/profile-navigation";
 
-type ProfileRecord = {
-  id: string;
-  name: string;
-  city: string | null;
-  region: string | null;
-  primaryContactName: string | null;
-  contactCount: number;
-  bookingCount: number;
-  locationCount: number;
+type Directory = OrganizationListPage & {
+  families: Array<{ id: string; name: string; memberCount: number }>;
+  travelLegs: Array<{ id: string; name: string; color: string }>;
 };
-type Family = { id: string; name: string; description: string | null; memberCount: number; matchedMemberCount: number };
-type Page = { records: ProfileRecord[]; families: Family[]; total: number; page: number; pageCount: number };
 
 export default function BossProfilesPage() {
   const search = useSearch();
-  const params = new URLSearchParams(search);
-  const [query, setQuery] = useState(() => params.get("q") ?? "");
-  const [page, setPage] = useState(() => Math.max(1, Number(params.get("page") ?? 1) || 1));
-  const [data, setData] = useState<Page | null>(null);
+  const query = organizationListQuerySchema.parse({
+    ...Object.fromEntries(new URLSearchParams(search)),
+    lastResort: "all", filler: "all", includeRetired: undefined,
+  });
+  const [data, setData] = useState<Directory | null>(null);
   const [error, setError] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    setIsSearching(true);
-    const timeout = window.setTimeout(() => {
-      const qs = new URLSearchParams();
-      const term = query.trim();
-      if (term) qs.set("q", term);
-      if (page > 1) qs.set("page", String(page));
-      bossGet<Page>(`/boss/profiles?${qs}`)
-        .then((next) => { if (active) { setData(next); setError(""); } })
-        .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load profiles."); })
-        .finally(() => { if (active) setIsSearching(false); });
-    }, query.trim() ? 150 : 0);
-    return () => { active = false; window.clearTimeout(timeout); };
-  }, [query, page]);
+    setLoading(true);
+    setError("");
+    void bossGet<Directory>(`/boss/profiles?${new URLSearchParams(search)}`)
+      .then((next) => { if (active) setData(next); })
+      .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load profiles."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [search]);
+
+  useEffect(() => {
+    if (loading || !data) return;
+    const saved = readProfileReturnState();
+    if (saved?.path !== window.location.pathname + window.location.search) return;
+    const frame = requestAnimationFrame(() => window.scrollTo(0, saved.scrollY));
+    return () => cancelAnimationFrame(frame);
+  }, [loading, data]);
+
+  const families = data?.families ?? [];
+  const familySection = families.length ? (
+    <details className="rounded-xl border border-border bg-card p-4">
+      <summary className="cursor-pointer font-bold">Event Families ({families.length})</summary>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">{families.map((family) => (
+        <div className="rounded-lg border border-border p-3" key={family.id}>
+          <p className="font-bold">{family.name}</p>
+          <p className="text-sm text-muted-foreground">{family.memberCount} linked profiles</p>
+        </div>
+      ))}</div>
+    </details>
+  ) : null;
+  const organizations = data ? {
+    ...data,
+    records: data.records.map((record) => ({
+      ...record,
+      lastResort: false, lastResortReason: null, lastResortChangedAt: null,
+      filler: false, fillerReason: null, fillerChangedAt: null, matchedLocation: null,
+    })),
+  } : null;
 
   return (
-    <div className="grid min-w-0 gap-5" data-testid="boss-profiles-page">
+    <div className="mx-auto grid min-w-0 max-w-7xl gap-5" data-testid="boss-profiles-page">
       <header>
-        <p className="text-xs font-bold uppercase tracking-widest text-primary">Boss</p>
-        <h1 className="mt-1 text-2xl font-bold">Profiles</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Event organizations, contacts, locations, bookings, and history.</p>
+        <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">Relationships</p>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight">Profiles</h1>
+        <p className="mt-2 max-w-2xl text-muted-foreground">Events, fairs, companies, venues, schools, cities, and other places all live together as profiles.</p>
       </header>
       <BossProfileDirectoryNav active="profiles" />
-      <div className="relative">
-        <label className="relative block min-w-0 w-full">
-          <span className="sr-only">Search profiles</span>
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input aria-label="Search profiles" className="w-full rounded-lg border border-input bg-background py-2 pr-10" onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search profiles, contacts, or cities" style={{ paddingLeft: "3rem" }} value={query} />
-          {isSearching ? <span aria-label="Searching profiles" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-primary" role="status"><LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" /></span> : null}
-        </label>
-      </div>
-      {error ? <p className="rounded-xl bg-destructive/10 p-4 text-destructive" role="alert">{error}</p> : null}
-      {data ? (
-        <>
-          {data.families.length ? (
-            <details className="rounded-xl border border-border bg-card p-4">
-              <summary className="cursor-pointer font-bold">Event Families ({data.families.length})</summary>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {data.families.map((family) => (
-                  <div className="rounded-lg border border-border p-3" key={family.id}>
-                    <p className="font-bold">{family.name}</p>
-                    <p className="text-sm text-muted-foreground">{family.memberCount} linked profile{family.memberCount === 1 ? "" : "s"}</p>
-                  </div>
-                ))}
-              </div>
-            </details>
-          ) : null}
-          <p className="text-sm text-muted-foreground">Showing {data.records.length} of {data.total} profiles</p>
-          <div className="grid gap-2">
-            {data.records.map((profile) => {
-              const location = [profile.city, profile.region].filter(Boolean).join(", ");
-              return (
-                <Link className="block min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm transition hover:border-primary/40" href={`/boss/profiles/${profile.id}`} key={profile.id}>
-                  <div className="min-w-0 w-full">
-                    <div className="min-w-0">
-                      <h2 className="break-words text-lg font-bold">{profile.name}</h2>
-                      <p className="mt-1 break-words text-sm text-muted-foreground">{location ? <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{location}</span> : "Location not set"}{profile.primaryContactName ? ` · ${profile.primaryContactName}` : ""}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{profile.contactCount} contacts · {profile.bookingCount} events · {profile.locationCount} locations</p>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-          {data.pageCount > 1 ? (
-            <nav aria-label="Profile pages" className="flex items-center justify-between">
-              {data.page > 1 ? <button className="button-secondary" onClick={() => setPage(data.page - 1)} type="button">Previous</button> : <span />}
-              <span className="text-sm text-muted-foreground">Page {data.page} of {data.pageCount}</span>
-              {data.page < data.pageCount ? <button className="button-secondary" onClick={() => setPage(data.page + 1)} type="button">Next</button> : <span />}
-            </nav>
-          ) : null}
-        </>
-      ) : !error ? <p className="text-sm text-muted-foreground">Loading profiles…</p> : null}
+      {error ? <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-destructive">{error}</p> : null}
+      {organizations ? <OrganizationList organizations={organizations} query={query}
+        travelLegs={data?.travelLegs ?? []} afterSearch={familySection} loading={loading}
+        basePath="/boss/profiles" showExports={false} showStrategyFilters={false} /> : loading ? <p>Loading profiles…</p> : null}
     </div>
   );
 }

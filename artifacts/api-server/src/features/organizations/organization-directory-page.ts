@@ -6,10 +6,13 @@ import {
   contacts,
   eventFamilyMembers,
   followUps,
+  eventDateFacts,
   organizationContacts,
   organizationLocations,
   organizations,
 } from "../../db/schema";
+import { resolveEffectiveEventDate } from "@/features/event-date-coverage/effective-event-date";
+import type { EffectiveEventDate } from "@/features/event-date-coverage/event-date-types";
 import type { OrganizationListQuery } from "./last-resort-input";
 
 type MatchedOrganizationLocation = {
@@ -50,6 +53,7 @@ type OrganizationListPage = {
     primaryContactName: string | null;
     primaryContactEmail: string | null;
     primaryContactPhone: string | null;
+    effectiveEventDate: EffectiveEventDate | null;
     nextEventDate: Date | null;
     applicationDeadline: string | null;
     pipelineStatus: string | null;
@@ -416,6 +420,12 @@ export async function listOrganizationDirectoryPage(
     where o.id in (${idList})
   `);
 
+  const [dateBookings, dateFacts] = await Promise.all([
+    db.select({ id: bookings.id, organizationId: bookings.organizationId, startsAt: bookings.startsAt, endsAt: bookings.endsAt, status: bookings.status })
+      .from(bookings).where(inArray(bookings.organizationId, organizationIds)),
+    db.select().from(eventDateFacts).where(and(inArray(eventDateFacts.organizationId, organizationIds), eq(eventDateFacts.active, true))),
+  ]);
+  const today = new Date().toISOString().slice(0, 10);
   const contactCountByOrganization = new Map(contactCounts.map((record) => [record.organizationId, record.value]));
   const bookingCountByOrganization = new Map(
     bookingCounts.filter((record) => record.organizationId !== null).map((record) => [record.organizationId!, record.value]),
@@ -465,6 +475,14 @@ export async function listOrganizationDirectoryPage(
         primaryContactName: contact?.name ?? null,
         primaryContactEmail: contact?.email ?? null,
         primaryContactPhone: contact?.phone ?? null,
+        effectiveEventDate: resolveEffectiveEventDate({
+          today,
+          bookings: dateBookings.filter((booking) => booking.organizationId === organization.id).map((booking) => ({
+            id: booking.id, startsOn: booking.startsAt?.toISOString().slice(0, 10) ?? null,
+            endsOn: booking.endsAt?.toISOString().slice(0, 10) ?? null, status: booking.status,
+          })),
+          facts: dateFacts.filter((fact) => fact.organizationId === organization.id),
+        }),
         nextEventDate: decision?.nextEventDate ?? null,
         applicationDeadline: decision?.applicationDeadline ?? null,
         pipelineStatus: pipeline,
