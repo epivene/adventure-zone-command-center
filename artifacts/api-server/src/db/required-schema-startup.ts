@@ -1,3 +1,4 @@
+import { ensureBookingWorkSchemaBeforeListen } from "./booking-work-required-startup";
 import { ensureChatGPTConnectionSchemaBeforeListen } from "./chatgpt-connection-required-startup";
 import { runStartupStep } from "../lib/startup-step";
 import { ensureEventReviewDismissalSchemaBeforeListen } from "./event-review-dismissal-required-startup";
@@ -58,6 +59,7 @@ function systemSleep(delayMs: number): Promise<void> {
 
 export async function runRequiredSchemaStartup(dependencies?: {
   run?: RequiredStepRunner;
+  ensureBookingWork?: RequiredStep;
   ensurePaperNotes?: RequiredStep;
   ensureGoogleWorkspace?: RequiredStep;
   ensureLeadIntake?: RequiredStep;
@@ -99,6 +101,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
       }
     }
   };
+  await runRequired("required booking work schema", dependencies?.ensureBookingWork ?? ensureBookingWorkSchemaBeforeListen);
   if (process.env.CHATGPT_CONNECTION_ENABLED === "true" || dependencies?.ensureChatGPTConnection) {
     await runRequired("required ChatGPT connection schema", dependencies?.ensureChatGPTConnection ?? ensureChatGPTConnectionSchemaBeforeListen);
   }

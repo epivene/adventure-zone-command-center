@@ -1,3 +1,4 @@
+import { BookingWorkService } from "../booking-work/service";
 import { ProfileMergeService } from "./profile-merge-service";
 import { randomUUID } from "node:crypto";
 import { it, expect, vi } from "vitest";
@@ -30,6 +31,7 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
   const f = await fixture();
   try {
     const services = {
+      work: new BookingWorkService(f.db),
       reads: new ConnectionReadService(f.db),
       notes: new LeadNoteService(f.db),
       updates: new ProfileUpdateService(f.db),

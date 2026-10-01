@@ -1,7 +1,8 @@
 import assistantWorkspaceRouter from "./assistant-workspace";
 import { createOutreachPlannerRouter } from "./outreach-planner";
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
+import { createBookingWorkRouter } from "./booking-work";
 import healthRouter from "./health";
 import todayRouter from "./today";
 import assistantRouter from "./assistant";
@@ -258,6 +259,7 @@ router.use(officeAdminAccountsRouter);
 router.use(marketingRouter);
 router.use(bossAdminAccountsRouter);
 router.use(officeAdminTasksRouter);
+router.use("/booking-work", createBookingWorkRouter(pool));
 router.use(officeAdminMailRouter);
 router.use(officeAdminEmailDraftsRouter);
 router.use(officeAdminMessagesRouter);

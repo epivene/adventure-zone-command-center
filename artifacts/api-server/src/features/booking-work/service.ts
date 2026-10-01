@@ -1,0 +1,260 @@
+import { z } from "zod";
+import {
+  activeConnection,
+  requireConnectionScope,
+  ConnectionError,
+  transaction,
+  type ConnectionDatabase,
+  type ConnectionPrincipal,
+  type SqlQuery,
+} from "../chatgpt-connection/contracts";
+import { OperationStore } from "../chatgpt-connection/operation-store";
+import { receipt } from "../chatgpt-connection/lead-note-service";
+import { profileRow } from "../chatgpt-connection/read-service";
+import { BookingWorkRepository, WorkConflict } from "./repository";
+import {
+  createWorkSchema,
+  patchWorkSchema,
+  actorSchema,
+  terminal,
+  type CreateWork,
+  type PatchWork,
+  type WorkActor,
+  type WorkFilter,
+  type WorkActivity,
+} from "./contracts";
+export const workKeySchema = z
+  .object({
+    id: z.string().uuid(),
+    revision: z.number().int().positive(),
+    requestKey: z.string().trim().min(1).max(200),
+  })
+  .strict();
+type Key = z.infer<typeof workKeySchema>;
+export class BookingWorkService {
+  constructor(private db: ConnectionDatabase) {}
+  async list(p: ConnectionPrincipal, f: WorkFilter) {
+    requireConnectionScope(p, "crm:read");
+    await activeConnection(this.db, p);
+    return new BookingWorkRepository(this.db).list(f);
+  }
+  async read(p: ConnectionPrincipal, id: string) {
+    requireConnectionScope(p, "crm:read");
+    await activeConnection(this.db, p);
+    return this.get(this.db, z.string().uuid().parse(id));
+  }
+  private async get(tx: SqlQuery, id: string) {
+    const a = await new BookingWorkRepository(tx).read(id);
+    if (!a) throw new ConnectionError("WORK_NOT_FOUND", 404);
+    return a;
+  }
+  private async current(tx: SqlQuery, k: { id: string; revision: number }) {
+    const before = await this.get(tx, k.id);
+    await profileRow(tx, before.profileId, true);
+    const a = await this.get(tx, k.id);
+    if (a.revision !== k.revision || a.profileId !== before.profileId)
+      throw new WorkConflict(a);
+    if (terminal(a.status)) throw new ConnectionError("WORK_CLOSED", 409);
+    return a;
+  }
+  private async association(tx: SqlQuery, i: CreateWork) {
+    await profileRow(tx, i.profileId, true);
+    if (i.bookingId) {
+      const b = (
+        await tx.query(
+          "SELECT organization_id,starts_at,ends_at FROM bookings WHERE id=$1",
+          [i.bookingId],
+        )
+      ).rows[0];
+      if (
+        !b ||
+        b.organization_id !== i.profileId ||
+        !b.starts_at ||
+        !(
+          new Date(b.starts_at).getUTCFullYear() <= i.eventYear &&
+          new Date(b.ends_at ?? b.starts_at).getUTCFullYear() >= i.eventYear
+        )
+      )
+        throw new ConnectionError("WORK_BOOKING_MISMATCH", 409);
+    }
+  }
+  private async links(tx: SqlQuery, a: WorkActivity, patch: PatchWork) {
+    for (const l of patch.links ?? []) {
+      if (l.kind === "email") continue;
+      let rows: any[];
+      if (l.kind === "draft")
+        rows = (
+          await tx.query(
+            "SELECT id,content->>'eventYear' AS event_year,content->>'bookingId' AS booking_id FROM chatgpt_external_drafts WHERE id=$1 AND owner_id='owner' AND content->>'organizationId'=$2",
+            [l.recordId, a.profileId],
+          )
+        ).rows;
+      else if (l.kind === "document")
+        rows = (
+          await tx.query(
+            "SELECT document_id,booking_id FROM business_document_links WHERE document_id=$1 AND organization_id=$2",
+            [l.recordId, a.profileId],
+          )
+        ).rows;
+      else
+        rows = (
+          await tx.query(
+            "SELECT id,booking_id FROM follow_ups WHERE id=$1 AND organization_id=$2",
+            [l.recordId, a.profileId],
+          )
+        ).rows;
+      if (!rows.length) throw new ConnectionError("WORK_LINK_MISMATCH", 409);
+      for (const row of rows) {
+        if (row.event_year != null && Number(row.event_year) !== a.eventYear)
+          throw new ConnectionError("WORK_LINK_MISMATCH", 409);
+        if (row.booking_id) {
+          try {
+            await this.association(tx, {
+              profileId: a.profileId,
+              eventYear: a.eventYear,
+              bookingId: row.booking_id,
+              queue: a.queue,
+              title: a.title,
+              nextAction: a.nextAction,
+            });
+          } catch (e) {
+            if (
+              e instanceof ConnectionError &&
+              e.code === "WORK_BOOKING_MISMATCH"
+            )
+              throw new ConnectionError("WORK_LINK_MISMATCH", 409);
+            throw e;
+          }
+        }
+      }
+    }
+  }
+  async claim(
+    p: ConnectionPrincipal,
+    raw: CreateWork & { requestKey: string },
+  ) {
+    requireConnectionScope(p, "crm:append");
+    const { requestKey, ...i } = raw;
+    const input = createWorkSchema.parse(i);
+    return new OperationStore(this.db).perform(
+      p,
+      "claim_booking_work",
+      { requestKey },
+      input,
+      async (tx) => {
+        await this.association(tx, input);
+        const result = await new BookingWorkRepository(tx).createOrGet(input, {
+          kind: "connection",
+          id: p.connectionId,
+        });
+        return receipt(
+          tx,
+          result.activity.id,
+          `/profiles/${result.activity.profileId}`,
+          String(result.activity.revision),
+          result,
+        );
+      },
+    );
+  }
+  private async mutate(
+    p: ConnectionPrincipal,
+    operation: string,
+    k: Key,
+    patch: PatchWork,
+    mode: "update" | "release" | "claim",
+  ) {
+    requireConnectionScope(p, "crm:update");
+    workKeySchema.parse(k);
+    return new OperationStore(this.db).perform(
+      p,
+      operation,
+      { requestKey: k.requestKey },
+      { id: k.id, revision: k.revision, patch },
+      async (tx) => {
+        const a = await this.current(tx, k);
+        const mine =
+          a.assignedTo?.kind === "connection" &&
+          a.assignedTo.id === p.connectionId;
+        if (mode === "claim" ? a.assignedTo !== null : !mine)
+          throw new ConnectionError("WORK_NOT_ASSIGNED", 409);
+        await this.links(tx, a, patch);
+        const assigned =
+          mode === "release"
+            ? null
+            : { kind: "connection" as const, id: p.connectionId };
+        const b = await new BookingWorkRepository(tx).patch(
+          k.id,
+          k.revision,
+          patch,
+          assigned,
+        );
+        return receipt(
+          tx,
+          b.id,
+          `/profiles/${b.profileId}`,
+          String(b.revision),
+          b,
+        );
+      },
+    );
+  }
+  async update(p: ConnectionPrincipal, input: Key & { patch: PatchWork }) {
+    const { patch, ...k } = input;
+    return this.mutate(
+      p,
+      "update_booking_work",
+      k,
+      patchWorkSchema.parse(patch),
+      "update",
+    );
+  }
+  release(p: ConnectionPrincipal, k: Key) {
+    return this.mutate(p, "release_booking_work", k, {}, "release");
+  }
+  claimExisting(p: ConnectionPrincipal, k: Key) {
+    return this.mutate(p, "claim_existing_booking_work", k, {}, "claim");
+  }
+  async ownerCreate(raw: CreateWork) {
+    const i = createWorkSchema.parse(raw);
+    return transaction(this.db, async (tx) => {
+      await this.association(tx, i);
+      return new BookingWorkRepository(tx).createOrGet(i, {
+        kind: "owner",
+        id: "owner",
+      });
+    });
+  }
+  async ownerUpdate(id: string, revision: number, raw: PatchWork) {
+    const patch = patchWorkSchema.parse(raw);
+    return transaction(this.db, async (tx) => {
+      const a = await this.current(tx, { id, revision });
+      await this.links(tx, a, patch);
+      return new BookingWorkRepository(tx).patch(
+        id,
+        revision,
+        patch,
+        a.assignedTo,
+      );
+    });
+  }
+  async reassign(id: string, revision: number, raw: WorkActor | null) {
+    const actor = raw === null ? null : actorSchema.parse(raw);
+    return transaction(this.db, async (tx) => {
+      await this.current(tx, { id, revision });
+      if (actor?.kind === "owner" && actor.id !== "owner")
+        throw new ConnectionError("WORK_INVALID_ACTOR", 409);
+      if (
+        actor?.kind === "connection" &&
+        !(
+          await tx.query(
+            "SELECT id FROM chatgpt_connections WHERE id::text=$1 AND owner_id='owner' AND revoked_at IS NULL",
+            [actor.id],
+          )
+        ).rows.length
+      )
+        throw new ConnectionError("WORK_INVALID_ACTOR", 409);
+      return new BookingWorkRepository(tx).patch(id, revision, {}, actor);
+    });
+  }
+}

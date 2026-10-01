@@ -364,3 +364,21 @@ it("blocks in-app assistant drafts that require their own send-review reconcilia
   const p = await preview();
   expect(p.value.blockers.join(" ")).toContain("assistant_workspace_drafts");
 });
+
+it('blocks same-year active work and preserves both activities',async()=>{
+ const {ensureBookingWorkSchema}=await import('../../db/booking-work-schema');await ensureBookingWorkSchema(f.db);
+ for(const id of [f.profileId,duplicateId])await f.db.query("INSERT INTO booking_work_activities(profile_id,event_year,queue,title,next_action) VALUES($1,2027,'replies','Reply','Read')",[id]);
+ const p=await preview();expect(p.value.blockers.join(' ')).toContain('active booking work');
+ await expect(service.approve('owner',p.recordId,p.value.contentHash,true)).rejects.toThrow();
+ expect((await f.db.query('SELECT * FROM booking_work_activities')).rows).toHaveLength(2);
+});
+it('moves completed work and distinct-year work while invalidating changed previews',async()=>{
+ const {ensureBookingWorkSchema}=await import('../../db/booking-work-schema');await ensureBookingWorkSchema(f.db);
+ await f.db.query("INSERT INTO booking_work_activities(profile_id,event_year,queue,title,next_action,status) VALUES($1,2027,'replies','Done','Done','completed'),($1,2028,'replies','Next','Read','queued')",[duplicateId]);
+ const p=await preview();await f.db.query('UPDATE booking_work_activities SET revision=revision+1');
+ await expect(service.approve('owner',p.recordId,p.value.contentHash,true)).rejects.toMatchObject({code:'CONNECTION_STALE_MERGE'});
+ const p2=await service.preview(f.principal,{requestKey:'new-preview'},{primaryId:f.profileId,duplicateIds:[duplicateId],reason:'Verified same event',sources});
+ const a=await service.approve('owner',p2.recordId,p2.value.contentHash,true);
+ await service.apply(f.principal,{requestKey:'merge'},{proposalId:p2.recordId,approvalId:a.approvalId});
+ expect((await f.db.query('SELECT profile_id FROM booking_work_activities')).rows.every(r=>r.profile_id===f.profileId)).toBe(true);
+});
