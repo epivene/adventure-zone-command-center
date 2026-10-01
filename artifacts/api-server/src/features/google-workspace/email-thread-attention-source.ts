@@ -41,12 +41,35 @@ export async function readAttentionSource(messageId: string) {
     gmailConnectionId: before.id,
     threadId: detail.id,
     latestMessageId: latest.id,
-    sourceFingerprint: inputHash(messages),
+    // Gmail message IDs/content identify the reviewed source. Attachment download
+    // references and label-derived direction are retrieval state, not content.
+    sourceFingerprint: inputHash(
+      messages.map((message) => ({
+        id: message.id,
+        internalDateMs: message.internalDateMs,
+        from: message.from,
+        to: message.to,
+        cc: message.cc,
+        subject: message.subject,
+        date: message.date,
+        bodyText: message.bodyText,
+        attachments: (message.attachments ?? [])
+          .map((attachment) => ({
+            messageId: attachment.messageId,
+            filename: attachment.filename,
+            mimeType: attachment.mimeType,
+            sizeBytes: attachment.sizeBytes,
+          }))
+          .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+      })),
+    ),
     subject: detail.subject,
     from: latestMetadata.headers.from,
     to: latestMetadata.headers.to,
     internalDateMs: latestMetadata.internalDateMs,
-    hasAttachments: latestMetadata.hasAttachments,
+    hasAttachments: messages.some(
+      (message) => (message.attachments?.length ?? 0) > 0,
+    ),
     latestDirection: direction,
   };
 }
