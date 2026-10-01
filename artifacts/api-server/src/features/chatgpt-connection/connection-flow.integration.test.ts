@@ -105,6 +105,7 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
     const filing={previewId:preview.id,expectedRevision:preview.expectedRevision,requestKey:"attention-save"};
     const filed=await call("apply_email_profile_assignment",filing);
     expect(filed.record.state).toBe("needs_your_reply");
+    expect(await call("get_operation_receipt",{operationId:filed.operationId})).toEqual(filed);
     expect(await call("apply_email_profile_assignment",filing)).toEqual(filed);
     expect((await call("read_email_profile_assignment",{gmailConnectionId:attentionAccount,threadId:"attention-thread"})).operationId).toBe(filed.operationId);
     const sources = [
