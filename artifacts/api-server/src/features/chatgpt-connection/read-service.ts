@@ -1,3 +1,4 @@
+import { readOperational } from "./operational-reads";
 import { z } from "zod";
 import {
   activeConnection,
@@ -67,6 +68,9 @@ function cursorDecode(value: string | undefined, scope: unknown) {
 }
 export class ConnectionReadService {
   constructor(private db: ConnectionDatabase) {}
+  async operational(p: ConnectionPrincipal, input: unknown) {
+    return readOperational(this.db, p, input);
+  }
   private async authorize(p: ConnectionPrincipal) {
     requireConnectionScope(p, "crm:read");
     await activeConnection(this.db, p);

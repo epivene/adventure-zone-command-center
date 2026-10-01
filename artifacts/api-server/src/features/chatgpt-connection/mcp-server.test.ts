@@ -54,6 +54,9 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
   expect(list.status, list.text).toBe(200);
   expect(list.body.result.tools.map((t: any) => t.name).sort()).toEqual(
     [
+      "read_leg_schedule",
+      "read_route_plan",
+      "read_operational_resources",
       "search_profiles",
       "read_profile_context",
       "read_saved_document",
