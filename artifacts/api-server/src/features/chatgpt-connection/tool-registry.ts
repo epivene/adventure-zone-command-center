@@ -1,3 +1,4 @@
+import { mergeInputSchema, type ProfileMergeService } from "./profile-merge-service";
 import { operationalInput, scheduleSections, routeSections, resourceSections } from "./operational-reads";
 import { z } from "zod";
 import { eventDatesSchema } from "./research-details";
@@ -15,6 +16,7 @@ export type ConnectionServices = {
   updates: ProfileUpdateService;
   drafts: DraftFollowupService;
   operations: OperationStore;
+  merges: ProfileMergeService;
 };
 const id = z.string().uuid(),
   year = z.number().int().min(1900).max(2200).nullable(),
@@ -127,6 +129,23 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       description: "Edit an existing note body only when the owner requests cleanup. First read_profile_note in full and use its revision. Preserve dates, prices, agreements, payment facts, uncertainty and source links. Keep wording short; no AI/provider references. Original text is preserved in app note history and audit. Imported ACT notes cannot be edited. Does not change subject, timeline dates, bookings or event-date facts. Reuse requestKey for identical retries; stale revision means reread and reassess, never blindly overwrite.",
       schema: z.object({ requestKey, profileId: id, noteId: id, expectedRevision: z.string().min(1).max(100), body: z.string().trim().min(1).max(20000), reason: z.string().trim().min(1).max(1000) }).strict(),
       call: ({requestKey, ...a}) => s.notes.editNote(p, {requestKey}, a),
+    },
+    {
+      name: "preview_profile_merge",
+      scope: "crm:update",
+      description: "Prepare a duplicate-profile merge for owner review. Select the survivor and up to five verified duplicates; supply identity evidence. Similar names alone are insufficient. Returns linked-record counts, conflicts, blockers and an app approval link. Does not merge. Reuse requestKey on retries.",
+      schema: z.object({ ...mergeInputSchema.shape, requestKey }).strict(),
+      readOnly: false,
+      call: ({ requestKey, ...a }) => s.merges.preview(p, { requestKey }, a),
+    },
+    {
+      name: "apply_approved_profile_merge",
+      scope: "crm:update",
+      description: "Merge only the exact profiles approved by the owner on the app preview within 15 minutes. Requires its approval ID. Preserves linked records and source-profile history; removes duplicate profiles. Changed profiles or linked records require a fresh preview. Reuse requestKey after timeouts. Never approve on the owner's behalf.",
+      schema: z.object({requestKey, proposalId:id, approvalId:id}).strict(),
+      readOnly: false,
+      destructive: true,
+      call: ({ requestKey, ...a }) => s.merges.apply(p, {requestKey}, a),
     },
     {
       name: "propose_profile_update",

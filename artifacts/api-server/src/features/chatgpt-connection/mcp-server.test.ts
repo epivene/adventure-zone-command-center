@@ -63,6 +63,8 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
       "create_researched_lead",
       "append_research_note",
       "propose_profile_update",
+      "preview_profile_merge",
+      "apply_approved_profile_merge",
       "apply_approved_profile_update",
       "save_app_draft",
       "list_followups",
@@ -182,4 +184,10 @@ it("challenges an ungranted edit before invoking any note service", async () => 
   expect(JSON.parse(result.body.result.content[0].text).code).toBe("CONNECTION_ACCESS_DENIED");
   expect(result.body.result._meta["mcp/www_authenticate"][0]).toContain('scope="crm:read crm:append crm:update"');
   // No note methods exist in setup: falling through to a service cannot pass.
+});
+it("advertises merge tools but blocks an ungranted merge before service access",async()=>{
+  const {app}=setup(["crm:read"]);
+  const result=await rpc(app,"tools/call",{name:"apply_approved_profile_merge",arguments:{requestKey:"denied",proposalId:randomUUID(),approvalId:randomUUID()}});
+  expect(result.body.result.isError).toBe(true);
+  expect(JSON.parse(result.body.result.content[0].text).code).toBe("CONNECTION_ACCESS_DENIED");
 });

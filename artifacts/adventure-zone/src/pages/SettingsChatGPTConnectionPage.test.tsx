@@ -134,3 +134,57 @@ it("loads a receipt outside the first page and continues through older drafts", 
   expect(screen.getAllByText("Body old")).toHaveLength(1);
   expect(screen.queryByRole("button", { name: "Older drafts" })).toBeNull();
 });
+
+it("requires a same-event confirmation and approves the exact merge preview", async () => {
+  const content = {
+    kind: "profile_merge",
+    profileName: "County Fair",
+    primary: { id: "primary", name: "County Fair" },
+    duplicates: [
+      { id: "duplicate", name: "County Fair old", city: "Town", region: "UT" },
+    ],
+    reason: "Verified duplicate",
+    conflicts: [
+      {
+        field: "phone",
+        primaryValue: null,
+        duplicateId: "duplicate",
+        duplicateValue: "801-555-0100",
+      },
+    ],
+    references: [{ table: "activities", count: 7 }],
+    blockers: [],
+    policy: "Preserve original fields in merge history.",
+    sources: [],
+  };
+  client.connectionRequest.mockImplementation(async (path = "") => {
+    if (path === "/drafts") return { items: [], nextCursor: null };
+    if (path === "/proposals")
+      return {
+        items: [{ id: "merge", content, content_hash: "exact-hash" }],
+        nextCursor: null,
+      };
+    if (path === "/proposals/merge/approve-merge")
+      return { approvalId: "approved-merge" };
+    return { enabled: true, clients: [], connections: [], csrfToken: "csrf" };
+  });
+  render(<SettingsChatGPTConnectionPage />);
+  const button = await screen.findByRole("button", {
+    name: "Approve this exact merge",
+  });
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  expect(
+    screen.getByRole("link", { name: "County Fair old" }).getAttribute("href"),
+  ).toBe("/profiles/duplicate");
+  expect(screen.getByText("801-555-0100", { exact: false })).toBeTruthy();
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: /same event or organization/i }),
+  );
+  fireEvent.click(button);
+  await screen.findByText("approved-merge");
+  expect(client.connectionRequest).toHaveBeenCalledWith(
+    "/proposals/merge/approve-merge",
+    { contentHash: "exact-hash", confirmedSameEvent: true },
+    "csrf",
+  );
+});

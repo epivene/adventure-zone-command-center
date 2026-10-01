@@ -1,3 +1,5 @@
+import { ProfileMergeService } from "./profile-merge-service";
+import { randomUUID } from "node:crypto";
 import { it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
@@ -31,6 +33,7 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
       reads: new ConnectionReadService(f.db),
       notes: new LeadNoteService(f.db),
       updates: new ProfileUpdateService(f.db),
+      merges: new ProfileMergeService(f.db),
       drafts: new DraftFollowupService(f.db),
       operations: new OperationStore(f.db),
     };
@@ -183,6 +186,22 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
     expect(
       (await f.db.query("SELECT * FROM chatgpt_external_drafts")).rows,
     ).toHaveLength(1);
+    const duplicateId = randomUUID();
+    await f.db.query("INSERT INTO organizations(id,name,city,region) VALUES($1,'County Fair old','New Town','UT')",[duplicateId]);
+    const merge = await call("preview_profile_merge", {
+      requestKey:"merge-preview",primaryId:f.profileId,duplicateIds:[duplicateId],
+      reason:"Verified duplicate event",sources,
+    });
+    const settings=await request(app).get("/api/chatgpt-connection/").auth(owner,{type:"bearer"});
+    const approveMerge=()=>request(app).post(`/api/chatgpt-connection/proposals/${merge.recordId}/approve-merge`).auth(owner,{type:"bearer"});
+    expect((await approveMerge().send({contentHash:merge.value.contentHash,confirmedSameEvent:true})).status).toBe(403);
+    expect((await approveMerge().set("Origin","https://app.example").set("X-Connection-CSRF",settings.body.csrfToken)
+      .send({contentHash:merge.value.contentHash})).status).toBe(400);
+    const approvedMerge=await approveMerge().set("Origin","https://app.example").set("X-Connection-CSRF",settings.body.csrfToken)
+      .send({contentHash:merge.value.contentHash,confirmedSameEvent:true});
+    expect(approvedMerge.status,approvedMerge.text).toBe(200);
+    expect(approvedMerge.body.approvalId).toBeTruthy();
+    expect((await f.db.query("SELECT id FROM organizations WHERE id=$1",[duplicateId])).rows).toHaveLength(1);
     await f.db.query(
       "UPDATE chatgpt_rate_windows SET calls=300,window_start=date_trunc('minute',clock_timestamp()) WHERE connection_id=$1",
       [f.principal.connectionId],

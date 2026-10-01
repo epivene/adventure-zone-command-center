@@ -156,6 +156,7 @@ export class ProfileUpdateService {
           [proposalId],
         )
       ).rows[0];
+      if (row.content?.kind) throw new ConnectionError("CONNECTION_WRONG_PROPOSAL_TYPE", 409);
       if (
         row.consumed_at ||
         row.approved_at ||
@@ -201,6 +202,7 @@ export class ProfileUpdateService {
         )
           throw new ConnectionError("CONNECTION_APPROVAL_REQUIRED", 403);
         const content = row.content;
+        if (content?.kind) throw new ConnectionError("CONNECTION_WRONG_PROPOSAL_TYPE", 409);
         if (
           inputHash(content) !== row.content_hash ||
           content.connectionId !== p.connectionId ||

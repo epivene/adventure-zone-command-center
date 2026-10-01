@@ -53,6 +53,8 @@ it("has no runtime import path to app model, extraction, research or job modules
     "read-service",
     "lead-note-service",
     "profile-update-service",
+    "profile-merge-service",
+    "profile-merge-executor",
     "draft-followup-service",
     "operation-store",
   ])
