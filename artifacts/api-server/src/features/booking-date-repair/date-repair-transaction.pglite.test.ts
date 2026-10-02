@@ -74,3 +74,23 @@ it("filters a bounded review queue by independently proved season and reason",as
  const result=await service.queue({season:2027,reason:"INCOMPLETE_PUBLIC_WINDOW",limit:1} as never);
  expect(result.records.map(r=>r.bookingId)).toEqual([ids.booking]);expect(result.nextCursor).toBeNull();
 },30000);
+
+
+it("requires a fresh preview when the active-hold set changes through expiry",async()=>{
+ const service=await setup(),start=Date.now();
+ await fixture.pg.query("INSERT INTO outreach_holds VALUES($1,$2,$3,'2026-01-01','2026-01-02','[]','{}','active',$4::timestamptz)",[ids.split,ids.booking,ids.leg,new Date(start+60000).toISOString()]);
+ const p=await service.preview(proposal() as never,"owner");expect(p.impacts.blocked).toBe(true);
+ vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(start+120000);
+ await expect(service.apply(applyInput(p),"owner")).rejects.toMatchObject({status:409});
+},30000);
+
+
+it("cannot bypass a verified signed-window obligation by first changing raw dates through a legacy writer",async()=>{
+ const service=await setup(),first=await service.preview(proposal() as never,"owner");
+ await service.apply(applyInput(first),"owner");
+ await fixture.pg.query("UPDATE bookings SET status='contract_received',starts_at='2027-07-22T06:00:00Z' WHERE id=$1",[ids.booking]);
+ await fixture.pg.query("UPDATE activities SET body=body || ' Proposed changed start 2027-07-22' WHERE id=$1",[noteId]);
+ const changed=proposal();changed.endpoints[0].value="2027-07-22";
+ const p=await service.preview(changed as never,"owner");expect(p.impacts.blocked).toBe(true);
+ await expect(service.apply(applyInput(p,"legacy-bypass"),"owner")).rejects.toMatchObject({status:409});
+},30000);

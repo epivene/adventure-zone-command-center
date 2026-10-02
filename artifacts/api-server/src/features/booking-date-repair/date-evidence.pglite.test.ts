@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it } from "vitest";
-import { resolveBookingDates } from "./date-evidence";
+import { resolveBookingDates,dateEndpointInstant } from "./date-evidence";
 const bookingId = "00000000-0000-4000-8000-000000000001";
 describe("date provenance migration and SQL", () => {
   it("is additive, repeat-safe, and keeps sentinel imports out of effective overlap", async () => {
@@ -37,3 +37,14 @@ describe("date provenance migration and SQL", () => {
     } finally { await db.close(); }
   }, 30_000);
 });
+
+
+it("matches SQL for early supported years without throwing on padded ISO date components",async()=>{
+ const db=new PGlite();try{
+  await db.exec("create table bookings(id uuid primary key,starts_at timestamptz,ends_at timestamptz)");
+  await db.exec(await readFile(new URL("../../../../../lib/db/migrations/20261002_booking_date_provenance.sql",import.meta.url),"utf8"));
+  const result=await db.query<{value:string|null}>("SELECT booking_date_iso(booking_date_value('0001-01-01','inclusive_date','public_start')) value");
+  let value:string|null;try{value=dateEndpointInstant("0001-01-01","inclusive_date","public_start");}catch{value="conversion threw";}
+  expect(value).toEqual(result.rows[0].value);
+ }finally{await db.close();}
+},30000);
