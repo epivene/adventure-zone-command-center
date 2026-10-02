@@ -11,6 +11,7 @@ import { ScoutAlertsSection, type ScoutAlertView } from "@/components/today/scou
 import { BUSINESS_TIME_ZONE, classifyBusinessDueDate } from "@/lib/business-date";
 import { classifyTodayEventTiming } from "@/features/today/today-summary-labels";
 import { deriveTodayFocus } from "@/features/today/today-focus";
+import { LegCallList } from "@/components/today/leg-call-list";
 import { OutreachPlanner } from "@/components/today/outreach-planner";
 import { getLaterFollowUpCount } from "@/features/today/follow-up-counts";
 
@@ -282,6 +283,7 @@ export default function TodayPage() {
         ) : null}
       </section>
 
+      <LegCallList followUps={followUps} followUpTotal={dashboard.followUpTotal} now={now} />
       <OutreachPlanner />
 
       {visibleRouteWarningCount > 0 ? (
