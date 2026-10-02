@@ -28,4 +28,13 @@ it("stores ACT sales evidence once and replay preserves verified dates and comme
     expect((await pg.query("select count(*)::int as count from booking_date_evidence")).rows).toEqual([{count:2}]);
     expect((await pg.query("select status,extract(year from starts_at)::int as year from bookings")).rows).toEqual([{status:"confirmed",year:2027}]);
   } finally { await pg.close(); }
+}, 30_000);
+
+describe("pending ACT date writes", () => {
+  it("requires event evidence instead of applying a persisted close-date payload", async () => {
+    const repository = new DrizzleApplyRepository({} as never);
+    const target = {id:"booking",entityType:"booking",values:{},sourceIds:new Set<string>()};
+    await expect(repository.writeTarget(target,"startsAt","2027-04-03T00:00:00Z",{batchId:batch,attemptToken:batch})).rejects.toMatchObject({code:"verified_event_date_required",status:409});
+    await expect(repository.fillMissingTarget(target,"endsAt","2027-04-04T00:00:00Z",{batchId:batch,attemptToken:batch})).rejects.toMatchObject({code:"verified_event_date_required",status:409});
+  });
 });

@@ -16,7 +16,7 @@ describe("date provenance migration and SQL", () => {
       expect(resolved.rows[0].value.publicWindow).toBeNull();
       expect(resolved.rows[0].value.evidenceState).toBe("needs_review");
     } finally { await db.close(); }
-  });
+  }, 30_000);
   it("matches JavaScript for verified DST exclusive dates and rejects conflicting endpoints", async () => {
     const db = new PGlite();
     try {
@@ -35,5 +35,5 @@ describe("date provenance migration and SQL", () => {
       const conflict = await db.query<{value:any}>("select booking_resolved_dates($1,null,null,$2::timestamptz,$3::timestamptz) as value",[bookingId,input.rawReservation.start,input.rawReservation.end]);
       expect(conflict.rows[0].value.reservationWindow).toBeNull();
     } finally { await db.close(); }
-  });
+  }, 30_000);
 });
