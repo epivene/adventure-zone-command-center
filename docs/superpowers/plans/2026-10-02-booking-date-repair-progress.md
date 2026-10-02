@@ -34,3 +34,5 @@ Task 3: map regression RED after fixture correction in job110709516000. Implemen
 Ruling: fictional existing test fixtures receive explicit reviewed all-day semantics for their calendar-date literals, and timestamp semantics for timed instants; test-only triggers follow synthetic date updates — product code never infers provenance this way — cost if wrong: fixture intent must be corrected case by case rather than weakening production resolution.
 
 Task 3: RED real coverage projection and profile window checks confirmed in job110709999747 (3 failed,35passed). Implement additive provenance in booking/profile responses. Map/readiness/calendar/startup checks now green. Add focused resource-unknown and frontend review-visibility regressions before final reader integration.
+
+Ruling: finish native test iterations on a temporary verification branch, then fast-forward the original draft-PR branch to the final tested commit — each draft synchronization triggered many unrelated repository workflows and delayed/redoubled checks — cost if wrong: the draft PR temporarily shows the earlier checkpoint; retain exact ancestry and synchronize before delivery.

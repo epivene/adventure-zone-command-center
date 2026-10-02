@@ -12,7 +12,7 @@ on:
       - "tsconfig*.json"
       - ".github/workflows/booking-date-repair.yml"
   push:
-    branches: [main, feat/booking-date-provenance-repair]
+    branches: [main, work/booking-date-provenance-native]
     paths:
       - "artifacts/adventure-zone/**"
       - "artifacts/api-server/**"
