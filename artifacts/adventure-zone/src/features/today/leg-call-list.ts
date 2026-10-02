@@ -33,6 +33,7 @@ export type LegCallRow = {
   dueAt: string | null;
   questions: string[];
   priority: number;
+  manualRank: number;
 };
 const tiers = { dedicated: 0, convention: 1, strong: 2, filler: 3, unclassified: 4 };
 const time = (value: Date | string | null | undefined) => value ? new Date(value).getTime() : NaN;
@@ -84,7 +85,7 @@ export function buildLegCallList(
       season: years.size === 1 ? [...years][0] : null, legId: leg?.id ?? null,
       legName: leg?.name ?? "Leg needs review", reason: followUp.kind,
       reviewReason: null, packages: [], openingLabels: [], lastContactAt: iso(followUp.lastContactedAt),
-      dueAt: iso(followUp.dueAt), priority: -1,
+      dueAt: iso(followUp.dueAt), priority: -1, manualRank: 0,
       questions: ["Confirm you are speaking with the current event organizer.", "Confirm event dates and the next decision or callback date.", "Review the operating plan before promising packages or crew."],
     };
     if (matches(row)) rows.push(row);
@@ -115,7 +116,7 @@ export function buildLegCallList(
       openingLabels: [opening.title + " (" + opening.startsOn + " – " + opening.endsOn + ")"],
       lastContactAt: contactSources.map((source) => source.occurredAt).sort((a, b) => time(b) - time(a))[0] ?? null,
       dueAt: iso(candidate.outreach.dueAt),
-      priority: tiers[candidate.tier] * 100000 + candidate.manualRank,
+      priority: tiers[candidate.tier], manualRank: candidate.manualRank,
       questions: ["Confirm the current organizer and dates for " + candidate.eventYear + ".", "Ask which attractions and package sizes fit the event.", "Confirm interest and the next decision date.", "Check crew, equipment and travel before making an offer."],
     };
     if (candidate.capacity.status !== "fits") {
@@ -123,7 +124,7 @@ export function buildLegCallList(
     }
     if (matches(row)) prospects.push(row);
   }
-  prospects.sort((a, b) => Number(Boolean(a.reviewReason)) - Number(Boolean(b.reviewReason)) || a.priority - b.priority || a.id.localeCompare(b.id));
+  prospects.sort((a, b) => Number(Boolean(a.reviewReason)) - Number(Boolean(b.reviewReason)) || a.priority - b.priority || a.manualRank - b.manualRank || a.id.localeCompare(b.id));
   const unique = new Map<string, LegCallRow>();
   for (const row of prospects) {
     const existing = unique.get(row.id);
@@ -132,7 +133,7 @@ export function buildLegCallList(
   }
   return [...rows, ...unique.values()].sort((a, b) =>
     Number(Boolean(a.reviewReason)) - Number(Boolean(b.reviewReason)) ||
-    a.priority - b.priority ||
+    a.priority - b.priority || a.manualRank - b.manualRank ||
     (time(a.dueAt) || 0) - (time(b.dueAt) || 0) || a.id.localeCompare(b.id));
 }
 export function legCallWorkspaceHref(row: LegCallRow): string {

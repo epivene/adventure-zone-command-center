@@ -75,6 +75,7 @@ function dashboard(overrides: Record<string, unknown> = {}) {
 
 function mockDashboard(value: ReturnType<typeof dashboard>) {
   apiGet.mockImplementation((path: string) => {
+    if (path === "/outreach-planner/") return Promise.resolve({ enabled: false, candidates: [], openings: [], legs: [], packages: [], researchTasks: [] });
     if (path === "/today") return Promise.resolve(value);
     if (path === "/calls/config") {
       return Promise.resolve({
@@ -103,7 +104,8 @@ describe("TodayPage renewals", () => {
   it("shows document attention separately from calls and follow-ups", async () => {
     mockDashboard(dashboard());
     apiGet.mockImplementation((path: string) => {
-      if (path === "/today") return Promise.resolve(dashboard());
+      if (path === "/outreach-planner/") return Promise.resolve({ enabled: false, candidates: [], openings: [], legs: [], packages: [], researchTasks: [] });
+    if (path === "/today") return Promise.resolve(dashboard());
       if (path === "/calls/config") return Promise.resolve({ assistedCallingEnabled: false, voicemailLauncherUrl: null });
       if (path === "/business-documents/review-count") return Promise.resolve({ count: 3 });
       return Promise.reject(new Error(`Unexpected API path: ${path}`));

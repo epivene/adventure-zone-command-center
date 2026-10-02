@@ -38,6 +38,11 @@ describe("leg call list", () => {
     expect(rows[0].season).toBeNull();
     expect(rows[1].questions.join(" ")).toContain("2027");
   });
+  it("preserves tier priority even with a large manual rank", () => {
+    const dedicated = candidate({ opportunityId: "dedicated-event", tier: "dedicated", manualRank: 1000000 });
+    const rows = buildLegCallList([], planner([candidate(), dedicated]), now);
+    expect(rows[0].id).toContain("dedicated-event");
+  });
   it("does not turn email checks, internal reviews or future callbacks into calls", () => {
     const reminders = [callback({ kind: "Check for reply" }), callback({ kind: "Review leg plan" }), callback({ kind: "Call list review" }), callback({ dueAt: "2026-10-04T17:00:00Z" })];
     expect(buildLegCallList(reminders, null, now)).toEqual([]);

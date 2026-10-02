@@ -45,6 +45,7 @@ jobs:
       - name: Test call list and existing call outcome workflow
         run: >-
           pnpm --filter @workspace/adventure-zone test --maxWorkers=2
+          src/pages/TodayPage.test.tsx
           src/features/today/leg-call-list.test.ts
           src/components/today/leg-call-list.test.tsx
           src/components/today/call-queue-workspace.test.tsx
