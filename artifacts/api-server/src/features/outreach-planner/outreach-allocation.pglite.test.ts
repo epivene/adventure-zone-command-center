@@ -49,6 +49,23 @@ const org = "10000000-0000-4000-8000-000000000001",
 const resource = "50000000-0000-4000-8000-000000000001",
   pkg = "60000000-0000-4000-8000-000000000001",
   leg2 = "30000000-0000-4000-8000-000000000002";
+it("participates in planning protection with both feature flags enabled",async()=>{
+ const f=await setup();
+ await f.client.exec(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS name text DEFAULT 'Fixture', ADD COLUMN IF NOT EXISTS latitude double precision, ADD COLUMN IF NOT EXISTS longitude double precision;
+ ALTER TABLE resources ADD name text DEFAULT 'Fixture equipment', ADD category text DEFAULT 'Pool';
+ ALTER TABLE google_operational_calendar_links ADD last_app_snapshot jsonb;
+ CREATE TABLE crew_workers(id uuid PRIMARY KEY,name text,rehire_status text);
+ CREATE TABLE crew_worker_leg_memberships(worker_id uuid,leg_id uuid);
+ CREATE TABLE leg_manager_access(leg_id uuid PRIMARY KEY,session_version integer);
+ CREATE TABLE boss_accounts(id uuid PRIMARY KEY,enabled boolean);
+ CREATE TABLE trips(id uuid PRIMARY KEY,travel_leg_id uuid,start_date timestamptz,end_date timestamptz,route_confirmed_at timestamptz);
+ CREATE TABLE trip_stops(id uuid PRIMARY KEY,trip_id uuid,booking_id uuid);
+ CREATE TABLE trip_resource_assignments(trip_id uuid,resource_id uuid);`);
+ await f.client.exec(await readFile("../../lib/db/migrations/20261001_leg_planning.sql","utf8"));
+ vi.stubEnv("LEG_PLANNING_ENABLED","true");
+ await commitmentTransaction(f.db,async tx=>{await tx.execute(sql`UPDATE bookings SET name='Reviewed fixture' WHERE id=${booking}::uuid`);},{source:"both-flags",bookingIds:[]},f.allocation);
+ expect((await f.client.query<{valid:boolean}>("SELECT bool_and(validated) AS valid FROM outreach_write_receipts")).rows[0].valid).toBe(true);
+});
 async function setup() {
   vi.stubEnv("OUTREACH_PLANNER_ENABLED", "true");
   const client = new PGlite();

@@ -1,4 +1,82 @@
 import { parseBusinessDate } from "../../lib/business-date";
+import type { OperationalWindow, PlanObligation } from "@workspace/api-zod";
+
+/** Exact half-open instants for operating plans; legacy inclusive business-date policy stays unchanged. */
+export function evaluateIntervalCapacity(input: {
+  window: OperationalWindow;
+  legId: string;
+  quantities: Record<string, number>;
+  reservations: PlanObligation[];
+  excludeCanonicalId: string;
+  splitBookingIds: string[];
+}) {
+  const unique = new Map<string, PlanObligation>(),
+    mirrorConflicts: string[] = [];
+  for (const r of input.reservations) {
+    if (r.canonicalId === input.excludeCanonicalId) continue;
+    const previous = unique.get(r.canonicalId);
+    if (previous) {
+      const q = (v: Record<string, number>) =>
+        JSON.stringify(Object.entries(v).sort());
+      if (
+        previous.legId !== r.legId ||
+        previous.window.startMs !== r.window.startMs ||
+        previous.window.endMs !== r.window.endMs ||
+        q(previous.packageQuantities) !== q(r.packageQuantities)
+      )
+        mirrorConflicts.push(r.canonicalId);
+      previous.resourceIds = [
+        ...new Set([...previous.resourceIds, ...r.resourceIds]),
+      ];
+      previous.workerIds = [
+        ...new Set([...previous.workerIds, ...r.workerIds]),
+      ];
+      previous.window = {
+        ...previous.window,
+        startMs: Math.min(previous.window.startMs, r.window.startMs),
+        endMs: Math.max(previous.window.endMs, r.window.endMs),
+      };
+      for (const [id, quantity] of Object.entries(r.packageQuantities))
+        previous.packageQuantities[id] = Math.max(
+          previous.packageQuantities[id] ?? 0,
+          quantity,
+        );
+    } else unique.set(r.canonicalId, structuredClone(r));
+  }
+  const overlap = (w: OperationalWindow) =>
+    w.startMs < input.window.endMs && input.window.startMs < w.endMs;
+  const reservations = [...unique.values()],
+    relevant = reservations.filter((r) => overlap(r.window));
+  const points = [
+    input.window.startMs,
+    ...relevant
+      .map((r) => r.window.startMs)
+      .filter((p) => p >= input.window.startMs && p < input.window.endMs),
+  ];
+  const peak = { ...input.quantities };
+  for (const p of points)
+    for (const key of Object.keys(peak))
+      peak[key] = Math.max(
+        peak[key],
+        (input.quantities[key] ?? 0) +
+          relevant
+            .filter((r) => r.window.startMs <= p && p < r.window.endMs)
+            .reduce((sum, r) => sum + (r.packageQuantities[key] ?? 0), 0),
+      );
+  return {
+    peak,
+    reservations,
+    relevant,
+    mirrorConflicts,
+    legConflicts: relevant
+      .filter(
+        (r) =>
+          r.legId === input.legId &&
+          !input.splitBookingIds.includes(r.bookingId),
+      )
+      .map((r) => r.bookingId),
+  };
+}
 export type CapacityWindow = { startsOn: string; endsOn: string };
 export type CapacityReservation = CapacityWindow & {
   id: string;

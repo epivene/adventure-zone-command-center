@@ -108,6 +108,8 @@ export function useManagerAuth() {
   if (!context) throw new Error("useManagerAuth must be inside ManagerAuthProvider");
   return context;
 }
+/** Optional access for shared owner/boss/manager planning components. */
+export function useOptionalManagerAuth() { return useContext(Context); }
 
 export async function listManagerLoginLegs(): Promise<{ id: string; name: string }[]> {
   const res = await raw("/manager/auth/legs", {}, null);

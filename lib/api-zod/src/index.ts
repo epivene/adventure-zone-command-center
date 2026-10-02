@@ -5,3 +5,4 @@ export * from "./email-template-compiler";
 export * from "./manager-schedule";
 export * from "./design-studio-email";
 export * from "./booking-leg-operations";
+export * from "./leg-planning";

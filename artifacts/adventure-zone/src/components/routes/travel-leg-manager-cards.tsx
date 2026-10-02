@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { LegSeasonEditor } from '@/components/leg-planning/leg-season-editor';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp } from "lucide-react";
 import type { TravelLegDetails, TravelLegOrder } from "@/features/routes/travel-leg-input";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
@@ -24,11 +25,12 @@ function input(leg: FormLeg): TravelLegDetails {
 }
 
 export function TravelLegManagerCards({
-  legs, legResources = [], managerAccess = [], onSaveLeg, onSaveOrder, onAdd, onArchive, onRestore, onSetManagerPassword, onSignOutManagerDevices,
+  legs, legResources = [], managerAccess = [], seasonYear, onSaveLeg, onSaveOrder, onAdd, onArchive, onRestore, onSetManagerPassword, onSignOutManagerDevices,
 }: {
   legs: TravelLeg[];
   legResources?: LegResourceSummary[];
   managerAccess?: LegManagerAccessStatus[];
+  seasonYear?: number;
   onSaveLeg: (id: string, input: TravelLegDetails) => Promise<SaveLegResult> | SaveLegResult;
   onSaveOrder: (input: TravelLegOrder) => Promise<SaveOrderResult> | SaveOrderResult;
   onAdd?: () => Promise<void>;
@@ -127,6 +129,7 @@ export function TravelLegManagerCards({
                 {open ? <ChevronUp className="h-5 w-5 shrink-0 text-slate-500" /> : <ChevronDown className="h-5 w-5 shrink-0 text-slate-500" />}
               </button>
               {open ? <div id={`leg-details-${leg.id}`} className="grid gap-3 border-t border-slate-100 p-4">
+                {seasonYear ? <LegSeasonEditor key={`${leg.id}:${seasonYear}`} legId={leg.id} seasonYear={seasonYear} role="owner" /> : null}
                 <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]"><label className="grid gap-1 text-sm font-semibold">Manager / Leg name<input aria-label="Manager / Leg name" value={leg.name} onChange={(e) => change(leg.id, "name", e.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Color<input aria-label={`Travel leg ${leg.sortOrder} color`} className="h-11 w-full" type="color" value={leg.color} onChange={(e) => change(leg.id, "color", e.target.value)} /></label></div>
                 <label className="grid gap-1 text-sm font-semibold">Base address<input aria-label={`Travel leg ${leg.sortOrder} base address`} value={leg.baseAddress} onChange={(e) => change(leg.id, "baseAddress", e.target.value)} /></label>
                 <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]"><label className="grid gap-1 text-sm font-semibold">Default vehicle<input aria-label={`Travel leg ${leg.sortOrder} default vehicle`} value={leg.defaultVehicleName} onChange={(e) => change(leg.id, "defaultVehicleName", e.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Default MPG<input aria-label={`Travel leg ${leg.sortOrder} default MPG`} type="number" min="0" step="0.1" value={leg.defaultMpg} onChange={(e) => change(leg.id, "defaultMpg", e.target.value)} /></label></div>
@@ -147,4 +150,3 @@ export function TravelLegManagerCards({
     </section>
   );
 }
-

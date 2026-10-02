@@ -35,6 +35,23 @@ jobs:
     name: Operations regressions and builds
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: leg_planning_test_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d leg_planning_test_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/leg_planning_test_ci
+      LEG_PLANNING_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/leg_planning_test_ci
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -50,6 +67,24 @@ jobs:
         run: pnpm run typecheck:libs
       - name: Test shared operations contract
         run: pnpm exec vitest run lib/api-zod/src/booking-leg-operations.test.ts
+      - name: Test planning policy, scope and concurrent commitments
+        run: >-
+          pnpm --filter @workspace/api-server test --maxWorkers=2
+          src/features/leg-planning
+          src/routes/leg-planning.test.ts
+          src/db/leg-planning-required-startup.test.ts
+          src/db/required-schema-startup.test.ts
+          src/features/leg-manager/leg-manager-middleware.test.ts
+      - name: Test planning editors and connected navigation
+        run: >-
+          pnpm --filter @workspace/adventure-zone test --maxWorkers=2
+          src/features/leg-planning
+          src/components/leg-planning
+          src/pages/LegPlanning.integration.test.tsx
+          src/components/routes/travel-leg-manager-cards.test.tsx
+          src/pages/ManagerCrewPage.test.tsx
+          src/pages/BossAssignmentsPage.test.tsx
+          src/pages/SettingsPackagesResourcesPage.collapsible.test.tsx
       - name: Test operations API with local fixtures
         run: >-
           pnpm --filter @workspace/api-server test --maxWorkers=2
@@ -63,6 +98,7 @@ jobs:
           src/features/routes/location-resolver.test.ts
           src/routes/boss-schedule-route.test.ts
           src/features/bookings/booking-leg-operations-providers.pglite.test.ts
+          src/features/bookings/booking-leg-operations-planning.test.ts
           src/features/google-workspace/calendar/calendar-operational-window-projection.test.ts
       - name: Test connected operations views
         run: >-

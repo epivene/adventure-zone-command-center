@@ -2,7 +2,7 @@ import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ search: 'view=map&season=2027&leg=angel', navigate: vi.fn() }));
 vi.mock('wouter', () => ({ useSearch: () => state.search, useLocation: () => ['/schedule', state.navigate] }));
-vi.mock('@/lib/auth-token', () => ({ apiGet: async () => ({ travelLegs: [{ id: 'angel', name: 'Angel' }] }) }));
+vi.mock('@/lib/auth-token', () => ({ apiFetch: vi.fn(), apiGet: async () => ({ travelLegs: [{ id: 'angel', name: 'Angel' }] }) }));
 vi.mock('./CalendarPage', () => ({ CalendarContent: ({ season, legId }: any) => <p>Calendar {season} {legId}</p> }));
 vi.mock('./RoutesPage', () => ({ RoutesContent: ({ season, legId, onSeasonYearChange }: any) => <button onClick={() => onSeasonYearChange(2028)}>Map {season} {legId}</button> }));
 import SchedulePage from './SchedulePage';

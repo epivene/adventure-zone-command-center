@@ -1,4 +1,5 @@
 export * from "./schema";
+export * from "./leg-planning-schema";
 export * from "./event-family-schema";
 export * from "./paper-note-schema";
 export * from "./business-source-schema";

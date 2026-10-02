@@ -36,6 +36,7 @@ function focusedTripMapData(detail: TripFocusDetail): FocusedTripMapData {
 }
 
 export function RoutesContent({ season, legId, status, embedded = false, managementOnly = false, onSeasonYearChange }: RouteScheduleFilters) {
+  const [planningSeason,setPlanningSeason] = useState(Number(season) || new Date().getFullYear());
   const [data, setData] = useState<any>(null);
   const [handoffs, setHandoffs] = useState<EquipmentHandoffView[]>([]);
   const [focusedTrip, setFocusedTrip] = useState<FocusedTripMapData | null>(null);
@@ -127,7 +128,8 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
         <p className="mt-2 max-w-2xl text-slate-600">Manage travel legs, ordering, resources, manager access, and route-review decisions.</p>
       </div>
       <div className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <TravelLegManagerCards key={data.travelLegs.map((leg: any) => `${leg.id}:${leg.archivedAt ? "a" : ""}`).sort().join(",")} legs={data.travelLegs} legResources={data.legResources} managerAccess={data.managerAccess} onSaveLeg={handleSaveLeg} onSaveOrder={handleSaveOrder} onSetManagerPassword={handleSetManagerPassword} onSignOutManagerDevices={handleSignOutManagerDevices} onAdd={handleAdd} onArchive={handleArchive} onRestore={handleRestore} />
+        <label className="grid gap-1 text-sm font-semibold">Staffing season<input type="number" min="1900" max="9998" value={planningSeason} onChange={e=>setPlanningSeason(Number(e.target.value))} /></label>
+        <TravelLegManagerCards key={data.travelLegs.map((leg: any) => `${leg.id}:${leg.archivedAt ? "a" : ""}`).sort().join(",")} legs={data.travelLegs} seasonYear={planningSeason} legResources={data.legResources} managerAccess={data.managerAccess} onSaveLeg={handleSaveLeg} onSaveOrder={handleSaveOrder} onSetManagerPassword={handleSetManagerPassword} onSignOutManagerDevices={handleSignOutManagerDevices} onAdd={handleAdd} onArchive={handleArchive} onRestore={handleRestore} />
         <ManagerRouteReviewQueue onApproved={loadData} />
         <div className="grid gap-2 sm:grid-cols-3"><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-finance">Leg finances →</a><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-crew">Seasonal crew →</a><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-aftermath">Reviews & incidents →</a></div>
       </div>

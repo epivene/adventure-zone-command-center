@@ -1,4 +1,5 @@
 import * as chatgptConnectionSchema from "./chatgpt-connection-schema";
+import * as legPlanningSchema from "./leg-planning-schema";
 import * as assistantWorkspaceSchema from "./assistant-workspace-schema";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
@@ -65,7 +66,7 @@ const finalConnectionString = normalizeDatabaseConnectionString(
 
 export const pool = new Pool({
   connectionString: finalConnectionString,
-  ...(process.env.OUTREACH_PLANNER_ENABLED === "true"
+  ...(process.env.OUTREACH_PLANNER_ENABLED === "true" || process.env.LEG_PLANNING_ENABLED === "true"
     ? { options: "-c outreach.enforced=true" }
     : {}),
   application_name: "adventure-zone-command-center-api",
@@ -77,7 +78,7 @@ export const pool = new Pool({
 // leaving the main pool available to resolve labels and persist job state.
 export const gmailThreadLockPool = new Pool({
   connectionString: finalConnectionString,
-  ...(process.env.OUTREACH_PLANNER_ENABLED === "true"
+  ...(process.env.OUTREACH_PLANNER_ENABLED === "true" || process.env.LEG_PLANNING_ENABLED === "true"
     ? { options: "-c outreach.enforced=true" }
     : {}),
   application_name: "adventure-zone-command-center-gmail-thread-lock",
@@ -85,7 +86,7 @@ export const gmailThreadLockPool = new Pool({
   ...databasePoolTimeouts(),
 });
 import * as outreachPlannerSchema from "./outreach-planner-schema";
-type DatabaseSchema = typeof chatgptConnectionSchema & typeof assistantWorkspaceSchema &
+type DatabaseSchema = typeof legPlanningSchema & typeof chatgptConnectionSchema & typeof assistantWorkspaceSchema &
   typeof outreachPlannerSchema &
   typeof coreSchema &
   typeof eventFamilySchema &
@@ -124,6 +125,7 @@ type DatabaseSchema = typeof chatgptConnectionSchema & typeof assistantWorkspace
     designTemplates: typeof designTemplates;
   };
 const schema: DatabaseSchema = {
+  ...legPlanningSchema,
   ...chatgptConnectionSchema,
   ...assistantWorkspaceSchema,
   ...outreachPlannerSchema,
@@ -169,6 +171,7 @@ export const db: NodePgDatabase<typeof schema> & { $client: pg.Pool } = drizzle(
 );
 
 export * from "./schema";
+export * from "./leg-planning-schema";
 export * from "./event-family-schema";
 export * from "./paper-note-schema";
 export * from "./business-source-schema";

@@ -7,6 +7,8 @@ describe("Packages & Resources collapsible sections", () => {
     expect(packageResourceSectionDefaults).toEqual({
       packageTemplatesOpen: true,
       resourceInventoryOpen: false,
+      offersOpen: false,
+      importedAssetsOpen: false,
     });
   });
 });

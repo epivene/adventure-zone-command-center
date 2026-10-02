@@ -1,19 +1,23 @@
 import type { BookingLegOperations, OperationsSection } from '@workspace/api-zod';
-import type { ReactNode } from 'react';
+import {useRef,type ReactNode} from 'react';
 import type { OperationsReadClient } from '@/features/bookings/booking-leg-operations-client';
 import { useBookingLegOperations } from '@/features/bookings/use-booking-leg-operations';
-import { operationsScheduleHref, operationsDateLabel as date } from '@/features/bookings/operations-navigation';
+import { operationsScheduleHref, operationsManagerHref, operationsDateLabel as date } from '@/features/bookings/operations-navigation';
+import { EventPlanEditor } from '@/components/leg-planning/event-plan-editor';
 
 type Role = 'owner' | 'boss' | 'manager';
 function Section<T>({ title, value, children }: { title: string; value: OperationsSection<T>; children: (data: T) => ReactNode }) {
   return <section className="min-w-0 rounded-xl border border-slate-200 p-3"><h3 className="font-semibold">{title}</h3>{value.state === 'loaded' ? <div className="mt-2 grid gap-2 text-sm">{children(value.data)}</div> : <div className="mt-2 text-sm"><p className="font-medium text-slate-600">{value.state === 'not_recorded' ? 'Not recorded' : value.state === 'restricted' ? 'Office-managed' : 'Unavailable'}</p><p className="mt-1 text-slate-600">{value.message}</p></div>}</section>;
 }
 export function LegOperationsPanel({ operations: o, role, onRetry }: { operations: BookingLegOperations; role: Role; onRetry: () => void }) {
+  const capability=useRef<string|null>(null);if(o.planning?.state==='loaded')capability.current=o.bookingId;
   const ownerHref = o.seasonYear === null ? '/schedule?view=map' : operationsScheduleHref({ season: o.seasonYear, bookingId: o.bookingId, legId: o.assignment.state === 'loaded' ? o.assignment.data.assignedLeg?.id : null });
-  const scheduleHref = role === 'boss' ? ownerHref.replace('/schedule', '/boss/schedule') : role === 'manager' ? '/manager/operations' : ownerHref;
+  const managerHref = operationsManagerHref({bookingId:o.bookingId,season:o.seasonYear,legId:o.assignment.state==='loaded'?o.assignment.data.assignedLeg?.id:null});
+  const scheduleHref = role === 'boss' ? ownerHref.replace('/schedule', '/boss/schedule') : role === 'manager' ? managerHref : ownerHref;
   return <section aria-label="Leg & Operations" className="grid min-w-0 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
     <header className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-xl font-bold">Leg &amp; Operations</h2><p className="mt-1 text-sm text-slate-600">{o.seasonYear ?? 'Year not recorded'} · Booking: {o.bookingStatus.replaceAll('_', ' ')}</p></div><div className="flex flex-wrap gap-2 text-sm"><a className="button-secondary" href={scheduleHref}>View schedule &amp; map</a>{role === 'owner' ? <a className="button-secondary" href={`/bookings/${o.bookingId}/edit`}>Edit leg &amp; setup</a> : null}</div></header>
     <p className="text-sm text-slate-600">Saved assignments and suggestions still need crew, equipment and travel checks.</p>
+    {role !== 'manager' && o.assignment.state === 'loaded' && o.assignment.data.assignedLeg ? <a className="button-secondary justify-self-start" href={managerHref}>Manager operations</a> : null}
     <div className="grid min-w-0 gap-3 lg:grid-cols-2">
       <Section title="Previous season" value={o.history}>{h => <>
         {h.basis === 'none' ? <p>No matched historical booking in the saved records. Calendar history may still need reconciliation.</p> : h.items.map(item => <div key={`${item.bookingId}:${item.leg?.id ?? ''}`} className="grid gap-1 border-b border-slate-100 pb-2 last:border-0">
@@ -49,12 +53,13 @@ export function LegOperationsPanel({ operations: o, role, onRetry }: { operation
       <Section title="Next action" value={o.work}>{w => <>{w.items.length ? w.items.map(item => <div key={item.id}><p className="font-semibold">{item.title}</p><p>{item.nextAction}</p><p className="text-xs text-slate-500">Work status: {item.status.replaceAll('_', ' ')}</p></div>) : <p>Review missing crew, equipment, lodging and travel details.</p>}</>}</Section>
     </div>
     {role !== 'manager' ? <Section title="Calendar connection" value={o.calendar}>{c => <><p>{c.connectionStatus !== 'connected' || c.lastErrorCode ? 'Calendar connection needs attention.' : 'Calendar connection saved as connected; history coverage is not verified.'}</p>{c.pendingReviewCount ? <p>{c.pendingReviewCount} calendar {c.pendingReviewCount === 1 ? 'match needs' : 'matches need'} review.</p> : null}{role === 'owner' ? <a className="text-blue-700 underline" href="/settings/google-workspace">Review calendar connection</a> : null}</>}</Section> : null}
+    {capability.current===o.bookingId ? <details><summary className="cursor-pointer font-bold">Operating plan · {o.planning?.state==='loaded'?o.planning.data.readiness.overall.replaceAll('_', ' '):'unavailable'}</summary><div className="mt-3"><EventPlanEditor bookingId={o.bookingId} role={role} onCommitted={onRetry}/></div></details> : o.planning ? <Section title="Operating plan" value={o.planning}>{() => null}</Section> : null}
     {Object.values(o).some(value => typeof value === 'object' && value !== null && 'state' in value && value.state === 'unavailable') ? <button type="button" className="button-secondary justify-self-start" onClick={onRetry}>Retry unavailable details</button> : null}
   </section>;
 }
 export function BookingLegOperationsCard({ bookingId, client, role }: { bookingId: string; client: OperationsReadClient; role: Role }) {
   const result = useBookingLegOperations(bookingId, client);
-  if (result.error) return <section className="rounded-xl border p-4"><h2 className="font-bold">Leg &amp; Operations</h2><p role="alert" className="mt-2 text-sm text-rose-700">Operations details are unavailable.</p><button type="button" className="button-secondary mt-2" onClick={() => void result.reload()}>Retry operations</button></section>;
+  if (result.error && !result.data) return <section className="rounded-xl border p-4"><h2 className="font-bold">Leg &amp; Operations</h2><p role="alert" className="mt-2 text-sm text-rose-700">Operations details are unavailable.</p><button type="button" className="button-secondary mt-2" onClick={() => void result.reload()}>Retry operations</button></section>;
   if (!result.data) return <p className="rounded-xl border p-4 text-sm text-slate-500">Loading leg &amp; operations…</p>;
-  return <LegOperationsPanel operations={result.data} role={role} onRetry={() => void result.reload()} />;
+  return <>{result.error?<p role="alert">Operations refresh failed. Showing previously saved details; your open draft is retained.</p>:null}<LegOperationsPanel operations={result.data} role={role} onRetry={() => void result.reload()} /></>;
 }

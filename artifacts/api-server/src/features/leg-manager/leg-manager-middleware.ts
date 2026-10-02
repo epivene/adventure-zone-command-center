@@ -4,6 +4,7 @@ import { verifyLegManagerToken } from "./leg-manager-auth";
 export type LegManagerRequestContext = {
   legId: string;
   managerName: string | null;
+  sessionVersion?: number;
 };
 
 export interface LegManagerSessionRepository {
@@ -34,6 +35,7 @@ export async function resolveLegManagerSession(
   return {
     legId: access.legId,
     managerName: access.legName ?? access.managerName ?? null,
+    sessionVersion: access.sessionVersion,
   };
 }
 

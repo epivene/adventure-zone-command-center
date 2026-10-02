@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PackageSetEditor, DaveAuthorityEditor } from '@/components/leg-planning/package-set-editor';
 import { apiGet } from "@/lib/auth-token";
 import { PackageTemplateEditor } from "@/components/packages/package-template-editor";
 import { CommercialOfferEditor } from "@/components/packages/commercial-offer-editor";
@@ -17,14 +18,14 @@ export default function SettingsPackagesResourcesPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [packageTemplatesOpen, setPackageTemplatesOpen] = useState(
+  const [packageTemplatesOpen, setPackageTemplatesOpen] = useState<boolean>(
     packageResourceSectionDefaults.packageTemplatesOpen,
   );
-  const [offersOpen, setOffersOpen] = useState(packageResourceSectionDefaults.offersOpen);
-  const [resourceInventoryOpen, setResourceInventoryOpen] = useState(
+  const [offersOpen, setOffersOpen] = useState<boolean>(packageResourceSectionDefaults.offersOpen);
+  const [resourceInventoryOpen, setResourceInventoryOpen] = useState<boolean>(
     packageResourceSectionDefaults.resourceInventoryOpen,
   );
-  const [importedAssetsOpen, setImportedAssetsOpen] = useState(
+  const [importedAssetsOpen, setImportedAssetsOpen] = useState<boolean>(
     packageResourceSectionDefaults.importedAssetsOpen,
   );
 
@@ -55,6 +56,7 @@ export default function SettingsPackagesResourcesPage() {
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div>
       ) : data ? (
         <div className="grid gap-4">
+          <details className="rounded-xl border bg-white p-4"><summary className="cursor-pointer font-bold">Verified physical sets &amp; Dave approval setup</summary><div className="mt-3 grid gap-3"><PackageSetEditor role="owner"/><DaveAuthorityEditor/></div></details>
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <button aria-expanded={packageTemplatesOpen} className="flex w-full items-center justify-between gap-4 p-4 text-left sm:p-5" onClick={() => setPackageTemplatesOpen((open) => !open)} type="button">
               <div><h2 className="text-xl font-bold">Package templates</h2><p className="mt-1 text-sm font-normal text-slate-600">Starting prices, package sizes, and booking/setup knowledge.</p></div>

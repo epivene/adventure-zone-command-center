@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import {
   activeAllocationTransactions,
   allocationEnabled,
+  capacityEnforcementEnabled,
   withAllocationTransaction,
   invalidateAllocationIn,
   OutreachAllocation,
@@ -58,7 +59,7 @@ export async function commitmentTransaction<T>(
   plan: CommitmentPlan = { source: "booking-capacity-writer" },
   allocation = createProductionOutreachAllocation(db as AllocationDatabase),
 ): Promise<T> {
-  if (!allocationEnabled()) return db.transaction(work);
+  if (!capacityEnforcementEnabled()) return db.transaction(work);
   if (activeAllocationTransactions.has(db))
     throw new OutreachError(
       409,
@@ -69,6 +70,15 @@ export async function commitmentTransaction<T>(
       409,
       "Review and commit one booking at a time; batch commitment plans are not supported.",
     );
+  if (!allocationEnabled()) {
+    const { planningWriterTransaction } =
+      await import("../leg-planning/planning-writer-hooks");
+    return planningWriterTransaction(
+      db as AllocationDatabase,
+      (tx) => work(tx as unknown as AllocationTransaction),
+      plan.source,
+    );
+  }
   const before = await loadAllocationFacts(db as AllocationDatabase);
   const projected = plan.project
     ? plan.project(structuredClone(before))
@@ -114,6 +124,11 @@ export async function commitmentTransaction<T>(
   return withAllocationTransaction(
     db as AllocationDatabase,
     async (tx) => {
+      const hooks =
+        process.env.LEG_PLANNING_ENABLED === "true"
+          ? await import("../leg-planning/planning-writer-hooks")
+          : null;
+      const planningBefore = hooks ? await hooks.planningSnapshotIn(tx) : [];
       const current = await loadAllocationFacts(tx);
       if (changed(current, before))
         throw new OutreachError(
@@ -218,6 +233,13 @@ export async function commitmentTransaction<T>(
             "Release the existing hold before changing its booking demand.",
           );
       }
+      if (hooks)
+        await hooks.checkPlanningWriteIn(
+          tx,
+          planningBefore,
+          await hooks.planningSnapshotIn(tx),
+          "commitment",
+        );
       const dirty = rowsOf<{ dirty: boolean }>(
         await tx.execute(
           sql`select dirty from outreach_write_receipts where transaction_id=txid_current()`,
@@ -235,6 +257,7 @@ export async function commitmentTransaction<T>(
 }
 
 export type ReconciliationSource =
+  | "crew-inventory"
   | "operational-calendar-import"
   | "operational-calendar-link"
   | "assistant-history-import"
@@ -267,7 +290,7 @@ export async function reconcileCapacityFacts<T>(
       | "serializable";
   } = {},
 ) {
-  if (!allocationEnabled())
+  if (!capacityEnforcementEnabled())
     return db.transaction(
       work,
       detail.isolationLevel
@@ -283,9 +306,24 @@ export async function reconcileCapacityFacts<T>(
       );
     return work(db as unknown as AllocationTransaction);
   }
+  if (!allocationEnabled()) {
+    const { planningWriterTransaction } =
+      await import("../leg-planning/planning-writer-hooks");
+    return planningWriterTransaction(
+      db as AllocationDatabase,
+      (tx) => work(tx as unknown as AllocationTransaction),
+      source,
+      "reconciliation",
+    );
+  }
   return withAllocationTransaction(
     db as AllocationDatabase,
     async (tx) => {
+      const hooks =
+        process.env.LEG_PLANNING_ENABLED === "true"
+          ? await import("../leg-planning/planning-writer-hooks")
+          : null;
+      const planningBefore = hooks ? await hooks.planningSnapshotIn(tx) : [];
       const before = await loadAllocationFacts(tx);
       const result = await work(tx as unknown as AllocationTransaction);
       const after = await loadAllocationFacts(tx);
@@ -299,6 +337,13 @@ export async function reconcileCapacityFacts<T>(
           sql`insert into outreach_reconciliation_facts(source,actor,reason,booking_ids,facts_fingerprint,detail) values (${source},${detail.actor ?? "system"},${detail.reason ?? (source === "assistant-history-import" ? "Unverified assistant-supplied commitment claim; independent owner source review is required." : "Authoritative source facts imported; fresh allocation review required.")},${JSON.stringify(ids)}::jsonb,${fingerprint(after)},${JSON.stringify({ before: fingerprint(before), after: fingerprint(after), capacityReviewRequired: true, provenance: detail.provenance ?? { integration: source, receivedAt: new Date().toISOString() }, changes: ids.map((id) => ({ bookingId: id, before: bookingEvidence(before, id), after: bookingEvidence(after, id) })) })}::jsonb)`,
         );
       }
+      if (hooks)
+        await hooks.checkPlanningWriteIn(
+          tx,
+          planningBefore,
+          await hooks.planningSnapshotIn(tx),
+          "reconciliation",
+        );
       await finishCapacityWriteIn(tx);
       return result;
     },

@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, lte, gte, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
+import { commitmentTransaction } from "../outreach-planner/outreach-commitments";
 import {
   bookings,
   resources,
@@ -91,19 +92,33 @@ export type TripAuditChange = {
 };
 
 export interface TripRepository {
-  createTrip(values: Omit<TripRecord, "id" | "createdAt" | "updatedAt" | "routeConfirmedAt">): Promise<TripRecord>;
+  createTrip(
+    values: Omit<
+      TripRecord,
+      "id" | "createdAt" | "updatedAt" | "routeConfirmedAt"
+    >,
+  ): Promise<TripRecord>;
   getTrip(id: string): Promise<TripRecord | null>;
   listTrips(options?: { travelLegId?: string }): Promise<TripListItem[]>;
-  updateTrip(id: string, values: Partial<Omit<TripRecord, "id" | "createdAt" | "updatedAt">>): Promise<TripRecord | null>;
+  updateTrip(
+    id: string,
+    values: Partial<Omit<TripRecord, "id" | "createdAt" | "updatedAt">>,
+  ): Promise<TripRecord | null>;
   deleteTrip(id: string): Promise<boolean>;
 
   listStops(tripId: string): Promise<TripStopRecord[]>;
   addStop(tripId: string, bookingId: string): Promise<TripStopRecord | null>;
   removeStop(tripId: string, stopId: string): Promise<boolean>;
-  setStopOrder(tripId: string, orderedStopIds: readonly string[]): Promise<boolean>;
+  setStopOrder(
+    tripId: string,
+    orderedStopIds: readonly string[],
+  ): Promise<boolean>;
 
   listSegments(tripId: string): Promise<TripSegmentRecord[]>;
-  replaceSegments(tripId: string, segments: readonly NewTripSegment[]): Promise<void>;
+  replaceSegments(
+    tripId: string,
+    segments: readonly NewTripSegment[],
+  ): Promise<void>;
   updateSegmentOverride(
     tripId: string,
     segmentId: string,
@@ -111,7 +126,10 @@ export interface TripRepository {
   ): Promise<TripSegmentRecord | null>;
 
   listResources(tripId: string): Promise<TripResourceRecord[]>;
-  addResource(tripId: string, resourceId: string): Promise<TripResourceRecord | null>;
+  addResource(
+    tripId: string,
+    resourceId: string,
+  ): Promise<TripResourceRecord | null>;
   removeResource(tripId: string, resourceId: string): Promise<boolean>;
 
   audit(change: TripAuditChange): Promise<void>;
@@ -160,14 +178,23 @@ export class DrizzleTripRepository implements TripRepository {
   constructor(private readonly database: DrizzleDatabase) {}
 
   async createTrip(
-    values: Omit<TripRecord, "id" | "createdAt" | "updatedAt" | "routeConfirmedAt">,
+    values: Omit<
+      TripRecord,
+      "id" | "createdAt" | "updatedAt" | "routeConfirmedAt"
+    >,
   ): Promise<TripRecord> {
-    const [created] = await this.database
-      .insert(trips)
-      .values(values)
-      .returning(tripSelection);
-    if (!created) throw new Error("Trip could not be created.");
-    return created;
+    return commitmentTransaction(
+      this.database,
+      async (transaction) => {
+        const [created] = await transaction
+          .insert(trips)
+          .values(values)
+          .returning(tripSelection);
+        if (!created) throw new Error("Trip could not be created.");
+        return created;
+      },
+      { source: "trip-create" },
+    );
   }
 
   async getTrip(id: string): Promise<TripRecord | null> {
@@ -199,7 +226,9 @@ export class DrizzleTripRepository implements TripRepository {
     return query;
   }
 
-  async getTravelLegDefaults(travelLegId: string): Promise<{ mpg: number | null }> {
+  async getTravelLegDefaults(
+    travelLegId: string,
+  ): Promise<{ mpg: number | null }> {
     const [leg] = await this.database
       .select({ mpg: travelLegs.defaultMpg })
       .from(travelLegs)
@@ -212,20 +241,32 @@ export class DrizzleTripRepository implements TripRepository {
     id: string,
     values: Partial<Omit<TripRecord, "id" | "createdAt" | "updatedAt">>,
   ): Promise<TripRecord | null> {
-    const [updated] = await this.database
-      .update(trips)
-      .set({ ...values, updatedAt: new Date() })
-      .where(eq(trips.id, id))
-      .returning(tripSelection);
-    return updated ?? null;
+    return commitmentTransaction(
+      this.database,
+      async (transaction) => {
+        const [updated] = await transaction
+          .update(trips)
+          .set({ ...values, updatedAt: new Date() })
+          .where(eq(trips.id, id))
+          .returning(tripSelection);
+        return updated ?? null;
+      },
+      { source: "trip-update" },
+    );
   }
 
   async deleteTrip(id: string): Promise<boolean> {
-    const deleted = await this.database
-      .delete(trips)
-      .where(eq(trips.id, id))
-      .returning({ id: trips.id });
-    return deleted.length > 0;
+    return commitmentTransaction(
+      this.database,
+      async (transaction) => {
+        const deleted = await transaction
+          .delete(trips)
+          .where(eq(trips.id, id))
+          .returning({ id: trips.id });
+        return deleted.length > 0;
+      },
+      { source: "trip-delete" },
+    );
   }
 
   async listStops(tripId: string): Promise<TripStopRecord[]> {
@@ -237,8 +278,11 @@ export class DrizzleTripRepository implements TripRepository {
       .orderBy(asc(tripStops.sortOrder), asc(tripStops.id));
   }
 
-  async addStop(tripId: string, bookingId: string): Promise<TripStopRecord | null> {
-    return this.database.transaction(async (transaction) => {
+  async addStop(
+    tripId: string,
+    bookingId: string,
+  ): Promise<TripStopRecord | null> {
+    return commitmentTransaction(this.database, async (transaction) => {
       const [maxRow] = await transaction
         .select({ max: sql<number>`coalesce(max(${tripStops.sortOrder}), 0)` })
         .from(tripStops)
@@ -259,7 +303,7 @@ export class DrizzleTripRepository implements TripRepository {
   }
 
   async removeStop(tripId: string, stopId: string): Promise<boolean> {
-    return this.database.transaction(async (transaction) => {
+    return commitmentTransaction(this.database, async (transaction) => {
       const deleted = await transaction
         .delete(tripStops)
         .where(and(eq(tripStops.id, stopId), eq(tripStops.tripId, tripId)))
@@ -284,7 +328,7 @@ export class DrizzleTripRepository implements TripRepository {
     tripId: string,
     orderedStopIds: readonly string[],
   ): Promise<boolean> {
-    return this.database.transaction(async (transaction) => {
+    return commitmentTransaction(this.database, async (transaction) => {
       const existing = await transaction
         .select({ id: tripStops.id })
         .from(tripStops)
@@ -326,7 +370,9 @@ export class DrizzleTripRepository implements TripRepository {
     segments: readonly NewTripSegment[],
   ): Promise<void> {
     await this.database.transaction(async (transaction) => {
-      await transaction.delete(tripSegments).where(eq(tripSegments.tripId, tripId));
+      await transaction
+        .delete(tripSegments)
+        .where(eq(tripSegments.tripId, tripId));
       if (segments.length > 0) {
         await transaction
           .insert(tripSegments)
@@ -343,13 +389,15 @@ export class DrizzleTripRepository implements TripRepository {
     const [updated] = await this.database
       .update(tripSegments)
       .set({ ...override, updatedAt: new Date() })
-      .where(and(eq(tripSegments.id, segmentId), eq(tripSegments.tripId, tripId)))
+      .where(
+        and(eq(tripSegments.id, segmentId), eq(tripSegments.tripId, tripId)),
+      )
       .returning();
     return updated ?? null;
   }
 
-  async listResources(tripId: string): Promise<TripResourceRecord[]> {
-    return this.database
+  async listResources(tripId: string, queryDatabase: Pick<DrizzleDatabase,'select'> = this.database): Promise<TripResourceRecord[]> {
+    return queryDatabase
       .select({
         assignmentId: tripResourceAssignments.id,
         resourceId: resources.id,
@@ -359,7 +407,10 @@ export class DrizzleTripRepository implements TripRepository {
         movable: resources.movable,
       })
       .from(tripResourceAssignments)
-      .innerJoin(resources, eq(tripResourceAssignments.resourceId, resources.id))
+      .innerJoin(
+        resources,
+        eq(tripResourceAssignments.resourceId, resources.id),
+      )
       .where(eq(tripResourceAssignments.tripId, tripId))
       .orderBy(asc(resources.name), asc(resources.id));
   }
@@ -368,25 +419,41 @@ export class DrizzleTripRepository implements TripRepository {
     tripId: string,
     resourceId: string,
   ): Promise<TripResourceRecord | null> {
-    const [inserted] = await this.database
-      .insert(tripResourceAssignments)
-      .values({ tripId, resourceId })
-      .onConflictDoNothing()
-      .returning({ id: tripResourceAssignments.id });
-    if (!inserted) return null;
-    const records = await this.listResources(tripId);
-    return records.find((record) => record.assignmentId === inserted.id) ?? null;
+    return commitmentTransaction(
+      this.database,
+      async (transaction) => {
+        const [inserted] = await transaction
+          .insert(tripResourceAssignments)
+          .values({ tripId, resourceId })
+          .onConflictDoNothing()
+          .returning({ id: tripResourceAssignments.id });
+        if (!inserted) return null;
+        const records = await this.listResources(tripId, transaction);
+        return (
+          records.find((record) => record.assignmentId === inserted.id) ?? null
+        );
+      },
+      { source: "trip-resource-add" },
+    );
   }
 
   async removeResource(tripId: string, resourceId: string): Promise<boolean> {
-    const deleted = await this.database
-      .delete(tripResourceAssignments)
-      .where(and(
-        eq(tripResourceAssignments.tripId, tripId),
-        eq(tripResourceAssignments.resourceId, resourceId),
-      ))
-      .returning({ id: tripResourceAssignments.id });
-    return deleted.length > 0;
+    return commitmentTransaction(
+      this.database,
+      async (transaction) => {
+        const deleted = await transaction
+          .delete(tripResourceAssignments)
+          .where(
+            and(
+              eq(tripResourceAssignments.tripId, tripId),
+              eq(tripResourceAssignments.resourceId, resourceId),
+            ),
+          )
+          .returning({ id: tripResourceAssignments.id });
+        return deleted.length > 0;
+      },
+      { source: "trip-resource-remove" },
+    );
   }
 
   audit(change: TripAuditChange): Promise<void> {
@@ -418,7 +485,9 @@ export async function listTripsInWindow(
     })
     .from(trips)
     .innerJoin(travelLegs, eq(trips.travelLegId, travelLegs.id))
-    .where(and(lte(trips.startDate, windowEnd), gte(trips.endDate, windowStart)))
+    .where(
+      and(lte(trips.startDate, windowEnd), gte(trips.endDate, windowStart)),
+    )
     .orderBy(asc(trips.startDate), asc(trips.name), asc(trips.id));
 }
 

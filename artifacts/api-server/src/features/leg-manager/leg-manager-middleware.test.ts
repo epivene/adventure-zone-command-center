@@ -8,7 +8,7 @@ class Repo implements LegManagerSessionRepository {
 }
 beforeEach(()=>{process.env.SESSION_SECRET="task-three-test-secret";});
 describe("resolveLegManagerSession",()=>{
-  it("accepts exact active leg/version",async()=>{const r=new Repo();r.records.set(A,{legId:A,managerName:"Alice",sessionVersion:4});const t=issueLegManagerToken({legId:A,sessionVersion:4})!.token;await expect(resolveLegManagerSession(t,r)).resolves.toEqual({legId:A,managerName:"Alice"});});
+  it("accepts exact active leg/version",async()=>{const r=new Repo();r.records.set(A,{legId:A,managerName:"Alice",sessionVersion:4});const t=issueLegManagerToken({legId:A,sessionVersion:4})!.token;await expect(resolveLegManagerSession(t,r)).resolves.toEqual({legId:A,managerName:"Alice",sessionVersion:4});});
   it("rejects stale versions",async()=>{const r=new Repo();r.records.set(A,{legId:A,managerName:null,sessionVersion:5});const t=issueLegManagerToken({legId:A,sessionVersion:4})!.token;await expect(resolveLegManagerSession(t,r)).resolves.toBeNull();});
   it("cannot use another leg token",async()=>{const r=new Repo();r.records.set(A,{legId:A,managerName:"A",sessionVersion:1});const t=issueLegManagerToken({legId:B,sessionVersion:1})!.token;await expect(resolveLegManagerSession(t,r)).resolves.toBeNull();});
   it("rejects archived/disabled access",async()=>{const r=new Repo();const t=issueLegManagerToken({legId:A,sessionVersion:1})!.token;await expect(resolveLegManagerSession(t,r)).resolves.toBeNull();});

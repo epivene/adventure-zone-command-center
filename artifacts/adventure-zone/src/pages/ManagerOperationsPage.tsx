@@ -1,3 +1,5 @@
+import { LegSeasonEditor } from "@/components/leg-planning/leg-season-editor";
+import { ApprovalQueue } from "@/components/leg-planning/approval-review";
 import { useEffect, useMemo, useState } from "react";
 import { BookingLegOperationsCard } from '@/components/bookings/leg-operations-panel';
 import { createOperationsReadClient } from '@/features/bookings/booking-leg-operations-client';
@@ -12,13 +14,14 @@ import { Link } from "wouter";
 import type { YearEndInspectionDto } from "@/lib/year-end-inspections-api";
 
 export default function ManagerOperationsPage() {
-  const { managerApi } = useManagerAuth();
+  const { managerApi, manager } = useManagerAuth();
+  const [planningSeason,setPlanningSeason] = useState(() => Number(new URLSearchParams(window.location.search).get("season")) || new Date().getFullYear());
   const [dashboard, setDashboard] = useState<any>(null);
   const [rollup, setRollup] = useState<any>(null);
   const [yearEndInspection, setYearEndInspection] = useState<YearEndInspectionDto | null>(null);
   const map = useManagerScopedMap();
   const operationsClient = useMemo(() => createOperationsReadClient(managerApi, 'manager'), [managerApi]);
-  const [selectedBooking, setSelectedBooking] = useState('');
+  const [selectedBooking, setSelectedBooking] = useState(() => new URLSearchParams(window.location.search).get('bookingId') ?? '');
   const assignedEvents = map.data?.events ?? [];
   const bookingId = assignedEvents.some(event => event.bookingId === selectedBooking) ? selectedBooking : null;
 
@@ -54,6 +57,8 @@ export default function ManagerOperationsPage() {
           : "Start the piece-by-piece inspection for this leg"}</p>
       </Link>
 
+      <ApprovalQueue role="manager"/>
+      {manager ? <details className="rounded-xl border p-3"><summary className="font-semibold">Season staffing &amp; base</summary><label className="grid gap-1 mt-2">Staffing season<input type="number" min="1900" max="9998" value={planningSeason} onChange={e=>setPlanningSeason(Number(e.target.value))}/></label><LegSeasonEditor key={`${manager.legId}:${planningSeason}`} legId={manager.legId} seasonYear={planningSeason} role="manager"/></details> : null}
       {map.error ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{map.error}</p> : null}
       {assignedEvents.length > 0 ? <section className="grid gap-3" aria-label="Assigned event operations">
         <label className="text-sm font-semibold">Assigned event
