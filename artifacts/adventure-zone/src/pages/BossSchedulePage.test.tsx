@@ -138,7 +138,7 @@ describe("Boss schedule planning views", () => {
     expect(screen.getAllByRole("link", { name: "Booked Fair One" }).every((link) => link.getAttribute("href")?.split("?")[0] === "/boss/profiles/30000000-0000-4000-8000-000000000002")).toBe(true);
     expect(screen.getAllByRole("link", { name: "Booked Fair Two" }).every((link) => link.getAttribute("href")?.split("?")[0] === "/boss/profiles/30000000-0000-4000-8000-000000000003")).toBe(true);
     expect(await screen.findAllByText("Potential County Fair")).not.toHaveLength(0);
-    expect(screen.getAllByRole("link", { name: /Potential County Fair/i }).every((link) => link.getAttribute("href")?.split("?")[0] === "/boss/profiles/30000000-0000-4000-8000-000000000001")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Potential County Fair" }).every((link) => link.getAttribute("href")?.split("?")[0] === "/boss/profiles/30000000-0000-4000-8000-000000000001")).toBe(true);
     expect(screen.queryByRole("button", { name: "Retry location" })).not.toBeInTheDocument();
 
     const overlaps = screen.getByRole("region", { name: "Route schedule conflicts" });

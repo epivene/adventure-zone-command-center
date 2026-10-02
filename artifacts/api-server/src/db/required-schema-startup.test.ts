@@ -8,6 +8,12 @@ vi.hoisted(() => {
 import { runRequiredSchemaStartup } from "./required-schema-startup";
 
 describe("runRequiredSchemaStartup", () => {
+  it("does not become ready when required leg planning verification fails", async () => {
+    await expect(runRequiredSchemaStartup({
+      run: async (name, step) => name === 'required leg planning schema' ? step() : true,
+      ensureLegPlanning: async () => { throw new Error('LEG_PLANNING_SCHEMA_REQUIRED'); },
+    })).rejects.toThrow('LEG_PLANNING_SCHEMA_REQUIRED');
+  });
   it("creates required schemas without reapplying the retired Kristy review cleanup", async () => {
     const calls: string[] = [];
     const timeouts = new Map<string, number | undefined>();

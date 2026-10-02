@@ -1,4 +1,5 @@
 import { ensureEmailThreadAttentionSchemaBeforeListen } from "./email-thread-attention-schema";
+import { ensureLegPlanningSchemaBeforeListen, legPlanningEnabled } from './leg-planning-required-startup';
 import { ensureBookingWorkSchemaBeforeListen } from "./booking-work-required-startup";
 import { ensureChatGPTConnectionSchemaBeforeListen } from "./chatgpt-connection-required-startup";
 import { runStartupStep } from "../lib/startup-step";
@@ -82,9 +83,13 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureBusinessDocuments?: RequiredStep;
   ensureGoogleDriveBackup?: RequiredStep;
   ensureChatGPTConnection?: RequiredStep;
+  ensureLegPlanning?: RequiredStep;
   sleep?: (delayMs: number) => Promise<void>;
 }): Promise<void> {
   const run = dependencies?.run ?? runStartupStep;
+  if (legPlanningEnabled() || dependencies?.ensureLegPlanning) {
+    await run('required leg planning schema', dependencies?.ensureLegPlanning ?? ensureLegPlanningSchemaBeforeListen, REQUIRED_SCHEMA_TIMEOUT_MS);
+  }
   const sleep = dependencies?.sleep ?? systemSleep;
   const runRequired = async (
     name: string,

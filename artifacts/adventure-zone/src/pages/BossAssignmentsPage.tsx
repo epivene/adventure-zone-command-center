@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ApprovalQueue } from '@/components/leg-planning/approval-review';
 import { Plus, RefreshCw } from "lucide-react";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
@@ -263,6 +264,7 @@ export default function BossAssignmentsPage() {
 
   return (
     <div className="grid gap-5" data-testid="boss-assignments-page">
+      <ApprovalQueue role="boss"/>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-primary">Boss</p>

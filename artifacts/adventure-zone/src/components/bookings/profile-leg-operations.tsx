@@ -6,13 +6,14 @@ import { currentOperationsSeason, selectProfileOperationsBooking } from '@/featu
 import { BookingLegOperationsCard } from './leg-operations-panel';
 import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
 export function ProfileLegOperations({ profileId, client, role, search, onSearchChange }: { profileId: string; client: OperationsReadClient; role: 'owner' | 'boss'; search: string; onSearchChange: (search: string) => void }) {
-  const [options, setOptions] = useState<OperationsBookingOption[] | null>(null);
+  const [savedOptions, setOptions] = useState<{profileId:string;client:OperationsReadClient;items:OperationsBookingOption[]} | null>(null);
+  const options=savedOptions?.profileId===profileId&&savedOptions.client===client?savedOptions.items:null;
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
   const changes = useBookingOperationsRevision();
   useEffect(() => {
-    let active = true; setOptions(null); setError(false);
-    client.listProfileBookings(profileId).then(value => { if (active) setOptions(value); }).catch(() => { if (active) setError(true); });
+    let active = true; setError(false);
+    client.listProfileBookings(profileId).then(value => { if (active) setOptions({profileId,client,items:value}); }).catch(() => { if (active) setError(true); });
     return () => { active = false; };
   }, [profileId, client, revision, changes]);
   const params = new URLSearchParams(search);

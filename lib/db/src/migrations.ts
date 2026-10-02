@@ -673,6 +673,16 @@ const migrationFiles = [
         AND pg_get_constraintdef(oid) LIKE '%event_date_fact%'
     ) AS ready`,
   },
+  {
+    name: '20261001_leg_planning.sql',
+    markerSql: `SELECT
+      NOT EXISTS(SELECT 1 FROM (VALUES ('leg_season_plans'),('crew_availability'),('package_sets'),('package_set_members'),('leg_event_plans'),('leg_plan_crew_commitments'),('leg_plan_splits'),('leg_plan_authorities'),('leg_plan_approval_requests'),('leg_plan_approval_decisions'),('leg_plan_mutation_receipts')) t(name) WHERE to_regclass(current_schema()||'.'||t.name) IS NULL)
+      AND NOT EXISTS(SELECT 1 FROM (VALUES ('leg_season_plans_identity'),('crew_availability_window'),('package_set_members_identity'),('leg_plan_crew_window'),('leg_plan_crew_identity'),('leg_plan_split_distinct'),('leg_plan_receipt_identity')) t(name) WHERE NOT EXISTS(SELECT 1 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname=t.name))
+      AND NOT EXISTS(SELECT 1 FROM (VALUES ('crew_availability_worker_window'),('package_set_members_resource'),('leg_event_plans_leg'),('leg_plan_crew_worker_window'),('leg_plan_splits_bookings'),('leg_plan_requests_bookings'),('leg_plan_decisions_request')) t(name) WHERE to_regclass(current_schema()||'.'||t.name) IS NULL)
+      AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='leg_plan_decision_immutable' AND tgrelid=to_regclass(current_schema()||'.leg_plan_approval_decisions'))
+      AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='leg_planning_write_guard' AND tgrelid=to_regclass(current_schema()||'.leg_plan_crew_commitments'))
+      AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='leg_planning_receipt_validation' AND tgrelid=to_regclass(current_schema()||'.outreach_write_receipts')) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

@@ -1,4 +1,5 @@
 import { currentOperationsSeason } from './select-profile-operations-booking';
+export function operationsManagerHref({bookingId,season,legId}:{bookingId:string;season:number|null;legId?:string|null}):string{const q=new URLSearchParams({bookingId});if(season!==null)q.set('season',String(season));if(legId)q.set('leg',legId);return `/manager/operations?${q}`;}
 export function operationsScheduleHref({ season, legId, status, bookingId }: { season: number; legId?: string | null; status?: string; bookingId?: string }): string {
   const query = new URLSearchParams({ view: 'map', season: String(season) });
   if (legId) query.set('leg', legId);

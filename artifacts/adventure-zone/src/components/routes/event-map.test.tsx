@@ -126,6 +126,7 @@ it('unmapped_unassigned_still_listed and zero_coordinates_are_valid', () => {
   render(<EventMap events={[undated, zero]} travelLegs={[leg]} requestedSeasonYear={2026} />);
   expect(screen.getByText('Undated event')).toBeInTheDocument();
   expect(screen.getByText('Needs dates')).toBeInTheDocument();
+  expect(screen.getByRole('link',{name:'Operating plan for Undated event'})).toHaveAttribute('href','/schedule?view=map&season=2026&bookingId=undated');
   expect(screen.getByText('Needs leg')).toBeInTheDocument();
   expect(mocks.layers.mock.calls.at(-1)?.[0].events.map((event: any) => event.id)).toContain('zero');
   expect(mocks.post).not.toHaveBeenCalled();

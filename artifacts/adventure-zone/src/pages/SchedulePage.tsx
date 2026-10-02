@@ -5,6 +5,8 @@ import { CalendarContent } from "./CalendarPage";
 import { RoutesContent } from "./RoutesPage";
 import { ScheduleViewToggle, type ScheduleView } from "@/components/schedule/schedule-view-toggle";
 import { currentOperationsSeason } from '@/features/bookings/select-profile-operations-booking';
+import { BookingLegOperationsCard } from '@/components/bookings/leg-operations-panel';
+import { ownerOperationsClient } from '@/features/bookings/booking-leg-operations-client';
 
 type Leg = { id: string; name: string; archivedAt?: string | null };
 
@@ -65,6 +67,7 @@ export default function SchedulePage() {
         <h1 className="text-3xl font-bold tracking-tight">Schedule</h1>
         <ScheduleViewToggle view={view} onChange={changeView} />
       </header>
+      {params.get('bookingId') ? <BookingLegOperationsCard bookingId={params.get('bookingId')!} role="owner" client={ownerOperationsClient}/> : null}
 
       <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">

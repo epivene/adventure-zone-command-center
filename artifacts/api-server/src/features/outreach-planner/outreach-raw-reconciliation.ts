@@ -1,5 +1,8 @@
 import { drizzle } from "drizzle-orm/node-postgres";
-import { allocationEnabled } from "./outreach-allocation";
+import {
+  allocationEnabled,
+  capacityEnforcementEnabled,
+} from "./outreach-allocation";
 import { fingerprint, loadAllocationFacts } from "./outreach-capacity-evidence";
 import { OutreachError } from "./outreach-repository";
 export type RawCapacityClient = {
@@ -12,7 +15,7 @@ export async function beginRawCapacityReconciliation(
   client: RawCapacityClient,
   source: string,
 ) {
-  if (!allocationEnabled()) return;
+  if (!capacityEnforcementEnabled()) return;
   const lock = await client.query(
     "select id from outreach_allocation_mutex where id=1 for update",
   );
@@ -31,12 +34,19 @@ export async function finishRawCapacityReconciliation(
   client: RawCapacityClient,
   source: string,
 ) {
-  if (!allocationEnabled()) return;
-  const facts = await loadAllocationFacts(drizzle(client as never));
-  await client.query(
-    "insert into outreach_reconciliation_facts(source,actor,reason,booking_ids,facts_fingerprint,detail) values ($1,'system','Authoritative source facts changed; fresh allocation verification required.','[]'::jsonb,$2,'{\"capacityReviewRequired\":true}'::jsonb)",
-    [source, fingerprint(facts)],
-  );
+  if (!capacityEnforcementEnabled()) return;
+  if (process.env.LEG_PLANNING_ENABLED === "true")
+    await client.query(
+      "UPDATE leg_event_plans SET invalidation_reasons='[\"Source facts changed; review the current plan.\"]'::jsonb,revision=revision+1,updated_at=now()",
+    );
+  const facts = allocationEnabled()
+    ? await loadAllocationFacts(drizzle(client as never))
+    : null;
+  if (facts)
+    await client.query(
+      "insert into outreach_reconciliation_facts(source,actor,reason,booking_ids,facts_fingerprint,detail) values ($1,'system','Authoritative source facts changed; fresh allocation verification required.','[]'::jsonb,$2,'{\"capacityReviewRequired\":true}'::jsonb)",
+      [source, fingerprint(facts)],
+    );
   await client.query(
     "update outreach_allocation_mutex set generation=generation+1 where id=1",
   );
@@ -58,7 +68,7 @@ export async function rawCalendarFactQuery<
   values?: unknown[],
   source = "calendar-connection",
 ): Promise<T> {
-  if (!allocationEnabled()) return pool.query(text, values);
+  if (!capacityEnforcementEnabled()) return pool.query(text, values);
   if (!pool.connect)
     throw new OutreachError(
       409,

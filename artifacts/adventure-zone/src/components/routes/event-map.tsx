@@ -2,7 +2,7 @@
 
 import { Link } from "wouter";
 import { useEffect, useMemo, useState } from "react";
-import { eventMatchesOperationsSeason, operationsDateKey, operationsProfileHref } from '@/features/bookings/operations-navigation';
+import { eventMatchesOperationsSeason, operationsDateKey, operationsProfileHref,operationsScheduleHref } from '@/features/bookings/operations-navigation';
 import { currentOperationsSeason } from '@/features/bookings/select-profile-operations-booking';
 
 import { apiPost } from "@/lib/auth-token";
@@ -67,6 +67,7 @@ function eventDetailsHref(event: MapEvent, profileBasePath: string) {
 }
 
 type PlanningEvent = MapEvent & {
+  planningSeasonYear:number;
   planningEmphasis: Exclude<RouteEmphasis, "hidden">;
   routeStopNumber: number | null;
 };
@@ -171,6 +172,7 @@ function EventRows({
                 </p>
                 {!event.startsAt ? <p className="text-xs font-semibold text-amber-700">Needs dates</p> : null}
                 {!event.travelLegId ? <p className="text-xs font-semibold text-amber-700">Needs leg</p> : null}
+                {showBookingLinks ? <Link className="mt-2 block text-sm font-semibold text-blue-700 underline" href={operationsScheduleHref({season:event.planningSeasonYear,legId:event.travelLegId,bookingId:event.id}).replace('/schedule',profileBasePath==='/boss/profiles'?'/boss/schedule':'/schedule')}>Operating plan for {event.name}</Link> : null}
                 {unmapped ? <p className="text-xs font-semibold text-amber-700">Needs mapping</p> : null}
                 {!unmapped && onFocus ? (
                   <button className="button-secondary mt-2" onClick={() => onFocus(event)} type="button">
@@ -419,6 +421,7 @@ export function EventMap({
               : "needs_mapping_missing_location"),
         seasonYear: eventSeasonYear(event),
         planningEmphasis: emphasis,
+        planningSeasonYear:seasonYear,
       });
     }
     return addRouteStopNumbers(result);

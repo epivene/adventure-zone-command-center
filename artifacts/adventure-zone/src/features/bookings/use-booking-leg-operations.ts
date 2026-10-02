@@ -10,7 +10,7 @@ export function useBookingLegOperations(bookingId: string | null, client: Operat
   const revision = useBookingOperationsRevision(bookingId);
   const reload = useCallback(async () => {
     const request = ++generation.current;
-    setData(null); setError(null);
+    setError(null);
     if (!bookingId) { setLoading(false); return; }
     setLoading(true);
     try {
@@ -20,6 +20,7 @@ export function useBookingLegOperations(bookingId: string | null, client: Operat
       if (request === generation.current) setError(cause instanceof Error ? cause.message : 'Operations details could not be loaded.');
     } finally { if (request === generation.current) setLoading(false); }
   }, [bookingId, client]);
-  useEffect(() => { void reload(); return () => { generation.current++; }; }, [reload, revision]);
+  useEffect(() => { setData(null); void reload(); return () => { generation.current++; }; }, [reload]);
+  useEffect(() => { if(revision) void reload(); }, [reload, revision]);
   return { data: data?.bookingId === bookingId ? data : null, loading, error, reload };
 }

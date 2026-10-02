@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { BookingLegOperationsCard } from '@/components/bookings/leg-operations-panel';
+import { bossOperationsClient } from '@/features/bookings/booking-leg-operations-client';
 import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
 import { Link, useSearch, useLocation } from "wouter";
 import { currentOperationsSeason } from '@/features/bookings/select-profile-operations-booking';
@@ -232,6 +234,7 @@ export default function BossSchedulePage() {
         <h1 className="text-3xl font-bold tracking-tight">Schedule</h1>
         <ScheduleViewToggle view={view} onChange={view => changeFilters({ view })} />
       </header>
+      {new URLSearchParams(search).get('bookingId') ? <BookingLegOperationsCard bookingId={new URLSearchParams(search).get('bookingId')!} role="boss" client={bossOperationsClient}/> : null}
 
       <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">

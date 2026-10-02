@@ -44,6 +44,8 @@ export type PreparedAllocation = {
 };
 export const allocationEnabled = () =>
   process.env.OUTREACH_PLANNER_ENABLED === "true";
+export const capacityEnforcementEnabled = () =>
+  allocationEnabled() || process.env.LEG_PLANNING_ENABLED === "true";
 const review = (...reasons: string[]): CapacityDecision => ({
   status: "needs_review",
   reasons,
@@ -80,9 +82,24 @@ export async function withAllocationTransaction<T>(
       sql`insert into outreach_write_receipts(transaction_id,mode,source) values (txid_current(),${participation.mode},${participation.source})`,
     );
     activeAllocationTransactions.set(tx, participation.mode);
+    const planning = process.env.LEG_PLANNING_ENABLED === "true";
+    const hooks = planning
+      ? await import("../leg-planning/planning-writer-hooks")
+      : null;
+    const beforePlanning =
+      hooks && participation.mode === "allocation"
+        ? await hooks.planningSnapshotIn(tx)
+        : null;
     let result: T;
     try {
       result = await work(tx as unknown as AllocationDatabase);
+      if (hooks && beforePlanning)
+        await hooks.checkPlanningWriteIn(
+          tx,
+          beforePlanning,
+          await hooks.planningSnapshotIn(tx),
+          "commitment",
+        );
     } finally {
       activeAllocationTransactions.delete(tx);
     }
