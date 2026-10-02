@@ -11,7 +11,7 @@ it('projects saved reserved windows without replacing public dates', async () =>
   try {
     for (const table of [schema.bookings, schema.travelLegs, schema.bookingLegAssignments, schema.bookingOperationalWindows, schema.googleOperationalCalendarLinks]) {
       const c = getTableConfig(table);
-      await sql.exec(`CREATE TABLE "${c.name}" (${c.columns.map(col => `"${col.name}" ${'enumValues' in col && col.enumValues ? 'text' : col.getSQLType()}${col.name === 'id' ? ' PRIMARY KEY' : ''}`).join(',')})`);
+      await sql.exec(`CREATE TABLE "${c.name}" (${c.columns.map(col => `"${col.name}" ${'enumValues' in col && col.enumValues ? 'text' : col.getSQLType()}${col.name === 'id' ? ' PRIMARY KEY DEFAULT gen_random_uuid()' : ''}`).join(',')})`);
     }
     await sql.exec(readFileSync(new URL("../../../../../lib/db/migrations/20261002_booking_date_provenance.sql",import.meta.url),"utf8"));
     const seed = async (bookingId: string, field: string, value: string, semantics = "instant") => sql.query(`insert into booking_date_evidence(booking_id,field,kind,value,semantics,revision,source_type,source_id,source_revision,actor) values($1,$2,$3,$4,$5,1,'saved_note','fixture','1','owner')`, [bookingId,field,field.startsWith("public")?"verified_event":"verified_reservation",value,semantics]);

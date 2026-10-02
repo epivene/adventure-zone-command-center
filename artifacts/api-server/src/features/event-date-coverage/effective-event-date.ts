@@ -1,3 +1,4 @@
+import { isBookedForSchedule } from "../calendar/schedule-booking-state";
 import type {
   BookingDateInput,
   EffectiveEventDate,
@@ -9,7 +10,8 @@ const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
 function isEligibleDate(value: string | null, today: string): value is string {
   if (value === null || !dateOnlyPattern.test(value) || value < today) return false;
   const [year, month, day] = value.split("-").map(Number);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (year < 1 || year >= 9999) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
   return parsed.getUTCFullYear() === year &&
     parsed.getUTCMonth() === month - 1 &&
     parsed.getUTCDate() === day;
@@ -22,8 +24,9 @@ export function resolveEffectiveEventDate(input: {
 }): EffectiveEventDate | null {
   const booking = input.bookings
     .filter((candidate) =>
-      !["cancelled", "declined"].includes(candidate.status ?? "") &&
-      isEligibleDate(candidate.startsOn, input.today),
+      isBookedForSchedule(candidate) &&
+      isEligibleDate(candidate.startsOn, input.today) &&
+      isEligibleDate(candidate.endsOn, candidate.startsOn!),
     )
     .sort((left, right) => left.startsOn!.localeCompare(right.startsOn!))[0];
 

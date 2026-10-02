@@ -16,8 +16,8 @@ function sourceFor(count: number): CoverageDataSource {
       region: index === 0 ? "OR" : null,
     }))),
     loadBookings: vi.fn(async () => [
-      { id: "future-booking", organizationId: "org-0", startsOn: "2027-06-10", endsOn: null, status: "booked" },
-      { id: "past-booking", organizationId: "org-3", startsOn: "2025-06-10", endsOn: null, status: "booked" },
+      { id: "future-booking", organizationId: "org-0", startsOn: "2027-06-10", endsOn: "2027-06-11", status: "confirmed" },
+      { id: "past-booking", organizationId: "org-3", startsOn: "2025-06-10", endsOn: "2025-06-11", status: "confirmed" },
     ]),
     loadFacts: vi.fn(async (): ReturnType<CoverageDataSource["loadFacts"]> => [
       { id: "confirmed", organizationId: "org-1", startsOn: "2027-07-01", endsOn: null, status: "confirmed", active: true, researchedAt: new Date("2026-09-01T00:00:00Z"), verifiedAt: null },

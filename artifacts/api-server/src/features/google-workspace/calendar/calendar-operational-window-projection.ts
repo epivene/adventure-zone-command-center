@@ -1,7 +1,9 @@
+import type { ResolvedDates } from "../../booking-date-repair/date-evidence";
 export type CalendarBookingLike = {
   id: string;
   startsAt: Date | null;
   endsAt: Date | null;
+  dateProvenance?: ResolvedDates;
   status?: string | null;
   probability?: string | null;
   [key: string]: unknown;
@@ -23,6 +25,7 @@ export type CalendarBookingWithOperationalWindow<T extends CalendarBookingLike> 
 
 function inclusiveOperationalEnd(window: OperationalWindowLike) {
   const end = new Date(window.endsAt);
+  if (window.source === 'reviewed_timestamp') return end;
   if (end.getTime() <= window.startsAt.getTime()) return new Date(window.startsAt);
   end.setUTCDate(end.getUTCDate() - 1);
   return end;
@@ -79,6 +82,11 @@ export function applyOperationalWindowsToCalendarBookings<T extends CalendarBook
   const byBookingId = new Map(windows.map((window) => [window.bookingId, window]));
 
   return bookings.map((booking) => {
+    if (booking.dateProvenance) {
+      const dates=booking.dateProvenance, chosen=dates.reservationWindow ?? dates.publicWindow;
+      const exclusive=dates.reservationWindow ? dates.reservationEndExclusive : dates.publicEndExclusive;
+      return { ...booking, actualStartsAt: dates.publicWindow ? new Date(dates.publicWindow.start) : null, actualEndsAt: dates.publicWindow ? new Date(new Date(dates.publicWindow.end).getTime()-(dates.publicEndExclusive?1:0)) : null, startsAt: chosen ? new Date(chosen.start) : null, endsAt: chosen ? new Date(new Date(chosen.end).getTime()-(exclusive?1:0)) : null, dateOnly:false, actualDateOnly:false, operationalWindowSource:dates.reservationWindow ? "reviewed_timestamp" : "verified_public" };
+    }
     const window = byBookingId.get(booking.id);
     if (
       booking.startsAt

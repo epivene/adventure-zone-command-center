@@ -27,31 +27,18 @@ import { resolveOperationalWindow, windowContains } from "./operational-window";
 type Row = Record<string, any>;
 const iso = (value: unknown) =>
   value == null ? null : new Date(String(value)).toISOString();
-function sourceWindow(row: Row): WindowInput | null {
-  const reserved =
-    row.reserved_starts_at != null && row.reserved_ends_at != null;
-  const start = reserved ? row.reserved_starts_at : row.starts_at,
-    end = reserved ? row.reserved_ends_at : row.ends_at;
-  if (!start || !end) return null;
-  const dateOnly = reserved
-    ? row.reserved_source === "google_calendar" &&
-      String(iso(start)).endsWith("T00:00:00.000Z")
-    : isImportedCalendarDate(start, row.imported_dates === true);
-  return {
-    startsAt: operationsReadDate(start, dateOnly),
-    endsAt: operationsReadDate(end, dateOnly),
-    semantics: dateOnly
-      ? reserved
-        ? "exclusive_date"
-        : "inclusive_date"
-      : "timestamp",
-    source: reserved ? String(row.reserved_source) : "booking",
-  };
+function sourceWindow(row: Row, publicOnly = false): WindowInput | null {
+  const dates = row.date_provenance;
+  if (!dates?.publicWindow) return null;
+  const hasReservation = dates.rawReservation.start != null || dates.rawReservation.end != null;
+  if (!publicOnly && hasReservation && !dates.reservationWindow) return null;
+  const window = publicOnly ? dates.publicWindow : dates.reservationWindow ?? dates.publicWindow;
+  const exclusive = publicOnly ? dates.publicEndExclusive : dates.reservationWindow ? dates.reservationEndExclusive : dates.publicEndExclusive;
+  return { startsAt: window.start, endsAt: exclusive ? new Date(new Date(window.end).getTime()-1).toISOString() : window.end, semantics: "timestamp", source: dates.reservationWindow && !publicOnly ? "reviewed reservation" : "verified public event" };
 }
 function emptyDraft(booking: Row, actor: PlanningActor): PlanDraft {
   const sourceYear = operationsSeason(
-    booking.starts_at,
-    isImportedCalendarDate(booking.starts_at, booking.imported_dates === true),
+    booking.date_provenance?.publicWindow?.start ?? null, false,
   );
   return {
     bookingId: booking.id,
@@ -186,7 +173,7 @@ export async function loadPlanFacts(
     managerAccess,
   ] = await Promise.all([
     query(
-      sql`SELECT b.id,b.status,b.travel_leg_id,b.starts_at,b.ends_at,b.latitude,b.longitude,w.starts_at AS reserved_starts_at,w.ends_at AS reserved_ends_at,w.source AS reserved_source,EXISTS(SELECT 1 FROM google_operational_calendar_links c WHERE c.booking_id=b.id AND c.last_app_snapshot->>'imported'='true') AS imported_dates FROM bookings b LEFT JOIN booking_operational_windows w ON w.booking_id=b.id`,
+      sql`SELECT b.id,b.status,b.travel_leg_id,b.starts_at,b.ends_at,b.latitude,b.longitude,booking_resolved_dates(b.id,b.starts_at,b.ends_at,w.starts_at,w.ends_at) AS date_provenance,w.starts_at AS reserved_starts_at,w.ends_at AS reserved_ends_at,w.source AS reserved_source,EXISTS(SELECT 1 FROM google_operational_calendar_links c WHERE c.booking_id=b.id AND c.last_app_snapshot->>'imported'='true') AS imported_dates FROM bookings b LEFT JOIN booking_operational_windows w ON w.booking_id=b.id`,
     ),
     query(
       sql`SELECT booking_id,package_template_id FROM booking_package_selections`,
@@ -386,11 +373,7 @@ export async function loadPlanFacts(
     if (invalidIds.length) sourceReasons.push("UNRESOLVED_OBLIGATION_WINDOWS");
     if (plan?.committed && plan.committed.legId !== b.travel_leg_id)
       sourceReasons.push("BOOKING_LEG_CHANGED");
-    const publicResolved = sourceWindow({
-      ...b,
-      reserved_starts_at: null,
-      reserved_ends_at: null,
-    });
+    const publicResolved = sourceWindow(b, true);
     if (
       !publicResolved ||
       resolveOperationalWindow(publicResolved).state !== "resolved"
@@ -415,8 +398,7 @@ export async function loadPlanFacts(
       const row = bookings.find((b) => b.id === bid);
       return row
         ? planningStartCalendar(
-            row.starts_at,
-            isImportedCalendarDate(row.starts_at, row.imported_dates === true),
+            row.date_provenance?.publicWindow?.start ?? null, false,
           )
         : null;
     });
@@ -512,15 +494,10 @@ export async function loadPlanFacts(
         legId: b.travel_leg_id,
         status: b.status,
         seasonYear: operationsSeason(
-          b.starts_at,
-          isImportedCalendarDate(b.starts_at, b.imported_dates === true),
+          b.date_provenance?.publicWindow?.start ?? null, false,
         ),
         window,
-        publicWindow: sourceWindow({
-          ...b,
-          reserved_starts_at: null,
-          reserved_ends_at: null,
-        }),
+        publicWindow: sourceWindow(b, true),
         packageIds: selections
           .filter((s) => s.booking_id === id)
           .map((s) => s.package_template_id),

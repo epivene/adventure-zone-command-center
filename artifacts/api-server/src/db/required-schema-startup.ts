@@ -1,3 +1,4 @@
+import { ensureBookingDateSchemaBeforeListen } from "./booking-date-required-startup";
 import { ensureEmailThreadAttentionSchemaBeforeListen } from "./email-thread-attention-schema";
 import { ensureLegPlanningSchemaBeforeListen, legPlanningEnabled } from './leg-planning-required-startup';
 import { ensureBookingWorkSchemaBeforeListen } from "./booking-work-required-startup";
@@ -67,6 +68,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureGoogleWorkspace?: RequiredStep;
   ensureLeadIntake?: RequiredStep;
   ensureLegAssignment?: RequiredStep;
+  ensureBookingDates?: RequiredStep;
   ensureYearEndInspections?: RequiredStep;
   ensureEventReviewDismissals?: RequiredStep;
   ensureFollowUpDismissals?: RequiredStep;
@@ -135,6 +137,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
     "required leg assignment schema",
     dependencies?.ensureLegAssignment ?? ensureLegAssignmentSchemaBeforeListen,
   );
+  await runRequired("required booking date evidence schema", dependencies?.ensureBookingDates ?? ensureBookingDateSchemaBeforeListen);
   await runRequired(
     "required year-end inspection schema",
     dependencies?.ensureYearEndInspections ?? ensureYearEndInspectionSchemaBeforeListen,

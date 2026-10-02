@@ -25,3 +25,7 @@ Task 3: started; RED regressions queued for 18 sentinel overlap/review paging, e
 Ruling: Respect explicitly evidenced all-day date semantics when legacy Google storage encodes dates at midnight UTC — these values represent calendar dates, not UTC instants — cost if wrong: a wrongly classified source can shift the effective reservation; require exact source evidence and preserve raw values.
 Task 3: RED confirmed in run 36965005440/job 110706731605: connector returns all 18 sentinel leads in dated 2027 overlap; Google encoded date resolver returns null; unknown committed capacity lacks source-review blocker.
 Ruling: Include current endpoint source references/revisions in additive resolver output — availability fingerprints and owner previews must detect evidence changes even when dates stay equal — cost if wrong: slightly larger read payloads.
+
+Task 3: core checks GREEN 21/21 in job 110707438682; baseline ACT comparison passed. Existing connector fixture tests 4 failed because they omitted the new schema/evidence; upgrading fictional fixtures to explicit test-only reviewed evidence. Planning 122 and frontend 32 passed before remaining reader changes.
+
+Task 3: RED run 36965652210/job110708725508 confirms display, readiness and startup failures (7 assertions). Map fixture failed before the intended assertion because its newly required id lacked a default; correct the fixture and observe that regression before committing map implementation.

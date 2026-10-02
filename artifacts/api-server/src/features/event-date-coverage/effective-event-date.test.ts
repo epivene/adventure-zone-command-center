@@ -7,14 +7,14 @@ describe("resolveEffectiveEventDate", () => {
     expect(resolveEffectiveEventDate({
       today: "2026-09-21",
       bookings: [
-        { id: "booking-1", startsOn: "2026-10-03", endsOn: null, status: "confirmed" },
+        { id: "booking-1", startsOn: "2026-10-03", endsOn: "2026-10-04", status: "confirmed" },
       ],
       facts: [
         { id: "fact-1", startsOn: "2026-09-28", endsOn: null, status: "confirmed", active: true },
       ],
     })).toEqual({
       startsOn: "2026-10-03",
-      endsOn: null,
+      endsOn: "2026-10-04",
       displayStatus: "booked",
       sourceId: "booking-1",
     });
@@ -25,7 +25,7 @@ describe("resolveEffectiveEventDate", () => {
       name: "selects the earliest eligible booking",
       bookings: [
         { id: "later", startsOn: "2026-11-01", endsOn: null, status: "confirmed" },
-        { id: "earlier", startsOn: "2026-10-01", endsOn: "2026-10-03", status: "tentative" },
+        { id: "earlier", startsOn: "2026-10-01", endsOn: "2026-10-03", status: "confirmed" },
       ],
       facts: [],
       want: {

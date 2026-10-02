@@ -12,6 +12,7 @@ export type BookingDateInput = {
   startsOn: string | null;
   endsOn: string | null;
   status: string | null;
+  probability?: string | null;
 };
 
 export type EventDateFactInput = {
