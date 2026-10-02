@@ -1,10 +1,12 @@
+import { TodayReadService } from "./today-read-service";
+import { loadMasterTodayQueue } from "../today/master-work-queue-repository";
 import { createEmailAttentionService } from "../google-workspace/email-thread-attention-runtime";
 import { BookingWorkService } from "../booking-work/service";
 import { ProfileMergeService } from "./profile-merge-service";
 import { randomBytes } from "node:crypto";
 import { consentHtml } from "./consent-page";
 import express, { type Express } from "express";
-import { pool } from "@workspace/db";
+import { pool, db as appDatabase } from "@workspace/db";
 import { OAuthStore } from "./oauth-store";
 import {
   createConnectionOAuthProvider,
@@ -149,6 +151,7 @@ export function mountChatGPTConnection(
         });
       },
       services: {
+        today: new TodayReadService(db,now=>loadMasterTodayQueue(appDatabase,now)),
         attention: createEmailAttentionService(db),
         work: new BookingWorkService(db),
         reads: new ConnectionReadService(db),
