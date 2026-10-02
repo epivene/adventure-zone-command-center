@@ -34,7 +34,7 @@ env pnpm_config_verify_deps_before_run=false pnpm --filter @workspace/api-server
 
 Result: 3 failed, 18 passed. The manager anchor and both middleware source assertions reproduced exactly. Those tests and the manager map implementation are unchanged by this feature; the route index diff only adds the explicitly authenticated operations router. Other logged hosted failures were investigated, but their entire workflows were not rerun on baseline and are not claimed to have been fully reproduced. No broad check was suppressed or marked successful.
 
-Hosted focused workflow status: pending publication and execution. Phone/tablet/desktop visual checks and broad workspace failures remain pending; the PR stays draft.
+Hosted focused workflow passed on Node 22 at commit `87607a14574ae359b123a4f25837a935f1fd54a1`: job 110652045457, **Operations regressions and builds**, completed successfully. Shared-library typecheck, all 147 selected tests, frontend build and API build passed with a fresh frozen dependency installation. The subsequent documentation update changes only this verification record. Phone/tablet/desktop visual checks and broad workspace failures remain pending; the PR stays draft.
 
 ## Implemented acceptance
 
