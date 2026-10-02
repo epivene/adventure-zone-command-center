@@ -95,7 +95,8 @@ function warningKind(warning: ResourceWarning) {
 
 function warningSeverity(warning: ResourceWarning) {
   if (warning.overridden) return "warning" as const;
-  return warning.code === "RESOURCE_OVERLAP" ||
+  return warning.code === "RESOURCE_DATE_EVIDENCE_UNRESOLVED" ||
+    warning.code === "RESOURCE_OVERLAP" ||
     warning.code === "RESOURCE_UNAVAILABLE" ||
     warning.code === "PAINTBALL_TRANSFER_TIME"
     ? "blocking" as const

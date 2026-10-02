@@ -40,5 +40,15 @@ it('projects saved reserved windows without replacing public dates', async () =>
     expect(imported.seasonYear).toBe(2027);
     expect(filterMapEvents([imported], { statuses: [], travelLegIds: [], regions: [], dateFrom: '2027-01-01', dateTo: '2027-12-31' })).toHaveLength(1);
     expect(filterMapEvents([imported], { statuses: [], travelLegIds: [], regions: [], dateFrom: '2026-01-01', dateTo: '2026-12-31' })).toHaveLength(0);
+    const partialId='10000000-0000-4000-8000-000000000004';
+    await sql.query("INSERT INTO bookings(id,name,status,starts_at) VALUES($1,'Verified season, duration unknown','new_lead','2027-04-03T12:00:00Z')",[partialId]);
+    await seed(partialId,"public_start","2027-04-03T12:00:00Z");
+    const partial=(await repository.listMapEvents()).find(row=>row.id===partialId)!;
+    expect(partial.startsAt).toBeNull();
+    expect(partial.reservedStartsAt).toBeNull();
+    expect(partial.seasonYear).toBe(2027);
+    expect(filterMapEvents([partial],{statuses:[],travelLegIds:[],regions:[],dateFrom:'2027-01-01',dateTo:'2027-12-31'})).toHaveLength(1);
+    expect(filterMapEvents([partial],{statuses:[],travelLegIds:[],regions:[],dateFrom:'2027-04-01',dateTo:'2027-04-30'})).toHaveLength(0);
+
   } finally { await sql.close(); }
 },30_000);
