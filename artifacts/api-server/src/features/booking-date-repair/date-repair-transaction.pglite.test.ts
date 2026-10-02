@@ -1,8 +1,9 @@
+import { draft } from "../leg-planning/planning-fixtures";
 import { afterEach,expect,it,vi } from "vitest";
 import { BookingDateRepairService } from "./date-repair-service";
 import { repairDatabase,proposal,ids,noteId } from "./date-repair-test-setup";
 let fixture:Awaited<ReturnType<typeof repairDatabase>>;
-afterEach(async()=>{await fixture?.pg.close();vi.unstubAllEnvs();});
+afterEach(async()=>{await fixture?.pg.close();vi.unstubAllEnvs();vi.useRealTimers();});
 const setup=async()=>{fixture=await repairDatabase();return new BookingDateRepairService(fixture.db as never);};
 const applyInput=(p:{id:string;fingerprint:string},key="repair-one")=>({previewId:p.id,fingerprint:p.fingerprint,requestKey:key});
 it("previews without changing dates and atomically applies exact source proof, preserving siblings/history/status/packages",async()=>{
@@ -27,7 +28,7 @@ it.each([
  ["source","UPDATE activities SET body=body || ' changed' WHERE id='"+noteId+"'"],
  ["assignment","INSERT INTO booking_resource_assignments(booking_id,resource_id) VALUES('"+ids.booking+"','"+ids.resource+"')"],
  ["hold","INSERT INTO outreach_holds VALUES('"+ids.split+"','"+ids.booking+"','"+ids.leg+"','2027-07-20','2027-07-27','[]','{}','active','2030-01-01')"],
- ["plan","INSERT INTO leg_event_plans(booking_id,draft) VALUES('"+ids.booking+"','{}')"],
+ ["plan","INSERT INTO leg_event_plans(booking_id,draft) VALUES('"+ids.booking+"','"+JSON.stringify(draft())+"')"],
 ])("rejects stale %s without writes",async(_kind,mutation)=>{
  const service=await setup();const p=await service.preview(proposal() as never,"owner");await fixture.pg.exec(mutation);
  await expect(service.apply(applyInput(p),"owner")).rejects.toMatchObject({status:409});
