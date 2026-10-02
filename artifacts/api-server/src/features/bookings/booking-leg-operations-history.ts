@@ -9,7 +9,7 @@ export function operationsDateKey(value: Date | string, dateOnly = false): strin
   if (dateOnly || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value))) return date.toISOString().slice(0, 10);
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Denver', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
   const part = (key: string) => parts.find(item => item.type === key)?.value;
-  return `${part('year')}-${part('month')}-${part('day')}`;
+  return `${(part('year') ?? '').padStart(4,'0')}-${part('month')}-${part('day')}`;
 }
 export function operationsReadDate(value: Date | string | null, dateOnly = false): string | null {
   return value == null ? null : dateOnly ? operationsDateKey(value, true) : new Date(value).toISOString();

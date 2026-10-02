@@ -1,3 +1,4 @@
+import { isBookedForSchedule } from "../calendar/schedule-booking-state";
 import { operationsSeason } from "../bookings/booking-leg-operations-history";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -13,6 +14,7 @@ export type ReviewedPreview=DateRepairPreview&{
  beforeResolved:ReturnType<typeof resolveBookingDates>;afterResolved:ReturnType<typeof resolveBookingDates>;
  selection:{bookingId:string;name:string;profileId:string|null;status:string;packages:Row[]};
 };
+const committed=(booking:Row)=>isBookedForSchedule(booking)||["deposit_received","invoice_sent","signed","booked"].includes(booking.status);
 type StoredPreview={proposal:RepairProposalInput;preview:ReviewedPreview};
 const endpointRaw=(input:DateEvidenceInput,field:EndpointEvidence["field"])=>{
  const window=field.startsWith("public_")?input.rawPublic:input.rawReservation;
@@ -93,15 +95,15 @@ export class BookingDateRepairService {
   if(prior.verifiedPublicStart&&resolved.verifiedPublicStart&&operationsSeason(new Date(prior.verifiedPublicStart))!==operationsSeason(new Date(resolved.verifiedPublicStart)))reasons.push("SEPARATE_SEASON_REQUIRES_NEW_BOOKING");
   if(material&&(holds.length||resources.length||crew.length||plans.length||trips.length))reasons.push("RECONCILE_EXISTING_COMMITMENTS_FIRST");
   // An already evidenced signed reservation is an obligation even before individual assignments.
-  if(signedWindowChanged&&["confirmed","contract_received","deposit_received","invoice_sent","signed","booked"].includes(snapshot.booking.status)&&(prior.reservationWindow||prior.publicWindow))reasons.push("RECONCILE_CONFIRMED_WINDOW_FIRST");
+  if(signedWindowChanged&&committed(snapshot.booking)&&(prior.reservationWindow||prior.publicWindow))reasons.push("RECONCILE_CONFIRMED_WINDOW_FIRST");
   const affected=new Set<string>([id]);
   for(const hold of holds)if(hold.booking_id)affected.add(hold.booking_id);
   const target=resolved.reservationWindow??resolved.publicWindow;
-  if(material&&target&&["confirmed","signed","booked"].includes(snapshot.booking.status)){
+  if(material&&target&&committed(snapshot.booking)){
    const end=new Date(target.end).getTime()-((resolved.reservationWindow?resolved.reservationEndExclusive:resolved.publicEndExclusive)?1:0);
    const targetPackages=rows("booking_package_selections").filter(r=>r.booking_id===id).map(r=>r.package_template_id);
    const selectedResources=resources.map(r=>r.resource_id);
-   for(const other of rows("bookings").filter(r=>r.id!==id&&["confirmed","signed","booked"].includes(r.status))){
+   for(const other of rows("bookings").filter(r=>r.id!==id&&committed(r))){
     // Other unresolved obligations prevent a definitive capacity claim.
     const dates=other.date_provenance;
     const unsupported=(dates.rawReservation.start||dates.rawReservation.end)&&!dates.reservationWindow;
@@ -116,7 +118,7 @@ export class BookingDateRepairService {
      if(shared){affected.add(other.id);reasons.push("OVERLAPPING_COMMITMENT");}
      for(const packageId of targetPackages){
       const overlapping=rows("booking_package_selections").filter(r=>r.package_template_id===packageId&&r.booking_id!==id).filter(r=>{
-       const b=rows("bookings").find(b=>b.id===r.booking_id);if(!b||!["confirmed","signed","booked"].includes(b.status))return false;
+       const b=rows("bookings").find(b=>b.id===r.booking_id);if(!b||!committed(b))return false;
        const dates=b.date_provenance;
        const w=(dates.rawReservation.start||dates.rawReservation.end)&&!dates.reservationWindow?null:dates.reservationWindow??dates.publicWindow;
        return !w||Date.parse(w.start)<=end&&Date.parse(w.end)-((dates.reservationWindow?dates.reservationEndExclusive:dates.publicEndExclusive)?1:0)>=Date.parse(target.start);
