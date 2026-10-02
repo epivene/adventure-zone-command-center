@@ -1,3 +1,4 @@
+import { operationsSeason } from "../bookings/booking-leg-operations-history";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { planningWriterTransaction } from "../leg-planning/planning-writer-hooks";
@@ -73,7 +74,7 @@ export class BookingDateRepairService {
   const reasons:string[]=[];
   if(material&&(holds.length||resources.length||crew.length||plans.length||trips.length))reasons.push("RECONCILE_EXISTING_COMMITMENTS_FIRST");
   // An already evidenced signed reservation is an obligation even before individual assignments.
-  if(material&&["confirmed","signed","booked"].includes(snapshot.booking.status)&&(before.reservationWindow||before.publicWindow))reasons.push("RECONCILE_CONFIRMED_WINDOW_FIRST");
+  if(material&&["confirmed","contract_received","deposit_received","invoice_sent","signed","booked"].includes(snapshot.booking.status)&&(before.reservationWindow||before.publicWindow))reasons.push("RECONCILE_CONFIRMED_WINDOW_FIRST");
   const affected=new Set<string>([id]);
   for(const hold of holds)if(hold.booking_id)affected.add(hold.booking_id);
   const target=resolved.reservationWindow??resolved.publicWindow;
@@ -166,22 +167,24 @@ export class BookingDateRepairService {
    return receipt;
   },"booking-date-repair","commitment");
  }
- async queue(value:{bookingId?:string;after?:string;limit?:number}){
+ async queue(value:{bookingId?:string;after?:string;limit?:number;season?:number;reason?:string}){
   const parsed=repairQueueSchema.safeParse(value);if(!parsed.success)fail(400,"INVALID_QUEUE_QUERY");
   const q=parsed.data;
   const rows=await query(this.database,sql`SELECT b.id FROM bookings b LEFT JOIN booking_operational_windows w ON w.booking_id=b.id
    WHERE (${q.bookingId??null}::uuid IS NULL OR b.id=${q.bookingId??null}::uuid)
    AND (${q.after??null}::uuid IS NULL OR b.id>${q.after??null}::uuid)
    AND (${q.bookingId??null}::uuid IS NOT NULL OR booking_resolved_dates(b.id,b.starts_at,b.ends_at,w.starts_at,w.ends_at)->>'evidenceState'='needs_review')
+   AND (${q.season??null}::int IS NULL OR extract(year from (booking_resolved_dates(b.id,b.starts_at,b.ends_at,w.starts_at,w.ends_at)->>'verifiedPublicStart')::timestamptz AT TIME ZONE 'America/Denver')::int=${q.season??null}::int)
+   AND (${q.reason??null}::text IS NULL OR booking_resolved_dates(b.id,b.starts_at,b.ends_at,w.starts_at,w.ends_at)->'reviewReasons' @> ${JSON.stringify(q.reason?[q.reason]:[])}::jsonb)
    ORDER BY b.id LIMIT ${q.limit+1}`);
   const records=[];
   for(const r of rows.slice(0,q.limit)){
-   const snapshot=await this.repository.snapshot(this.database,r.id);
+   const snapshot=await this.repository.snapshot(this.database,r.id,false,false);
    records.push({bookingId:r.id,profileId:snapshot.booking.organization_id??null,name:snapshot.booking.name,status:snapshot.booking.status,
-    season:snapshot.resolved.verifiedPublicStart?.slice(0,4)??null,dateProvenance:snapshot.resolved,
-    packages:snapshot.operational.booking_package_selections.filter(s=>s.value.booking_id===r.id).map(s=>s.value),
+    season:snapshot.resolved.verifiedPublicStart?String(operationsSeason(snapshot.resolved.verifiedPublicStart,false)):null,dateProvenance:snapshot.resolved,
+    packages:snapshot.operational.booking_package_selections.filter(s=>s.value.booking_id===r.id).map(s=>({...s.value,package_name:snapshot.operational.package_templates.find(p=>p.value.id===s.value.package_template_id)?.value.name??null})),
     assignments:snapshot.operational.booking_resource_assignments.filter(s=>s.value.booking_id===r.id).map(s=>s.value),
-    sources:await this.repository.sources(this.database,snapshot)});
+    sources:q.bookingId?(await this.repository.sources(this.database,snapshot)).map(s=>({...s,content:s.content.slice(0,20000),contentTruncated:s.content.length>20000})):[]});
   }
   return {records,nextCursor:rows.length>q.limit?records.at(-1)?.bookingId??null:null};
  }

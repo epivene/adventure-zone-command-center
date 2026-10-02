@@ -1,3 +1,4 @@
+import { useSearch } from "wouter";
 import { useRef,useState,type FormEvent } from "react";
 import { useQuery,useQueryClient } from "@tanstack/react-query";
 import { getDateRepairs,previewDateRepair,applyDateRepair,type Endpoint,type RepairRecord,type Preview,type Proposal } from "./booking-date-repairs-api";
@@ -14,7 +15,8 @@ function initial(record:RepairRecord):Draft{
 }
 const display=(value:string|null)=>value??"Not recorded";
 export function BookingDateRepairs(){
- const client=useQueryClient();
+ const client=useQueryClient(),search=useSearch();
+ const requestedBookingId=new URLSearchParams(search).get("bookingId")??undefined;
  const [selection,setSelection]=useState(""),selectedRef=useRef("");
  const [drafts,setDrafts]=useState<Record<string,Draft>>({});
  const draftRef=useRef(drafts);draftRef.current=drafts;
@@ -23,10 +25,11 @@ export function BookingDateRepairs(){
  const pending=useRef(false),generation=useRef(0),requestKeys=useRef(new Map<string,string>());
  const [cursor,setCursor]=useState<string|undefined>(),[savedPages,setSavedPages]=useState<RepairRecord[]>([]);
  const [season,setSeason]=useState(""),[reasonFilter,setReasonFilter]=useState("");
- const queue=useQuery({queryKey:["event-date-coverage","booking-date-repairs",cursor??""],queryFn:()=>getDateRepairs({after:cursor,limit:25})});
+ const queue=useQuery({queryKey:["event-date-coverage","booking-date-repairs",requestedBookingId??"",season,reasonFilter,cursor??""],queryFn:()=>getDateRepairs({bookingId:requestedBookingId,after:cursor,limit:25,season:season?Number(season):undefined,reason:reasonFilter||undefined})});
  const records=[...savedPages,...(queue.data?.records??[])].filter((r,i,all)=>all.findIndex(x=>x.bookingId===r.bookingId)===i);
  const filtered=records.filter(r=>(!season||r.season===season)&&(!reasonFilter||r.dateProvenance.reviewReasons.includes(reasonFilter)));
- const record=records.find(r=>r.bookingId===selection),draft=record?drafts[selection]??initial(record):null;
+ const detail=useQuery({queryKey:["event-date-coverage","booking-date-repair-detail",selection],queryFn:()=>getDateRepairs({bookingId:selection,limit:1}),enabled:Boolean(selection)});
+ const record=detail.data?.records.find(r=>r.bookingId===selection)??records.find(r=>r.bookingId===selection),draft=record?drafts[selection]??initial(record):null;
  const select=(id:string)=>{
   generation.current++;selectedRef.current=id;setSelection(id);setPreview(null);setError("");setNotice("");setBusy(false);pending.current=false;
   const selected=records.find(r=>r.bookingId===id);
@@ -78,13 +81,14 @@ export function BookingDateRepairs(){
  return <section aria-label="Booking date repairs" className="min-w-0 space-y-4 rounded-xl border bg-card p-4">
   <header><h2 className="text-xl font-bold">Booking date repairs</h2><p className="mt-1 text-sm text-muted-foreground">Select the exact historical booking and saved evidence. Public event dates and setup/travel reservations are reviewed separately.</p></header>
   <div className="grid gap-3 sm:grid-cols-2">
-   <label className="grid gap-1 text-sm">Known verified season<input aria-label="Filter repair season" placeholder="e.g. 2027" value={season} onChange={e=>setSeason(e.target.value)}/></label>
-   <label className="grid gap-1 text-sm">Review reason<select aria-label="Filter repair reason" value={reasonFilter} onChange={e=>setReasonFilter(e.target.value)}><option value="">All reasons</option>{["INCOMPLETE_PUBLIC_WINDOW","INCOMPLETE_RESERVATION_WINDOW","REVERSED_PUBLIC_WINDOW","REVERSED_RESERVATION_WINDOW"].map(r=><option key={r}>{r}</option>)}</select></label>
+   <label className="grid gap-1 text-sm">Known verified season<input aria-label="Filter repair season" placeholder="e.g. 2027" value={season} type="number" min={1} max={9998} onChange={e=>{setSeason(e.target.value);setSavedPages([]);setCursor(undefined);select("");}}/></label>
+   <label className="grid gap-1 text-sm">Review reason<select aria-label="Filter repair reason" value={reasonFilter} onChange={e=>{setReasonFilter(e.target.value);setSavedPages([]);setCursor(undefined);select("");}}><option value="">All reasons</option>{["INCOMPLETE_PUBLIC_WINDOW","INCOMPLETE_RESERVATION_WINDOW","REVERSED_PUBLIC_WINDOW","REVERSED_RESERVATION_WINDOW"].map(r=><option key={r}>{r}</option>)}</select></label>
   </div>
-  <p className="text-xs text-muted-foreground">Filters apply to loaded review records. Load further pages to review additional records.</p>
+  <p className="text-xs text-muted-foreground">Review records are filtered by verified season and reason. Unknown seasons remain available without a season filter.</p>
   {queue.isError?<p role="alert">Review records could not be loaded. <button type="button" onClick={()=>queue.refetch()}>Retry</button></p>:null}
-  <label className="grid gap-1 text-sm font-semibold">Exact booking<select aria-label="Exact booking" className="w-full min-w-0" value={selection} onChange={e=>select(e.target.value)}><option value="">Choose an exact booking</option>{filtered.map(r=><option key={r.bookingId} value={r.bookingId}>{r.name} · {r.season??"Season needs review"} · {r.packages.map(p=>p.package_template_id).join(", ")||"No package"} · Profile: {r.profileId??"Unlinked"} · Booking: {r.bookingId}</option>)}</select></label>
+  <label className="grid gap-1 text-sm font-semibold">Exact booking<select aria-label="Exact booking" className="w-full min-w-0" value={selection} onChange={e=>select(e.target.value)}><option value="">Choose an exact booking</option>{filtered.map(r=><option key={r.bookingId} value={r.bookingId}>{r.name} · {r.season??"Season needs review"} · {r.packages.map(p=>(p.package_name?p.package_name+" · ":"")+p.package_template_id).join(", ")||"No package"} · Profile: {r.profileId??"Unlinked"} · Booking: {r.bookingId}</option>)}</select></label>
   {queue.data?.nextCursor?<button type="button" disabled={queue.isFetching} onClick={()=>{setSavedPages(records);setCursor(queue.data!.nextCursor!);}}>Load more review records</button>:null}
+  {detail.isError?<p role="alert">Saved evidence could not be refreshed. <button type="button" onClick={()=>detail.refetch()}>Retry evidence</button></p>:null}
   {record&&draft?<div className="space-y-4">
    <div className="break-words text-sm"><p>Booking: {record.bookingId} · Profile: {record.profileId??"Unlinked"} · Commercial status: {record.status}</p><p>Assigned resources: {record.assignments.map(a=>a.resource_id).join(", ")||"Not recorded"}</p>
     <p>Raw public: {display(record.dateProvenance.rawPublic.start)} → {display(record.dateProvenance.rawPublic.end)}</p><p>Raw reservation: {display(record.dateProvenance.rawReservation.start)} → {display(record.dateProvenance.rawReservation.end)}</p>
@@ -92,7 +96,7 @@ export function BookingDateRepairs(){
     {record.dateProvenance.endpointEvidence.map((e,i)=><p key={i}>{labels[e.field]}: {e.kind} · {e.semantics} · {e.sourceRef.type}:{e.sourceRef.id} · revision {e.sourceRef.revision}</p>)}
     {record.profileId?<a className="underline" href={"/event-profiles/"+encodeURIComponent(record.profileId)}>Create a separate season booking</a>:null}
    </div>
-   <details className="rounded-lg border p-3" open><summary className="font-semibold">Saved sources</summary>{record.sources.length?record.sources.map(s=><article className="mt-3 break-words" key={s.type+":"+s.id}><p className="font-semibold">{s.label}</p><p className="text-xs">{s.type}:{s.id} · revision {s.revision}</p><p className="whitespace-pre-wrap text-sm">{s.content}</p>{s.classifyOnly?<p className="text-sm">Sales/import classification only; this source cannot verify event dates.</p>:null}</article>):<p>No selectable saved evidence. Save or confirm evidence on the exact profile or booking first.</p>}</details>
+   <details className="rounded-lg border p-3" open><summary className="font-semibold">Saved sources</summary>{record.sources.length?record.sources.map(s=><article className="mt-3 break-words" key={s.type+":"+s.id}><p className="font-semibold">{s.label}</p><p className="text-xs">{s.type}:{s.id} · revision {s.revision}</p><p className="whitespace-pre-wrap text-sm">{s.content}</p>{s.contentTruncated?<p className="text-sm">Source excerpt truncated. Open the saved profile evidence to review the full source.</p>:null}{s.classifyOnly?<p className="text-sm">Sales/import classification only; this source cannot verify event dates.</p>:null}</article>):<p>No selectable saved evidence. Save or confirm evidence on the exact profile or booking first.</p>}</details>
    <form className="space-y-3" onSubmit={createPreview}>
     <div className="grid gap-3 lg:grid-cols-2">{fields.map(field=>{const f=draft.fields[field];return <fieldset className="min-w-0 space-y-2 rounded-lg border p-3" key={field}><legend className="px-1 font-semibold">{labels[field]}</legend>
      <label className="flex items-center gap-2"><input type="checkbox" aria-label={"Include "+field} checked={f.enabled} disabled={busy} onChange={e=>fieldEdit(field,{enabled:e.target.checked})}/>Review this endpoint</label>
@@ -111,7 +115,7 @@ export function BookingDateRepairs(){
     <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th>Endpoint</th><th>Before</th><th>After</th><th>Semantics &amp; source</th></tr></thead><tbody>{fields.map(field=>{
      const old=field.startsWith("public_")?preview.before.rawPublic:preview.before.rawReservation,next=field.startsWith("public_")?preview.after.rawPublic:preview.after.rawReservation;
      const e=[...preview.after.evidence].reverse().find(e=>e.field===field);
-     return <tr key={field} className="border-t align-top"><td>{labels[field]}</td><td className="break-all">{display(field.endsWith("_start")?old.start:old.end)}</td><td className="break-all">{display(field.endsWith("_start")?next.start:next.end)}</td><td className="break-all">{e?e.kind+" · "+e.semantics+" · "+e.sourceRef.type+":"+e.sourceRef.id:"Unchanged evidence"}</td></tr>;
+     return <tr key={field} className="border-t align-top"><td>{labels[field]}</td><td className="break-all">{display(field.endsWith("_start")?old.start:old.end)}</td><td className="break-all">{display(field.endsWith("_start")?next.start:next.end)}</td><td className="break-all">{e?e.kind+" · "+e.semantics+" · "+e.sourceRef.type+":"+e.sourceRef.id+" · revision "+e.sourceRef.revision:"Unchanged evidence"}</td></tr>;
     })}</tbody></table></div>
     <p className="text-sm">Impacts: schedule, route and readiness facts will refresh for {preview.impacts.affectedBookingIds.join(", ")}.</p>
     {preview.impacts.reasons.map(reason=><p className="text-sm text-amber-800" key={reason}>{reason}</p>)}

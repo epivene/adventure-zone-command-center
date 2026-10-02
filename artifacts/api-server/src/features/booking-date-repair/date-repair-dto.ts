@@ -7,4 +7,4 @@ export const repairProposalSchema=z.object({bookingId:z.string().uuid(),reason:z
 }).strict().superRefine((p,ctx)=>{if(new Set(p.endpoints.map(e=>e.field)).size!==p.endpoints.length)ctx.addIssue({code:"custom",message:"Select each endpoint once"});});
 export type RepairProposalInput=z.infer<typeof repairProposalSchema>;
 export const repairApplySchema=z.object({previewId:z.string().uuid(),fingerprint:z.string().min(1).max(128),requestKey:z.string().min(1).max(120)}).strict();
-export const repairQueueSchema=z.object({bookingId:z.string().uuid().optional(),after:z.string().uuid().optional(),limit:z.coerce.number().int().min(1).max(50).default(25)}).strict();
+export const repairQueueSchema=z.object({season:z.coerce.number().int().min(1).max(9998).optional(),reason:z.enum(["INCOMPLETE_PUBLIC_WINDOW","INCOMPLETE_RESERVATION_WINDOW","REVERSED_PUBLIC_WINDOW","REVERSED_RESERVATION_WINDOW"]).optional(),bookingId:z.string().uuid().optional(),after:z.string().uuid().optional(),limit:z.coerce.number().int().min(1).max(50).default(25)}).strict();
