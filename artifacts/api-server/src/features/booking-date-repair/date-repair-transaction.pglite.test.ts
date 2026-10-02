@@ -167,9 +167,8 @@ it("explicitly reconciles a signed correction only after assignments are resolve
 
 it("discovers exact legacy ACT source snapshots without endpoint evidence and excludes sibling snapshots",async()=>{
  const service=await setup(),source=ids.split,version=ids.resource,siblingVersion=ids.leg;
- await fixture.pg.exec("CREATE TABLE act_source_record_versions(id uuid PRIMARY KEY,source_record_id uuid,source_database_key text,raw_snapshot jsonb); CREATE TABLE act_external_links(entity_type text,entity_id uuid,source_record_id uuid,source_database_key text); CREATE TABLE act_imported_field_origins(entity_type text,entity_id uuid,source_record_id uuid,source_version_id uuid)");
- await fixture.pg.query("INSERT INTO act_source_record_versions VALUES($1,$2,'exact-db','{\"estimatedCloseDate\":\"2026-01-01\"}'),($3,$3,'sibling-db','{}')",[version,source,siblingVersion]);
- await fixture.pg.query("INSERT INTO act_external_links VALUES('booking',$1,$2,'exact-db'),('booking',$3,$4,'sibling-db')",[ids.booking,source,ids.otherBooking,siblingVersion]);
+ await fixture.pg.query("INSERT INTO act_source_record_versions(id,source_record_id,source_database_key,raw_snapshot) VALUES($1,$2,'exact-db','{\"estimatedCloseDate\":\"2026-01-01\"}'),($3,$3,'sibling-db','{}')",[version,source,siblingVersion]);
+ await fixture.pg.query("INSERT INTO act_external_links(entity_type,entity_id,source_record_id,source_database_key) VALUES('booking',$1,$2,'exact-db'),('booking',$3,$4,'sibling-db')",[ids.booking,source,ids.otherBooking,siblingVersion]);
  const queue=await service.queue({bookingId:ids.booking});
  expect(queue.records[0].sources.some(s=>s.type==="act_source_version"&&s.id===version)).toBe(true);
  expect(queue.records[0].sources.some(s=>s.id===siblingVersion)).toBe(false);
@@ -182,4 +181,13 @@ it("rejects unsupported instant offsets before applying a source-proved date",as
  const service=await setup(),input=proposal();input.endpoints[0].value="2027-07-21T12:00:00+16:00";input.endpoints[0].semantics="instant";
  await fixture.pg.query("UPDATE activities SET body=body || ' 2027-07-21T12:00:00+16:00' WHERE id=$1",[noteId]);
  await expect(service.preview(input as never,"owner")).rejects.toMatchObject({status:422});
+},30000);
+
+it("keeps ordinary instant proof verified through apply and SQL-backed readback",async()=>{
+ const service=await setup(),input=proposal();
+ input.endpoints[0].value="2027-07-21T12:00:00-07:00";input.endpoints[0].semantics="instant";
+ await fixture.pg.query("UPDATE activities SET body=body || ' 2027-07-21T12:00:00-07:00' WHERE id=$1",[noteId]);
+ const p=await service.preview(input as never,"owner");await service.apply(applyInput(p,"instant-readback"),"owner");
+ const value=(await fixture.pg.query<{value:any}>("SELECT booking_resolved_dates(id,starts_at,ends_at,null,null) value FROM bookings WHERE id=$1",[ids.booking])).rows[0].value;
+ expect(value.publicWindow).toEqual(p.afterResolved.publicWindow);expect(value.evidenceState).toBe("verified");
 },30000);

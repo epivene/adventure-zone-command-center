@@ -21,7 +21,7 @@ Use **Create a separate season booking** to open the existing profile booking fl
 - Confirmed, active, independently verified Event Date Coverage facts can prove their saved public endpoints. A fact without an end does not invent an end.
 - Accepted calendar reviews can prove saved Google reservation dates. Public dates require explicitly parsed EVENT DATES. Google reservation fallback does not establish public dates.
 - Committed planning receipts can prove their saved reservation endpoints.
-- Immutable ACT opportunity snapshots support sales/import classification only. Estimated/actual close dates never prove event dates.
+- Immutable ACT opportunity snapshots linked to the exact booking through archived external links or imported-field origins are selectable even when the booking has no endpoint evidence. Snapshot/database/version identity and linkage revisions are checked on Apply. They support sales/import classification only. Estimated/actual close dates never prove event dates.
 
 Source and endpoint revisions and the actor are resolved on the server. Clients cannot supply replacement actor/revision values. Missing, deleted, quarantined, out-of-scope or changed sources are rejected.
 
@@ -29,13 +29,15 @@ Source and endpoint revisions and the actor are resolved on the server. Clients 
 
 Public event dates and operational reservations are independent. Choose `inclusive_date` for an occupied calendar day, `exclusive_date` for a non-occupied end boundary, or `instant` for an explicitly timed ISO timestamp. Display and overlap calculations use America/Denver, including daylight-saving transitions.
 
-Year 9999, impossible calendar dates, reversed ranges, sales-only endpoints and unverified values never create an effective reservation. Independently proved partial dates may place a review card in a known season, but never create a continuous overlap bar.
+Instant timestamps require clock hours 00–23, minutes/seconds 00–59 and offsets smaller than 16 hours in both preview and SQL readers. Year 9999, impossible calendar dates, reversed ranges, sales-only endpoints and unverified values never create an effective reservation. Independently proved partial dates may place a review card in a known season, but never create a continuous overlap bar.
 
 Classification preserves canonical values unless the owner explicitly selects **clear**. A reservation row can be cleared only as a whole: both endpoints must be explicitly classified and cleared. No missing reservation endpoint is invented.
 
 Confirming a source or normalizing its timestamp encoding does not move an unchanged verified window. A different verified start season requires a separate booking. The legacy demand/commitment action cannot edit public dates; use this saved-source workflow.
 
-Material changes are blocked while active holds, staffing, equipment, trips or committed plans remain, and for changes to an already verified confirmed/signed window. Use the existing explicit reconciliation flow first. Repair never shortens an obligation or silently rewrites crew, equipment, hold or route windows.
+Material changes are blocked while active holds, staffing, equipment, trips or committed plans remain. Resolve each actual obligation through its existing owner controls, then create a fresh preview. For a changed previously verified signed window, the preview shows the prior proved public/reservation dates and all remaining obligation IDs. Review the proposed dates and saved sources, choose **Reconcile signed window and preview again**, then review and **Apply reviewed repair**. This explicit reconciliation is bound to that preview, exact prior/proposed windows, source revisions and operational snapshot; changed evidence or obligations requires a fresh preview. Signed status is preserved, and a proved window cannot be cleared through this action. Repair never silently rewrites crew, equipment, hold or route windows.
+
+Other commitments with unknown dates produce a capacity-review warning without preventing independently sourced date facts from being saved. Repair those bookings sequentially. This does not approve availability or allocate capacity: planning/readiness continues to report unknown commitments until their separate source review is complete.
 
 ## Preview expiry, stale data and retries
 

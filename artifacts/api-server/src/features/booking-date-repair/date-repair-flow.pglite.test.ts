@@ -11,13 +11,10 @@ it("carries a signed ACT sales import through owner source review and repair wit
  const raw={estimatedCloseDate:"2026-04-01T12:00:00Z",actualCloseDate:"9999-12-31T00:00:00Z"};
  await pg.exec(`ALTER TABLE bookings ALTER COLUMN id SET DEFAULT gen_random_uuid();
  ALTER TABLE bookings ADD COLUMN city text,ADD COLUMN region text,ADD COLUMN act_record_id text UNIQUE,ADD COLUMN venue_name text,ADD COLUMN address_1 text,ADD COLUMN postal_code text,ADD COLUMN probability text;
- CREATE TABLE act_source_records(id uuid PRIMARY KEY,source_database_key text,stream_type text,act_record_id text);
- CREATE TABLE act_source_record_versions(id uuid PRIMARY KEY,source_record_id uuid,raw_snapshot jsonb,fingerprint text);
- CREATE TABLE act_external_links(entity_type text,entity_id uuid,source_record_id uuid,source_database_key text,source_entity_type text,act_record_id text);
  CREATE TABLE act_replacement_apply_batches(id uuid PRIMARY KEY,attempt_token uuid,state text,lease_expires_at timestamptz,updated_at timestamptz);
  INSERT INTO act_source_records VALUES('${source}','fixture-act','opportunity','ACT-EXACT-EVENT');
  INSERT INTO act_replacement_apply_batches VALUES('${batch}','${batch}','applying',now()+interval '1 hour',now());`);
- await pg.query("INSERT INTO act_source_record_versions VALUES($1,$2,$3::jsonb,'original')",[version,source,JSON.stringify(raw)]);
+ await pg.query("INSERT INTO act_source_record_versions(id,source_record_id,source_database_key,raw_snapshot,fingerprint) VALUES($1,$2,'fixture-act',$3::jsonb,'original')",[version,source,JSON.stringify(raw)]);
  const imported=await new DrizzleApplyRepository(db as never).createTarget("booking",{name:"Exact signed fair",city:"Denver",region:"CO",localStatus:"contract_received",localProbability:"definite",notes:"Signed history remains",salesMilestones:raw},source,version,{batchId:batch,attemptToken:batch});
  const bookingId=imported.target.id;
  await pg.query("UPDATE bookings SET organization_id=$2,travel_leg_id=$3 WHERE id=$1",[bookingId,orgId,ids.leg]);

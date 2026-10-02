@@ -75,10 +75,14 @@ export class BookingDateRepairRepository {
   }
   if(ref.type==="act_source_version"){
    const proof=snapshot.input.evidence.filter(e=>(e.sourceRef.type==="act_source_record"&&e.sourceRef.revision===ref.id || e.sourceRef.type==="act_source_version"&&e.sourceRef.id===ref.id));
-   if(!proof.length)fail(422,"SOURCE_OUTSIDE_BOOKING");
    const [version]=await query(tx,sql`SELECT * FROM act_source_record_versions WHERE id=${ref.id}::uuid${share}`);
    if(!version)fail(422,"SOURCE_VERSION_MISSING");
-   return {...ref,revision:hash(version),label:"ACT source (classification only)",content:JSON.stringify(version.raw_snapshot),classifyOnly:true};
+   const links=await query(tx,sql`SELECT * FROM act_external_links WHERE entity_type='booking' AND entity_id=${booking.id}::uuid
+    AND source_record_id=${version.source_record_id}::uuid AND (source_database_key IS NULL OR source_database_key=${version.source_database_key})${share}`);
+   const origins=await query(tx,sql`SELECT * FROM act_imported_field_origins WHERE entity_type='booking' AND entity_id=${booking.id}::uuid
+    AND source_record_id=${version.source_record_id}::uuid AND source_version_id=${ref.id}::uuid${share}`);
+   if(!proof.length&&!links.length&&!origins.length)fail(422,"SOURCE_OUTSIDE_BOOKING");
+   return {...ref,revision:hash({version,links,origins}),label:"ACT source (classification only)",content:JSON.stringify(version.raw_snapshot),classifyOnly:true};
   }
   const proof=snapshot.input.evidence.filter(e=>e.sourceRef.type==="leg_plan_mutation_receipt"&&e.sourceRef.id===ref.id);
   if(!proof.length)fail(422,"SOURCE_OUTSIDE_BOOKING");
@@ -95,6 +99,10 @@ export class BookingDateRepairRepository {
   append("saved_event_fact",await query(tx,sql`SELECT id FROM event_date_facts WHERE organization_id=${b.organization_id}::uuid AND active=true AND status='confirmed' AND verified_at IS NOT NULL LIMIT 10`));
   append("google_calendar_review",await query(tx,sql`SELECT id FROM google_operational_calendar_reviews WHERE booking_id=${b.id}::uuid AND state='accepted' ORDER BY reviewed_at DESC,id LIMIT 20`));
   append("business_document",await query(tx,sql`SELECT DISTINCT d.id FROM business_documents d JOIN business_document_links l ON l.document_id=d.id WHERE d.lifecycle='active' AND d.review_state='accepted' AND (l.booking_id=${b.id}::uuid OR (l.booking_id IS NULL AND l.organization_id=${b.organization_id}::uuid)) LIMIT 30`));
+  append("act_source_version",await query(tx,sql`SELECT v.id FROM act_source_record_versions v WHERE
+   EXISTS(SELECT 1 FROM act_external_links l WHERE l.entity_type='booking' AND l.entity_id=${b.id}::uuid AND l.source_record_id=v.source_record_id AND (l.source_database_key IS NULL OR l.source_database_key=v.source_database_key))
+   OR EXISTS(SELECT 1 FROM act_imported_field_origins o WHERE o.entity_type='booking' AND o.entity_id=${b.id}::uuid AND o.source_record_id=v.source_record_id AND o.source_version_id=v.id)
+   ORDER BY v.id LIMIT 30`));
   for(const e of snapshot.input.evidence){
    if(e.sourceRef.type==="act_source_record")refs.push({type:"act_source_version",id:e.sourceRef.revision});
    if(e.sourceRef.type==="act_source_version")refs.push({type:"act_source_version",id:e.sourceRef.id});

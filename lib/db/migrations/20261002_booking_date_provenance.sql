@@ -43,6 +43,8 @@ BEGIN
   IF v IS NULL OR substring(v,1,4)::integer < 1 OR substring(v,1,4)::integer >= 9999 THEN RETURN NULL; END IF;
   IF semantics='instant' THEN
     IF v !~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$' THEN RETURN NULL; END IF;
+    IF substring(v,12,2)::integer>23 OR substring(v,15,2)::integer>59 OR substring(v,18,2)::integer>59 THEN RETURN NULL; END IF;
+    IF right(v,1)<>'Z' AND (substring(v,length(v)-4,2)::integer>15 OR right(v,2)::integer>59) THEN RETURN NULL; END IF;
     result := v::timestamptz;
   ELSE
     IF v !~ '^\d{4}-\d{2}-\d{2}$' THEN RETURN NULL; END IF;

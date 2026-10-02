@@ -66,7 +66,7 @@ export class BookingDateRepairService {
   const activeHoldIds=snapshot.operational.outreach_holds.filter(r=>r.value.state==="active"&&new Date(r.value.expires_at)>this.clock()).map(r=>r.value.id).sort();
   return hash({snapshot,proposal,sources:sources.map(s=>({type:s.type,id:s.id,revision:s.revision})),activeHoldIds});
  }
- private impacts(snapshot:RepairSnapshot,after:DateEvidenceInput){
+ private impacts(snapshot:RepairSnapshot,after:DateEvidenceInput,reconcileConfirmedWindow=false){
   const resolved=resolveBookingDates(after),before=snapshot.resolved,op=snapshot.operational;
   const rows=(table:string)=>op[table].map(r=>r.value);
   const id=snapshot.booking.id;
@@ -94,8 +94,14 @@ export class BookingDateRepairService {
   const reasons:string[]=[];
   if(prior.verifiedPublicStart&&resolved.verifiedPublicStart&&operationsSeason(new Date(prior.verifiedPublicStart))!==operationsSeason(new Date(resolved.verifiedPublicStart)))reasons.push("SEPARATE_SEASON_REQUIRES_NEW_BOOKING");
   if(material&&(holds.length||resources.length||crew.length||plans.length||trips.length))reasons.push("RECONCILE_EXISTING_COMMITMENTS_FIRST");
-  // An already evidenced signed reservation is an obligation even before individual assignments.
-  if(signedWindowChanged&&committed(snapshot.booking)&&(prior.reservationWindow||prior.publicWindow))reasons.push("RECONCILE_CONFIRMED_WINDOW_FIRST");
+  // An explicit second owner preview reconciles a proved signed window only after
+  // all operational obligations have been resolved. Its full proposal/snapshot/source
+  // fingerprints are revalidated under the allocation mutex at Apply.
+  const confirmedWindowChanged=Boolean(signedWindowChanged&&committed(snapshot.booking)&&(prior.reservationWindow||prior.publicWindow));
+  const obligationIds=[...holds,...resources,...crew,...plans,...trips].map(r=>String(r.id??r.resource_id??r.booking_id)).sort();
+  const retainsProvedWindows=(!prior.publicWindow||Boolean(resolved.publicWindow))&&(!prior.reservationWindow||Boolean(resolved.reservationWindow));
+  const acknowledged=confirmedWindowChanged&&reconcileConfirmedWindow&&retainsProvedWindows&&obligationIds.length===0;
+  if(confirmedWindowChanged&&!acknowledged)reasons.push("RECONCILE_CONFIRMED_WINDOW_FIRST");
   const affected=new Set<string>([id]);
   for(const hold of holds)if(hold.booking_id)affected.add(hold.booking_id);
   const target=resolved.reservationWindow??resolved.publicWindow;
@@ -131,7 +137,14 @@ export class BookingDateRepairService {
     }
    }
   }
-  return {reasons:[...new Set(reasons)],affectedBookingIds:[...affected].sort(),blocked:reasons.length>0};
+  return {reasons:[...new Set(reasons)],affectedBookingIds:[...affected].sort(),
+   // Recording independent source facts never certifies unknown capacity.
+   blocked:reasons.some(reason=>reason!=="OTHER_COMMITMENT_DATE_REVIEW_REQUIRED"),
+   ...(confirmedWindowChanged?{confirmedWindowReview:{
+    before:{publicWindow:prior.publicWindow,reservationWindow:prior.reservationWindow},
+    after:{publicWindow:resolved.publicWindow,reservationWindow:resolved.reservationWindow},
+    obligationIds,acknowledged,canReconcile:retainsProvedWindows&&obligationIds.length===0
+   }}:{})};
  }
  async preview(value:RepairProposalInput,actorId:string):Promise<ReviewedPreview>{
   if(!actorId)fail(403,"OWNER_ACTOR_REQUIRED");
@@ -140,7 +153,7 @@ export class BookingDateRepairService {
    const snapshot=await this.repository.snapshot(tx,p.bookingId),{after,sources}=await this.proposed(tx,p,snapshot);
    const preview:ReviewedPreview={id:randomUUID(),bookingId:p.bookingId,actorId,expiresAt:new Date(this.clock().getTime()+30*60*1000).toISOString(),
     fingerprint:this.fingerprint(snapshot,p,sources),
-    before:snapshot.input,after,impacts:this.impacts(snapshot,after),beforeResolved:snapshot.resolved,afterResolved:resolveBookingDates(after),
+    before:snapshot.input,after,impacts:this.impacts(snapshot,after,p.reconcileConfirmedWindow),beforeResolved:snapshot.resolved,afterResolved:resolveBookingDates(after),
     selection:{bookingId:p.bookingId,name:snapshot.booking.name,profileId:snapshot.booking.organization_id??null,status:snapshot.booking.status,
      packages:snapshot.operational.booking_package_selections.filter(r=>r.value.booking_id===p.bookingId).map(r=>r.value)}};
    await tx.execute(sql`INSERT INTO booking_date_repair_previews(id,booking_id,actor,fingerprint,payload,expires_at)
@@ -168,7 +181,7 @@ export class BookingDateRepairService {
    try{proposed=await this.proposed(tx,p,snapshot,true);}catch(error){if((error as {status?:number}).status===422)fail(409,"SOURCE_STALE");throw error;}
    const {after,sources}=proposed;
    if(this.fingerprint(snapshot,p,sources)!==input.fingerprint)fail(409,"PREVIEW_STALE");
-   const impacts=this.impacts(snapshot,after);if(impacts.blocked)fail(409,impacts.reasons.join(","));
+   const impacts=this.impacts(snapshot,after,p.reconcileConfirmedWindow);if(impacts.blocked)fail(409,impacts.reasons.join(","));
    await tx.execute(sql`UPDATE bookings SET starts_at=${after.rawPublic.start}::timestamptz,ends_at=${after.rawPublic.end}::timestamptz,updated_at=now() WHERE id=${p.bookingId}::uuid`);
    if(p.clearFields.includes("reservation_start"))await tx.execute(sql`DELETE FROM booking_operational_windows WHERE booking_id=${p.bookingId}::uuid`);
    else if(p.endpoints.some(e=>e.field.startsWith("reservation_")&&e.kind==="verified_reservation")){

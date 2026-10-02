@@ -5,11 +5,11 @@ export type Source={type:string;id:string;revision:string;label:string;content:s
 export type RepairRecord={bookingId:string;profileId:string|null;name:string;status:string;season:string|null;
  packages:Array<{package_template_id:string;package_name?:string|null}>;assignments:Array<{resource_id:string}>;
  dateProvenance:BookingDateProvenance;sources:Source[]};
-export type Proposal={bookingId:string;reason:string;endpoints:Array<Omit<Endpoint,"revision"|"sourceRef">&{sourceRef:{type:string;id:string}}>;clearFields:Endpoint["field"][]};
+export type Proposal={bookingId:string;reason:string;reconcileConfirmedWindow?:boolean;endpoints:Array<Omit<Endpoint,"revision"|"sourceRef">&{sourceRef:{type:string;id:string}}>;clearFields:Endpoint["field"][]};
 export type Values={rawPublic:{start:string|null;end:string|null};rawReservation:{start:string|null;end:string|null};evidence:Endpoint[]};
 export type Preview={id:string;bookingId:string;fingerprint:string;expiresAt:string;before:Values;after:Values;
  beforeResolved:BookingDateProvenance;afterResolved:BookingDateProvenance;
- impacts:{blocked:boolean;reasons:string[];affectedBookingIds:string[]}};
+ impacts:{blocked:boolean;reasons:string[];affectedBookingIds:string[];confirmedWindowReview?:{before:{publicWindow:{start:string;end:string}|null;reservationWindow:{start:string;end:string}|null};after:{publicWindow:{start:string;end:string}|null;reservationWindow:{start:string;end:string}|null};obligationIds:string[];acknowledged:boolean;canReconcile?:boolean}}};
 export type Receipt={id:string;bookingId:string;previewId:string;requestKey:string;appliedAt:string};
 export class DateRepairError extends Error{constructor(message:string,readonly status:number){super(message);}}
 async function request<T>(path:string,body?:unknown):Promise<T>{

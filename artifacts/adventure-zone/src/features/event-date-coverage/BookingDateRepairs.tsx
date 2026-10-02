@@ -40,7 +40,7 @@ export function BookingDateRepairs(){
   setDrafts(current=>{const next=change(current[record.bookingId]??initial(record));return {...current,[record.bookingId]:{...next,revision:next.revision+1}};});
  };
  const fieldEdit=(field:Endpoint["field"],patch:Partial<FieldDraft>)=>edit(current=>({...current,fields:{...current.fields,[field]:{...current.fields[field],...patch}}}));
- async function createPreview(event:FormEvent){
+ async function createPreview(event:FormEvent,reconcileConfirmedWindow=false){
   event.preventDefault();if(!record||!draft||pending.current)return;
   const bookingId=record.bookingId,version=draft.revision,epoch=++generation.current;
   const endpoints:Proposal["endpoints"]=[],clearFields:Endpoint["field"][]=[];
@@ -54,7 +54,7 @@ export function BookingDateRepairs(){
   if(!endpoints.length){setError("Select at least one endpoint.");return;}
   pending.current=true;setBusy(true);setError("");setPreview(null);
   try{
-   const result=await previewDateRepair({bookingId,reason:draft.reason,endpoints,clearFields});
+   const result=await previewDateRepair({bookingId,reason:draft.reason,endpoints,clearFields,reconcileConfirmedWindow});
    if(generation.current===epoch&&selectedRef.current===bookingId&&draftRef.current[bookingId]?.revision===version)setPreview(result);
   }catch(cause){if(generation.current===epoch)setError(cause instanceof Error?cause.message:"Preview could not be created.");}
   finally{if(generation.current===epoch){pending.current=false;setBusy(false);}}
@@ -118,6 +118,13 @@ export function BookingDateRepairs(){
      return <tr key={field} className="border-t align-top"><td>{labels[field]}</td><td className="break-all">{display(field.endsWith("_start")?old.start:old.end)}</td><td className="break-all">{display(field.endsWith("_start")?next.start:next.end)}</td><td className="break-all">{e?e.kind+" · "+e.semantics+" · "+e.sourceRef.type+":"+e.sourceRef.id+" · revision "+e.sourceRef.revision:"Unchanged evidence"}</td></tr>;
     })}</tbody></table></div>
     <p className="text-sm">Impacts: schedule, route and readiness facts will refresh for {preview.impacts.affectedBookingIds.join(", ")}.</p>
+    {preview.impacts.confirmedWindowReview?<div className="space-y-2 rounded-lg border p-3 text-sm">
+     <p className="font-semibold">Reconcile the existing signed window</p>
+     <p className="break-words">Prior proved public dates: {display(preview.impacts.confirmedWindowReview.before.publicWindow?.start??null)} → {display(preview.impacts.confirmedWindowReview.before.publicWindow?.end??null)}</p>
+     <p className="break-words">Prior proved reservation: {display(preview.impacts.confirmedWindowReview.before.reservationWindow?.start??null)} → {display(preview.impacts.confirmedWindowReview.before.reservationWindow?.end??null)}</p>
+     <p>Review the proposed dates and saved source revisions above. Commercial status is preserved. Remaining hold, crew, equipment, committed-plan or trip obligations: {preview.impacts.confirmedWindowReview.obligationIds.join(", ")||"None"}. Resolve those obligations through their existing owner controls before reconciliation.</p>
+     {preview.impacts.confirmedWindowReview.acknowledged?<p>Signed-window correction explicitly reconciled in this preview. Apply revalidates the exact windows, evidence and obligations.</p>:preview.impacts.confirmedWindowReview.canReconcile!==false&&preview.impacts.confirmedWindowReview.obligationIds.length===0?<button type="button" disabled={busy} onClick={event=>createPreview(event,true)}>Reconcile signed window and preview again</button>:null}
+    </div>:null}
     {preview.impacts.reasons.map(reason=><p className="text-sm text-amber-800" key={reason}>{reason}</p>)}
     <button className="button-primary" type="button" disabled={busy||preview.impacts.blocked} onClick={apply}>Apply reviewed repair</button>
    </section>:null}

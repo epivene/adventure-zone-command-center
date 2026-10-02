@@ -7,6 +7,10 @@ export const orgId="10000000-0000-4000-8000-000000000002";
 export const repairFixtureSql=`
 ALTER TABLE bookings ADD COLUMN organization_id uuid, ADD COLUMN notes text;
 ALTER TABLE booking_operational_windows ADD COLUMN updated_at timestamptz DEFAULT now();
+CREATE TABLE act_source_records(id uuid PRIMARY KEY,source_database_key text,stream_type text,act_record_id text);
+CREATE TABLE act_source_record_versions(id uuid PRIMARY KEY,source_record_id uuid,source_database_key text,raw_snapshot jsonb,fingerprint text);
+CREATE TABLE act_external_links(entity_type text,entity_id uuid,source_record_id uuid,source_database_key text,source_entity_type text,act_record_id text);
+CREATE TABLE act_imported_field_origins(entity_type text,entity_id uuid,source_record_id uuid,source_version_id uuid);
 CREATE TABLE organizations(id uuid PRIMARY KEY,name text);
 CREATE TABLE activities(id uuid PRIMARY KEY,organization_id uuid,booking_id uuid,body text,subject text,updated_at timestamptz DEFAULT now(),deleted_at timestamptz,source_version_id uuid);
 CREATE TABLE event_date_facts(id uuid PRIMARY KEY,organization_id uuid,starts_on date,ends_on date,status text,active boolean,verified_at timestamptz,updated_at timestamptz,source_title text);

@@ -55,6 +55,9 @@ export function dateEndpointInstant(value: string | null, semantics: EndpointEvi
   if (!value) return null;
   if (semantics === "instant") {
     if (!instantPattern.test(value) || !validDay(value.slice(0, 10))) return null;
+    const clock=[Number(value.slice(11,13)),Number(value.slice(14,16)),Number(value.slice(17,19))];
+    const offset=/[+-](\d{2}):(\d{2})$/.exec(value);
+    if(clock[0]>23||clock[1]>59||clock[2]>59||offset&&(Number(offset[1])>15||Number(offset[2])>59))return null;
     const n = Date.parse(value);
     if (!Number.isFinite(n) || new Date(n).getUTCFullYear() >= 9999 || new Date(n).getUTCFullYear() < 1) return null;
     return new Date(n).toISOString();
