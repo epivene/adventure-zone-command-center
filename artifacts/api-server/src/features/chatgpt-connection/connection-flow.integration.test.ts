@@ -1,3 +1,4 @@
+import { TodayReadService } from "./today-read-service";
 import { EmailThreadAttentionService } from "../google-workspace/email-thread-attention-service";
 import { ensureEmailThreadAttentionSchema } from "../../db/email-thread-attention-schema";
 import { BookingWorkService } from "../booking-work/service";
@@ -41,7 +42,9 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
       assign:async()=>({mutation:{id:"attention-mutation"}} as any),
       sync:async()=>({gmailSync:{state:"completed",errorCode:null},archiveSync:{state:"complete",conversationId:"saved-thread",errorCode:null}}),
     });
+    const todayRows:any[]=[{id:"current-thread",organizationId:f.profileId,attentionState:"waiting_for_their_reply",dueAt:null,completedAt:null}];
     const services = {
+      today:new TodayReadService(f.db,async()=>({needsAttention:todayRows,active:[],completedToday:[]})),
       attention,
       work: new BookingWorkService(f.db),
       reads: new ConnectionReadService(f.db),
@@ -101,6 +104,11 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
       profileId: f.profileId,
       eventYear: 2027,
     });
+    const today=await call("read_today_queue",{profileId:f.profileId});
+    expect(today.items[0].attentionState).toBe("waiting_for_their_reply");
+    expect(today.nextCursor).toBeNull();
+    todayRows.splice(0);
+    expect((await call("read_today_queue",{profileId:f.profileId})).items).toEqual([]);
     const preview = await call("preview_email_profile_assignment", {messageId:"attention-message",profileId:f.profileId,eventYear:null,state:"needs_your_reply",reason:"Question awaiting reply"});
     const filing={previewId:preview.id,expectedRevision:preview.expectedRevision,requestKey:"attention-save"};
     const filed=await call("apply_email_profile_assignment",filing);

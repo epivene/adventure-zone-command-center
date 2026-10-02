@@ -78,6 +78,7 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
       "complete_followup",
       "dismiss_followup",
       "get_operation_receipt",
+      "read_today_queue",
       "request_write_access",
       "request_edit_access",
       "request_email_organize_access",
@@ -211,4 +212,14 @@ it("denies email filing to a CRM-edit-only connection before calling services",a
  const r=await rpc(app,"tools/call",{name:"apply_email_profile_assignment",arguments:{previewId:randomUUID(),expectedRevision:null,requestKey:"filing"}});
  expect(r.body.result.isError).toBe(true);
  expect(r.body.result._meta["mcp/www_authenticate"][0]).toContain("email:organize");
+});
+it("requires read permission before exposing Today data",async()=>{
+ const {app}=setup([]);
+ const result=await rpc(app,"tools/call",{name:"read_today_queue",arguments:{}});
+ expect(result.body.result.isError).toBe(true);
+ expect(JSON.parse(result.body.result.content[0].text).code).toBe("CONNECTION_ACCESS_DENIED");
+ const list=(await rpc(setup().app,"tools/list")).body.result.tools;
+ const tool=list.find((t:any)=>t.name==="read_today_queue");
+ expect(tool.annotations.readOnlyHint).toBe(true);
+ expect(tool._meta.securitySchemes).toEqual([{type:"oauth2",scopes:["crm:read"]}]);
 });

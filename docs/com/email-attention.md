@@ -34,3 +34,13 @@ The app's Assign action opens the same preview flow. Today opens that conversati
 ## Independent review disposition
 
 The final reviewer identified four important gaps. Regression checks reproduce the incoming-direction, cross-actor read, and failed-history-refresh defects. Fixes identify archived inbound by sender/account evidence, read canonical records and durable effect status, verify archived message coverage, and preserve separately completed effects on retry. Production Today now propagates thread identity through explicit reminder links; records lacking that evidence remain visible rather than being guessed from a profile. The reviewer did not perform a second review after fixes.
+
+## Read Today without manual screen checks
+
+`read_today_queue` uses the same master queue loader as the app. It requires existing `crm:read` permission; no new write grant or paid in-app AI call is needed. Refresh connector tools after deploying.
+
+Inputs: `section` = `needsAttention` (default), `active`, or `completedToday`; optional exact `profileId`; `limit` 1–50 (default 20); optional `cursor`. Results include `checkedAt`, the app's `businessDate` and `timeZone`, section, items with profile links and thread identity where available, total matching items, and `nextCursor`.
+
+Follow pages until `nextCursor` is null. If the queue or filters change between pages, `TODAY_QUEUE_CHANGED` requires restarting without a cursor. Permission and active connection are checked before and after loading. The tool only reads saved app data.
+
+Queue presence verifies current master-queue data, not visual rendering or live Gmail labels. Absence alone does not prove a thread closed: use `read_email_profile_assignment` with its account/thread IDs for current state. `get_operation_receipt` describes the historical save and may correctly show Waiting even after a later resolution. Resolved email attention is not automatically a completed follow-up.

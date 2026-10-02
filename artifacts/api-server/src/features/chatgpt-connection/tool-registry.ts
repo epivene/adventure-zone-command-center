@@ -1,3 +1,4 @@
+import {todayReadInput,type TodayReadService} from "./today-read-service";
 import { emailAttentionTools } from "./email-attention-tools";
 import type { EmailThreadAttentionService } from "../google-workspace/email-thread-attention-service";
 import { bookingWorkTools } from "./booking-work-tools";
@@ -15,6 +16,7 @@ import type { ProfileUpdateService } from "./profile-update-service";
 import { closeFollowupSchema, type DraftFollowupService } from "./draft-followup-service";
 import type { OperationStore } from "./operation-store";
 export type ConnectionServices = {
+  today?: TodayReadService;
   attention?: EmailThreadAttentionService;
   work: BookingWorkService;
   reads: ConnectionReadService;
@@ -293,6 +295,10 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
     call: a => s.reads.operational(p, a),
   });
   // Discovery must not cache a permission-dependent subset. Calls remain scope-checked.
+  tools.push({name:"read_today_queue",scope:"crm:read",readOnly:true,
+    description:"Read the app's current master Today queue: needsAttention (default), active, or completedToday. Optional profileId filter. Follow nextCursor until null; restart without cursor on TODAY_QUEUE_CHANGED. This is current data, not visual UI verification. Absence does not prove resolution: use read_email_profile_assignment for an exact thread's current state. Operation receipts are historical. No writes or paid app AI.",
+    schema:todayReadInput,call:a=>{if(!s.today)throw new Error("TODAY_READ_UNAVAILABLE");return s.today.read(p,a);},
+  });
   tools.push(...emailAttentionTools(s.attention, p));
   tools.push(...bookingWorkTools(s.work, p));
   return tools;
