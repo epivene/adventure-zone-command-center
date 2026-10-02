@@ -1,0 +1,37 @@
+name: Season Planning Connector
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/chatgpt-connection/operational-reads*"
+      - "artifacts/api-server/src/features/chatgpt-connection/tool-registry.ts"
+      - "lib/db/src/leg-planning-schema.ts"
+      - ".github/workflows/season-planning-connector-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "artifacts/api-server/src/features/chatgpt-connection/operational-reads*"
+      - "artifacts/api-server/src/features/chatgpt-connection/tool-registry.ts"
+      - ".github/workflows/season-planning-connector-ci.yml"
+permissions:
+  contents: read
+concurrency:
+  group: season-planning-connector-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  planning-reads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test operational reads using production columns
+        run: pnpm --filter @workspace/api-server test --maxWorkers=2 src/features/chatgpt-connection/operational-reads.pglite.test.ts
+      - name: Build API
+        run: pnpm --filter @workspace/api-server build

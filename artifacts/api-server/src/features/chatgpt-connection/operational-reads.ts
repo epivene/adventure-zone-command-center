@@ -13,6 +13,8 @@ export const scheduleSections = [
   "bookings",
   "leg_suggestions",
   "holds",
+  "leg_seasons",
+  "operating_plans",
 ] as const;
 export const routeSections = ["trips", "stops", "segments", "anchors"] as const;
 export const resourceSections = [
@@ -25,6 +27,10 @@ export const resourceSections = [
   "demand",
   "resource_tags",
   "resource_attributions",
+  "crew_roster",
+  "crew_memberships",
+  "crew_availability",
+  "package_sets",
 ] as const;
 const allSections = [
   ...scheduleSections,
@@ -89,6 +95,42 @@ const tripWindow = { start: "t.start_date", end: "t.end_date" };
 const tripFilters = { tripId: "t.id", legId: "t.travel_leg_id" };
 // All SQL identifiers and expressions are static; only values come from tool input.
 const queries: Record<Input["section"], Query> = {
+  leg_seasons: {
+    select: "(substr(md5(a.leg_id::text||':'||a.season_year::text),1,12)||'5'||substr(md5(a.leg_id::text||':'||a.season_year::text),14,3)||'8'||substr(md5(a.leg_id::text||':'||a.season_year::text),18,15))::uuid AS id,a.leg_id,a.season_year,a.revision,a.updated_at,a.payload->>'leadership' AS leadership,a.payload->>'managerName' AS manager_name,a.payload->'managerWorkerId' AS manager_worker_id,a.payload->'workerIds' AS worker_ids,a.payload->>'baseAddress' AS base_address,a.payload->'transportResourceIds' AS transport_resource_ids",
+    from: "leg_season_plans a",
+    filters: { legId: "a.leg_id" },
+    start: "make_date(a.season_year,1,1)::timestamp AT TIME ZONE 'America/Denver'",
+    end: "(make_date(a.season_year+1,1,1)::timestamp AT TIME ZONE 'America/Denver')-interval '1 microsecond'",
+  },
+  operating_plans: {
+    select: "a.booking_id AS id,a.booking_id,b.organization_id AS profile_id,b.name AS booking_name,a.leg_id,a.revision,a.draft,a.committed,a.invalidation_reasons,a.updated_at",
+    from: "leg_event_plans a JOIN bookings b ON b.id=a.booking_id",
+    filters: { bookingId: "a.booking_id", legId: "a.leg_id" },
+    start: "make_date(COALESCE((a.committed->>'seasonYear')::integer,(a.draft->>'seasonYear')::integer),1,1)::timestamp AT TIME ZONE 'America/Denver'",
+    end: "(make_date(COALESCE((a.committed->>'seasonYear')::integer,(a.draft->>'seasonYear')::integer)+1,1,1)::timestamp AT TIME ZONE 'America/Denver')-interval '1 microsecond'",
+  },
+  crew_roster: {
+    select: "a.id,a.name,a.city,a.region,a.updated_at",
+    from: "crew_workers a",
+    filters: {},
+  },
+  crew_memberships: {
+    select: "(substr(md5(a.worker_id::text||':'||a.leg_id::text),1,12)||'5'||substr(md5(a.worker_id::text||':'||a.leg_id::text),14,3)||'8'||substr(md5(a.worker_id::text||':'||a.leg_id::text),18,15))::uuid AS id,a.worker_id,w.name AS worker_name,a.leg_id,a.created_at",
+    from: "crew_worker_leg_memberships a JOIN crew_workers w ON w.id=a.worker_id",
+    filters: { legId: "a.leg_id" },
+  },
+  crew_availability: {
+    select: "a.id,a.worker_id,w.name AS worker_name,a.starts_at,a.ends_at,a.state,a.revision,a.payload->'window' AS source_window,a.payload->'source' AS source",
+    from: "crew_availability a JOIN crew_workers w ON w.id=a.worker_id",
+    filters: {},
+    start: "a.starts_at",
+    end: "a.ends_at",
+  },
+  package_sets: {
+    select: "a.id,a.package_id,p.name AS package_name,a.revision,a.payload->>'name' AS name,a.payload->>'classification' AS classification,a.payload->>'state' AS state,a.payload->>'verifiedAt' AS verified_at,a.payload->'requirements' AS requirements,a.payload->'source' AS source,COALESCE((SELECT jsonb_agg(m.resource_id ORDER BY m.resource_id) FROM package_set_members m WHERE m.set_id=a.id),'[]'::jsonb) AS resource_ids",
+    from: "package_sets a JOIN package_templates p ON p.id=a.package_id",
+    filters: {},
+  },
   legs: {
     select:
       "a.id,a.name,a.color,a.sort_order,a.archived_at,a.base_address,a.default_vehicle_name,a.updated_at",
@@ -213,6 +255,7 @@ const queries: Record<Input["section"], Query> = {
   },
 };
 const limitations = [
+  "Season plans, roster membership, availability and operating-plan drafts are separate facts. Membership is not confirmed availability; an unverified set or draft is not a commitment. Operating-plan date filters use its committed season, falling back to draft season, not actual event or crew windows.",
   "Saved records only; not a complete availability or conflict verdict. Follow every nextCursor and inspect adjacent dates before assigning resources.",
   "Booking status, leg assignment, package selection and resource allocation are separate facts. Missing deposit evidence does not release signed commitments.",
   "Operational windows are stored overall windows, not separate verified arrival/setup/teardown/departure times. Coordinates are saved venue/trip points, not verified load-in points.",
@@ -335,6 +378,7 @@ export async function readOperational(
     if (a.section === "bookings") item.bookingHref = `/bookings/${row.id}`;
     if (a.section === "trips") item.tripHref = `/trips/${row.id}`;
     if (a.section === "legs") item.legsHref = "/operations/legs";
+    if (a.section === "leg_seasons") item.legsHref = "/operations/legs";
     const size = JSON.stringify(item).length;
     if (items.length && bytes + size > 24000) break;
     // A single unusually large row is explicitly incomplete, never silently dropped.
