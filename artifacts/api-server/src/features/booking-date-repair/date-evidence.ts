@@ -17,6 +17,7 @@ export type ResolvedDates = {
   reservationWindow: { start: string; end: string } | null;
   publicEndExclusive: boolean; reservationEndExclusive: boolean;
   evidenceState: "verified" | "needs_review"; reviewReasons: string[];
+  endpointEvidence: EndpointEvidence[];
 };
 export type DateRepairProposal = { bookingId: string; reason: string; endpoints: EndpointEvidence[]; clearFields: EndpointEvidence["field"][] };
 export type DateRepairPreview = {
@@ -73,7 +74,9 @@ function resolveEndpoint(input: DateEvidenceInput, field: EndpointEvidence["fiel
   const kind = field.startsWith("public_") ? "verified_event" : "verified_reservation";
   const values = latest.map(e => ({ value: dateEndpointInstant(e.value, e.semantics, field), semantics: e.semantics, kind: e.kind }));
   const keys = new Set(values.map(e => JSON.stringify(e)));
-  const canonical = raw ? dateEndpointInstant(raw, "instant", field) : null;
+  let canonical = raw ? dateEndpointInstant(raw, "instant", field) : null;
+  if (canonical && keys.size === 1 && values.length && values[0].semantics !== "instant" && canonical.endsWith("T00:00:00.000Z") && latest[0].value === canonical.slice(0,10))
+    canonical = dateEndpointInstant(latest[0].value, values[0].semantics, field);
   if (!canonical || keys.size !== 1 || !values.length || !values[0].value || values[0].kind !== kind || values[0].value !== canonical) return null;
   return { value: canonical, exclusive: values[0].semantics === "exclusive_date" };
 }
@@ -95,5 +98,6 @@ export function resolveBookingDates(input: DateEvidenceInput): ResolvedDates {
     rawPublic: input.rawPublic, rawReservation: input.rawReservation, publicWindow, reservationWindow,
     publicEndExclusive: publicEnd?.exclusive ?? false, reservationEndExclusive: reservedEnd?.exclusive ?? false,
     evidenceState: reasons.length ? "needs_review" : "verified", reviewReasons: reasons,
+    endpointEvidence: input.evidence.filter(e => e.revision === Math.max(...input.evidence.filter(other => other.field === e.field).map(other => other.revision))),
   };
 }

@@ -76,15 +76,18 @@ type Query = {
   end?: string;
   order?: string;
 };
+const dateJoin = " LEFT JOIN LATERAL (SELECT booking_resolved_dates(b.id,b.starts_at,b.ends_at,w.starts_at,w.ends_at) AS date_provenance OFFSET 0) d ON true";
+const effectiveStart = "CASE WHEN w.booking_id IS NOT NULL THEN (d.date_provenance#>>'{reservationWindow,start}')::timestamptz ELSE (d.date_provenance#>>'{publicWindow,start}')::timestamptz END";
+const effectiveEnd = "CASE WHEN w.booking_id IS NOT NULL THEN (d.date_provenance#>>'{reservationWindow,end}')::timestamptz - CASE WHEN (d.date_provenance->>'reservationEndExclusive')::boolean THEN interval '1 millisecond' ELSE interval '0 milliseconds' END ELSE (d.date_provenance#>>'{publicWindow,end}')::timestamptz - CASE WHEN (d.date_provenance->>'publicEndExclusive')::boolean THEN interval '1 millisecond' ELSE interval '0 milliseconds' END END";
 const bookingWindow = {
-  start: "COALESCE(w.starts_at,b.starts_at,b.ends_at)",
-  end: "COALESCE(w.ends_at,b.ends_at,b.starts_at)",
+  start: effectiveStart,
+  end: effectiveEnd,
 };
 const bookingJoins =
-  " JOIN bookings b ON b.id=a.booking_id LEFT JOIN booking_operational_windows w ON w.booking_id=b.id";
+  " JOIN bookings b ON b.id=a.booking_id LEFT JOIN booking_operational_windows w ON w.booking_id=b.id" + dateJoin;
 const bookingFilters = { bookingId: "b.id", legId: "b.travel_leg_id" };
 const bookingColumns =
-  "b.id AS booking_id,b.organization_id AS profile_id,b.name AS booking_name,b.status AS booking_status,b.travel_leg_id AS leg_id,b.starts_at,b.ends_at,w.starts_at AS operational_starts_at,w.ends_at AS operational_ends_at";
+  "b.id AS booking_id,b.organization_id AS profile_id,b.name AS booking_name,b.status AS booking_status,b.travel_leg_id AS leg_id,b.starts_at,b.ends_at,w.starts_at AS operational_starts_at,w.ends_at AS operational_ends_at,d.date_provenance";
 const tripWindow = { start: "t.start_date", end: "t.end_date" };
 const tripFilters = { tripId: "t.id", legId: "t.travel_leg_id" };
 // All SQL identifiers and expressions are static; only values come from tool input.
@@ -97,8 +100,8 @@ const queries: Record<Input["section"], Query> = {
     order: "a.sort_order",
   },
   bookings: {
-    select: `b.id,b.organization_id AS profile_id,b.name,b.status,b.probability,b.travel_leg_id AS leg_id,b.venue_name,b.address_1,b.city,b.region,b.postal_code,b.latitude,b.longitude,b.starts_at,b.ends_at,b.physical_attraction_total,b.attraction_total_approval_reason,b.updated_at,w.starts_at AS operational_starts_at,w.ends_at AS operational_ends_at,w.source AS operational_window_source,CASE WHEN b.travel_leg_id IS NULL THEN 'unassigned' ELSE 'assigned' END AS assignment_state`,
-    from: "bookings b LEFT JOIN booking_operational_windows w ON w.booking_id=b.id",
+    select: `b.id,b.organization_id AS profile_id,b.name,b.status,b.probability,b.travel_leg_id AS leg_id,b.venue_name,b.address_1,b.city,b.region,b.postal_code,b.latitude,b.longitude,b.starts_at,b.ends_at,b.physical_attraction_total,b.attraction_total_approval_reason,b.updated_at,w.starts_at AS operational_starts_at,w.ends_at AS operational_ends_at,w.source AS operational_window_source,d.date_provenance,CASE WHEN b.travel_leg_id IS NULL THEN 'unassigned' ELSE 'assigned' END AS assignment_state`,
+    from: "bookings b LEFT JOIN booking_operational_windows w ON w.booking_id=b.id" + dateJoin,
     filters: bookingFilters,
     ...bookingWindow,
   },
@@ -203,7 +206,7 @@ const queries: Record<Input["section"], Query> = {
   resource_attributions: {
     select:
       "a.id,a.booking_resource_assignment_id,a.package_template_id,r.booking_id,r.resource_id",
-    from: "booking_resource_package_attributions a JOIN booking_resource_assignments r ON r.id=a.booking_resource_assignment_id JOIN bookings b ON b.id=r.booking_id LEFT JOIN booking_operational_windows w ON w.booking_id=b.id",
+    from: "booking_resource_package_attributions a JOIN booking_resource_assignments r ON r.id=a.booking_resource_assignment_id JOIN bookings b ON b.id=r.booking_id LEFT JOIN booking_operational_windows w ON w.booking_id=b.id" + dateJoin,
     filters: {
       bookingId: "r.booking_id",
       resourceId: "r.resource_id",
@@ -313,7 +316,7 @@ export async function readOperational(
       )
     ).rows;
   } catch (error) {
-    if (["42P01", "42703"].includes((error as any).code))
+    if (["42P01", "42703", "42883"].includes((error as any).code))
       return {
         section: a.section,
         availability: "unavailable",
