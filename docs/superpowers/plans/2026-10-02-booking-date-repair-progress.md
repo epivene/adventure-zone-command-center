@@ -6,3 +6,5 @@ Ruling: Run Vitest/PostgreSQL/build verification in GitHub Actions rather than i
 Pre-flight: Task 1 produces evidence/resolver/SQL consumed by Tasks 2–5; naming and field types consistent.
 Pre-flight: Task 4 produces preview/apply DTOs consumed by Task 5; authenticated actor always comes from server, not proposal.
 Task 1: started; BASE c760a5645adb58fb55043057a882bf9598ec2d10.
+Task 1: initial RED run 36963795234: missing date-evidence module. Added API scaffold to observe behavioral assertion failures before implementing policy.
+Ruling: Shell now rejects even Get-Location with sandbox provisioning failed (-32603); continue repository connector and CI execution — cost if wrong: no local test turnaround; all claims require remote results.
