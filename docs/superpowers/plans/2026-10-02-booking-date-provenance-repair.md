@@ -128,12 +128,16 @@ Include JS/SQL parity for sentinel, leap-day, malformed, sales-only, conflicting
 - [ ] Authenticated browser checks at 360px, 768px and desktop: **unverified**, because no supported authenticated browser runtime is available. Component tests are not visual verification.
 - [x] Document owner onboarding, conservative legacy review, source-selection rules, clearing/commitment limitations, migration behavior and verification results. No live data corrections are part of verification.
 - [x] Commit: `test: verify booking date repair integration`.
-- [ ] Complete the chosen execution method's independent review, address findings, then create a draft PR linked to the approved spec with concrete test evidence and limitations. Stop before merge/deployment.
+- [x] Complete the chosen execution method's independent review, address findings, then create a draft PR linked to the approved spec with concrete test evidence and limitations. Stop before merge/deployment.
 
 ## Verified checkpoint
 
-Native run [36973212656](https://github.com/epivene/adventure-zone-command-center/actions/runs/36973212656) at `a63a71acd62178c9ff907e58438d1e77f216aa84`: backend88/88; frontend21/21; shared6/6; planning123/123; frontendplanning32/32; operations79/79; connectedviews73/73. Both builds pass. Package typechecks introduce zero errors: API104 inherited, frontend127 inherited. ACT/calendar/outreach gates retain two/three exact baseline failures, documented in the owner guide and progress ledger. Authenticated responsive browser checks are unverified. Final fresh review and draft synchronization are tracked separately below.
+Native run [36973212656](https://github.com/epivene/adventure-zone-command-center/actions/runs/36973212656) at `a63a71acd62178c9ff907e58438d1e77f216aa84`: backend88/88; frontend21/21; shared6/6; planning123/123; frontendplanning32/32; operations79/79; connectedviews73/73. Both builds pass. Package typechecks introduce zero errors: API104 inherited, frontend127 inherited. ACT/calendar/outreach gates retain two/three exact baseline failures, documented in the owner guide and progress ledger. Authenticated responsive browser checks are unverified. Final fresh review and draft synchronization are recorded in the progress ledger.
 
 ## Self-review
 
 All spec sections map to Tasks 1–6; source reuse and sales imports to Task 2, operational readers to Task 3, transaction/audit safeguards to Task 4, owner UX/access to Task 5, and delivery/mobile verification to Task 6. Shared types and preview/apply signatures are consistent. The five Review Focus cases have owning regression assertions. No public dates for the 18 historical records are invented by this plan.
+
+## Final Native delivery checkpoint
+
+One fresh independent review at `41e316da95c9010f796424ad206ad2750458911a` identified four Important findings and one deferred Minor. All Important findings received RED reproducers and ONE fix pass, without re-review. Final [run 36975066885](https://github.com/epivene/adventure-zone-command-center/actions/runs/36975066885) attempt2 verifies code `683c7c5376e06067de3e7e198ce23a6dc4091e7f`: backend94/94; frontend22/22; shared6/6; planning123/123; planningUI32/32; operations79/79; connectedviews73/73. Both jobs, shared typecheck and both builds pass; API104/104 and UI127/127 diagnostics introduce zero errors; compatibility retains two/three baseline failures. Attempt1's intermittent assistant-context assertion is disclosed in the ledger and passes the unchanged retry. All declined-to-judge items have Rulings/costs. Responsive browser usability, live historical dates and combined integration with newer main remain unverified. Delivery is the existing approved draft PR #993; no merge/deployment/live correction.
