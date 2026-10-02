@@ -1,4 +1,79 @@
-import { beforeEach,
+import { beforeEach, afterEach, it, expect } from "vitest";
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { getTableConfig } from "drizzle-orm/pg-core";
+import * as schema from "@workspace/db/schema";
+import { fixture } from "../chatgpt-connection/test-database";
+import { ConnectionReadService } from "../chatgpt-connection/read-service";
+
+let f: Awaited<ReturnType<typeof fixture>>, service: ConnectionReadService;
+const leg = randomUUID(),
+  trip = randomUUID(),
+  booking = randomUUID(),
+  resource = randomUUID();
+const period = { dateFrom: "2027-07-21", dateTo: "2027-08-01" };
+async function read(section: string, input: Record<string, unknown> = {}) {
+  return (service as any).operational(f.principal, { section, ...input });
+}
+beforeEach(async () => {
+  f = await fixture();
+  service = new ConnectionReadService(f.db);
+  // Production column definitions catch misspelled/nonexistent query fields.
+  // Foreign-key/NOT NULL constraints are not needed for this read-only fixture.
+  for (const table of [
+    schema.travelLegs,
+    schema.bookings,
+    schema.packageTemplates,
+    schema.bookingPackageSelections,
+    schema.resources,
+    schema.bookingResourceAssignments,
+    schema.tripResourceAssignments,
+    schema.trips,
+    schema.tripStops,
+    schema.tripSegments,
+    schema.crewWorkHistory,
+    schema.resourcePackageTags,
+    schema.bookingResourcePackageAttributions,
+  ]) {
+    const cfg = getTableConfig(table);
+    await f.db.exec(`DROP TABLE IF EXISTS "${cfg.name}" CASCADE`);
+    const cols = cfg.columns.map(
+      (c) =>
+        `"${c.name}" ${"enumValues" in c && c.enumValues ? "text" : c.getSQLType()}${c.name === "id" ? " PRIMARY KEY DEFAULT gen_random_uuid()" : ""}`,
+    );
+    await f.db.exec(`CREATE TABLE "${cfg.name}" (${cols.join(",")})`);
+  }
+  await f.db.exec(
+    readFileSync(
+      new URL(
+        "../../../../../lib/db/migrations/20260828_leg_assignment_suggestions.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  await f.db
+    .exec(`CREATE TABLE outreach_holds(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),booking_id uuid,leg_id uuid,event_starts_on date,event_ends_on date,starts_on date,ends_on date,quantities jsonb,resource_ids jsonb,state text,expires_at timestamptz,ended_at timestamptz,revision integer);
+  CREATE TABLE outreach_route_anchors(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),leg_id uuid,resource_id uuid,direction text,latitude double precision,longitude double precision,available_at timestamptz,valid_until timestamptz,source text,reason text,revision integer,recorded_at timestamptz,revoked_at timestamptz);
+  CREATE TABLE outreach_booking_demand(booking_id uuid PRIMARY KEY,quantities jsonb,resource_ids jsonb,revision integer,updated_at timestamptz);`);
+  await f.db.query(
+    `INSERT INTO travel_legs(id,name,sort_order) VALUES($1,'Leg A',1)`,
+    [leg],
+  );
+  await f.db.query(
+    `INSERT INTO bookings(id,organization_id,name,status,probability,travel_leg_id,starts_at,ends_at) VALUES($1,$2,'Fair','contract_received','definite',$3,'2027-07-23','2027-07-25')`,
+    [booking, f.profileId, leg],
+  );
+  await f.db.query(
+    `INSERT INTO trips(id,travel_leg_id,name,start_date,end_date) VALUES($1,$2,'Summer','2027-07-19','2027-08-02')`,
+    [trip, leg],
+  );
+  await f.db.query(
+    `INSERT INTO resources(id,name,status,movable,normal_travel_leg_id) VALUES($1,'Paintball trailer','maintenance',true,$2)`,
+    [resource, leg],
+  );
+}, 30_000);
+
 afterEach(async () => { await f.db.close(); });
 it("keeps 18 sentinel imports in review and returns only two verified 2027 windows", async () => {
   await f.db.exec(readFileSync(new URL("../../../../../lib/db/migrations/20261002_booking_date_provenance.sql",import.meta.url),"utf8"));
