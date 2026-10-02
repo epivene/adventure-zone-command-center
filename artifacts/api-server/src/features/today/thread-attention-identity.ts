@@ -12,7 +12,7 @@ export function attachVerifiedAttentionIdentity(
   rows: AttentionIdentity[],
 ) {
   for (const candidate of candidates) {
-    if (candidate.sourceType !== "follow_up" || candidate.kind !== "reply")
+    if (candidate.sourceType !== "follow_up" || !["reply", "follow_up"].includes(candidate.kind))
       continue;
     const matches = rows.filter(
       (row) =>

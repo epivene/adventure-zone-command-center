@@ -179,7 +179,7 @@ export function buildMasterTodayQueue(
 
   const represented = new Set(candidates.filter(c => c.sourceType === "email_thread_attention" && c.gmailConnectionId && c.threadId && !c.completedAt).map(c => c.gmailConnectionId + ":" + c.threadId));
   const open = candidates
-    .filter(c => !(c.kind === "reply" && c.sourceType !== "email_thread_attention" && c.gmailConnectionId && c.threadId && represented.has(c.gmailConnectionId + ":" + c.threadId)))
+    .filter(c => !((c.kind === "reply" || (c.kind === "follow_up" && c.sourceType === "follow_up")) && c.sourceType !== "email_thread_attention" && c.gmailConnectionId && c.threadId && represented.has(c.gmailConnectionId + ":" + c.threadId)))
     .filter(({ completedAt }) => completedAt === null)
     .filter(
       ({ snoozedUntil }) =>
