@@ -1,6 +1,6 @@
 # Booking Date Provenance and Repair Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Prevent sales milestones and unresolved imports from masquerading as event reservations, and provide an audited owner repair preview.
 
@@ -54,7 +54,7 @@ Evidence references reuse existing immutable source records, calendar references
 
 **Interfaces:** Produces shared contracts above and `bookingDateProjectionSql(bookingAlias: string, windowAlias: string, evidenceAlias: string): SQL`. Alias arguments are internal constants, never HTTP input.
 
-- [ ] Write resolver and migration regressions with these assertions:
+- [x] Write resolver and migration regressions with these assertions:
 ```ts
 expect(resolveBookingDates(sentinel9999).publicWindow).toBeNull();
 expect(resolveBookingDates(partialVerified).reviewReasons).toContain("INCOMPLETE_PUBLIC_WINDOW");
@@ -63,10 +63,10 @@ expect(resolveBookingDates(verifiedCrossYear).publicWindow).toEqual(crossYearWin
 expect(resolveBookingDates(reversed).evidenceState).toBe("needs_review");
 ```
 Include JS/SQL parity for sentinel, leap-day, malformed, sales-only, conflicting equal-authority evidence, partial, cross-year and exclusive-end DST fixtures; migration replay leaves booking rows byte-for-byte unchanged.
-- [ ] Run `pnpm --filter @workspace/api-server exec vitest run src/features/booking-date-repair/date-evidence.test.ts src/features/booking-date-repair/date-evidence.pglite.test.ts`; expect regression failure before implementation.
-- [ ] Implement resolver and SQL policy. Reject year 9999, invalid/reversed intervals and unverified endpoints. Explicit verified endpoint evidence matching the current raw value outranks historical ACT sales evidence; missing provenance yields review. Preserve independent public/reservation windows and original exclusive semantics. Add endpoint-evidence rows, persisted previews, immutable audit receipts and unique actor/request key constraints. An existing NOT NULL operational-window row can only be cleared as a whole, through reviewed apply; never invent a missing endpoint.
-- [ ] Run the same tests; expect all pass.
-- [ ] Commit: `feat: add booking date evidence and resolver`.
+- [x] Run `pnpm --filter @workspace/api-server exec vitest run src/features/booking-date-repair/date-evidence.test.ts src/features/booking-date-repair/date-evidence.pglite.test.ts`; expect regression failure before implementation.
+- [x] Implement resolver and SQL policy. Reject year 9999, invalid/reversed intervals and unverified endpoints. Explicit verified endpoint evidence matching the current raw value outranks historical ACT sales evidence; missing provenance yields review. Preserve independent public/reservation windows and original exclusive semantics. Add endpoint-evidence rows, persisted previews, immutable audit receipts and unique actor/request key constraints. An existing NOT NULL operational-window row can only be cleared as a whole, through reviewed apply; never invent a missing endpoint.
+- [x] Run the same tests; expect all pass.
+- [x] Commit: `feat: add booking date evidence and resolver`.
 
 ### Task 2: Stop ACT sales dates from becoming event dates
 
@@ -74,11 +74,11 @@ Include JS/SQL parity for sentinel, leap-day, malformed, sales-only, conflicting
 
 **Interfaces:** Consumes Task 1 endpoint evidence; preserves existing normalizer/apply interfaces and `act_source_records` identity.
 
-- [ ] Write assertions: normalized estimated/actual close dates do not populate public start/end; raw snapshots still contain both original values; applying the same source twice produces one sales-evidence identity; replay does not erase later verified manual dates or alter status.
-- [ ] Run `pnpm --filter @workspace/api-server exec vitest run src/features/act-replacement/normalizers/opportunity-date-provenance.test.ts src/features/act-replacement/opportunity-date-provenance.pglite.test.ts`; expect failure.
-- [ ] Replace the two close-date mappings with labeled sales evidence attached to existing source identity. Do not infer any public date from source linkage or creation time. Import replay uses existing duplicate protections; provenance writes follow the importer transaction.
-- [ ] Rerun tests; expect pass.
-- [ ] Commit: `fix: preserve ACT close dates as sales evidence`.
+- [x] Write assertions: normalized estimated/actual close dates do not populate public start/end; raw snapshots still contain both original values; applying the same source twice produces one sales-evidence identity; replay does not erase later verified manual dates or alter status.
+- [x] Run `pnpm --filter @workspace/api-server exec vitest run src/features/act-replacement/normalizers/opportunity-date-provenance.test.ts src/features/act-replacement/opportunity-date-provenance.pglite.test.ts`; expect failure.
+- [x] Replace the two close-date mappings with labeled sales evidence attached to existing source identity. Do not infer any public date from source linkage or creation time. Import replay uses existing duplicate protections; provenance writes follow the importer transaction.
+- [x] Rerun tests; expect pass.
+- [x] Commit: `fix: preserve ACT close dates as sales evidence`.
 
 ### Task 3: Use effective windows consistently
 
@@ -86,11 +86,11 @@ Include JS/SQL parity for sentinel, leap-day, malformed, sales-only, conflicting
 
 **Interfaces:** Consumes resolver and SQL projection; adds raw/effective/evidence/reasons to responses without removing current fields. Existing cursor scoping and access controls remain intact.
 
-- [ ] Write real-query assertions: 18 synthetic 2026→9999 lead fixtures appear in review/undated results, zero valid 2027 overlap windows; two verified 2027 fixtures remain. Verify pagination without missing/duplicate rows, scoped manager reads, cross-year, Denver DST and exclusive boundary results. Assert an unknown committed booking makes capacity `needs_review`, never `fits`; incomplete leads do not become commitments.
-- [ ] Run `pnpm --filter @workspace/api-server exec vitest run src/features/booking-date-repair/date-readers.pglite.test.ts src/features/routes/travel-leg-map-windows.pglite.test.ts`; expect failure.
-- [ ] Replace endpoint COALESCE fallbacks with Task 1 policy in schedule/map, connector package/resource/demand/attribution reads, coverage/profile summaries and allocation/readiness facts. Retain unresolved commitment obligations separately so absence of a valid interval cannot free capacity. Show known-season unresolved cards without a continuous bar. Use backend evidence in booking visibility.
-- [ ] Rerun focused tests and existing calendar, connector and leg-planning suites; expect pass.
-- [ ] Commit: `fix: use verified booking windows across operational reads`.
+- [x] Write real-query assertions: 18 synthetic 2026→9999 lead fixtures appear in review/undated results, zero valid 2027 overlap windows; two verified 2027 fixtures remain. Verify pagination without missing/duplicate rows, scoped manager reads, cross-year, Denver DST and exclusive boundary results. Assert an unknown committed booking makes capacity `needs_review`, never `fits`; incomplete leads do not become commitments.
+- [x] Run `pnpm --filter @workspace/api-server exec vitest run src/features/booking-date-repair/date-readers.pglite.test.ts src/features/routes/travel-leg-map-windows.pglite.test.ts`; expect failure.
+- [x] Replace endpoint COALESCE fallbacks with Task 1 policy in schedule/map, connector package/resource/demand/attribution reads, coverage/profile summaries and allocation/readiness facts. Retain unresolved commitment obligations separately so absence of a valid interval cannot free capacity. Show known-season unresolved cards without a continuous bar. Use backend evidence in booking visibility.
+- [x] Rerun focused tests and existing calendar, connector and leg-planning suites; expect pass.
+- [x] Commit: `fix: use verified booking windows across operational reads`.
 
 ### Task 4: Implement transactional preview and apply
 
@@ -98,11 +98,11 @@ Include JS/SQL parity for sentinel, leap-day, malformed, sales-only, conflicting
 
 **Interfaces:** `BookingDateRepairService.preview(proposal: DateRepairProposal, actorId: string): Promise<DateRepairPreview>`; `apply(input: ApplyDateRepairInput, actorId: string): Promise<DateRepairReceipt>`; repository persists preview/receipt and loads exact revisioned evidence.
 
-- [ ] Write tests asserting preview changes no booking/reservation; exact season/profile/package selection is retained; unrelated sibling bookings/history/status remain equal. Stale booking/window/source evidence and expired previews return 409. Actor mismatch, request-key payload mismatch, audit insertion failure and concurrent reservation updates commit no mutation. Identical replay returns the same receipt.
-- [ ] Run `pnpm --filter @workspace/api-server exec vitest run src/features/booking-date-repair/date-repair-service.test.ts src/features/booking-date-repair/date-repair-transaction.pglite.test.ts`; expect failure.
-- [ ] Implement persisted 30-minute previews. Fingerprint exact booking, operational window, source/evidence revisions, assignments, active holds, planning facts and proposed changes. Apply uses `planningWriterTransaction(db, work, "booking-date-repair", "commitment")`, acquiring the existing allocation mutex before row locks; re-read/fingerprint/recompute impacts inside it. Check replay before stale rejection, and bind request key to actor and exact payload. Reject shortening/clearing active obligations until existing explicit reconciliation resolves them; never silently update hold/crew windows. Write endpoints, evidence, immutable receipt and audit atomically; invalidate allocation/planning facts. No network calls inside the transaction.
-- [ ] Run tests plus PostgreSQL concurrency test with the repository test database configuration; expect pass, with two simultaneous stale applies producing one receipt and one 409. PGlite does not substitute for mutex/concurrency verification.
-- [ ] Commit: `feat: add audited booking date repair transactions`.
+- [x] Write tests asserting preview changes no booking/reservation; exact season/profile/package selection is retained; unrelated sibling bookings/history/status remain equal. Stale booking/window/source evidence and expired previews return 409. Actor mismatch, request-key payload mismatch, audit insertion failure and concurrent reservation updates commit no mutation. Identical replay returns the same receipt.
+- [x] Run `pnpm --filter @workspace/api-server exec vitest run src/features/booking-date-repair/date-repair-service.test.ts src/features/booking-date-repair/date-repair-transaction.pglite.test.ts`; expect failure.
+- [x] Implement persisted 30-minute previews. Fingerprint exact booking, operational window, source/evidence revisions, assignments, active holds, planning facts and proposed changes. Apply uses `planningWriterTransaction(db, work, "booking-date-repair", "commitment")`, acquiring the existing allocation mutex before row locks; re-read/fingerprint/recompute impacts inside it. Check replay before stale rejection, and bind request key to actor and exact payload. Reject shortening/clearing active obligations until existing explicit reconciliation resolves them; never silently update hold/crew windows. Write endpoints, evidence, immutable receipt and audit atomically; invalidate allocation/planning facts. No network calls inside the transaction.
+- [x] Run tests plus PostgreSQL concurrency test with the repository test database configuration; expect pass, with two simultaneous stale applies producing one receipt and one 409. PGlite does not substitute for mutex/concurrency verification.
+- [x] Commit: `feat: add audited booking date repair transactions`.
 
 ### Task 5: Add scoped owner routes and review UI
 
@@ -110,11 +110,11 @@ Include JS/SQL parity for sentinel, leap-day, malformed, sales-only, conflicting
 
 **Interfaces:** GET `/event-date-coverage/booking-date-repairs` (bounded exact-booking review queue), POST `/event-date-coverage/booking-date-repairs/preview` (proposal), POST `/event-date-coverage/booking-date-repairs/apply` (apply input). Strict schemas reject client actor/source revision fabrication; derive actor from authenticated session. Reuse owner middleware and service contracts.
 
-- [ ] Write route tests: owner can preview/apply, unauthenticated/non-owner cannot, malformed or extra fields reject. UI assertions: same-profile records display exact booking/season/package/source; preview shows old/new public and reservation dates, evidence semantics and impacts; no source-selection auto-apply; blocked preview cannot apply; 409 retains draft and prompts refreshed preview; late response from prior selection cannot overwrite current draft.
-- [ ] Run backend route and frontend component test files with each package's Vitest command; expect failure.
-- [ ] Implement “Booking date repairs” in Date Coverage. Display saved sources and evidence, classifications, clear proposals and unresolved conflicts. Provide new-season link to existing booking creation. Refresh affected booking/profile/calendar/map/route/readiness queries after receipt. Preserve drafts on errors. Manager/boss views expose evidence only, without owner actions.
-- [ ] Rerun route/component tests; expect pass.
-- [ ] Commit: `feat: add owner booking date repair review`.
+- [x] Write route tests: owner can preview/apply, unauthenticated/non-owner cannot, malformed or extra fields reject. UI assertions: same-profile records display exact booking/season/package/source; preview shows old/new public and reservation dates, evidence semantics and impacts; no source-selection auto-apply; blocked preview cannot apply; 409 retains draft and prompts refreshed preview; late response from prior selection cannot overwrite current draft.
+- [x] Run backend route and frontend component test files with each package's Vitest command; expect failure.
+- [x] Implement “Booking date repairs” in Date Coverage. Display saved sources and evidence, classifications, clear proposals and unresolved conflicts. Provide new-season link to existing booking creation. Refresh affected booking/profile/calendar/map/route/readiness queries after receipt. Preserve drafts on errors. Manager/boss views expose evidence only, without owner actions.
+- [x] Rerun route/component tests; expect pass.
+- [x] Commit: `feat: add owner booking date repair review`.
 
 ### Task 6: Verify integration and deliver draft PR
 
@@ -122,12 +122,17 @@ Include JS/SQL parity for sentinel, leap-day, malformed, sales-only, conflicting
 
 **Interfaces:** No new production API; consumes Tasks 1–5.
 
-- [ ] Add end-to-end regression `date-repair-flow.pglite.test.ts`: imported sales record → unresolved review → evidenced preview → apply → corrected overlap/readiness, preserving commercial status, packages and history. Assert source/audit failure rolls back. Run it red before filling any integration gaps.
-- [ ] Wire CI to Node 22, frozen pnpm install, focused backend/frontend tests and PostgreSQL concurrency suite. Complete integration; run regression green.
-- [ ] Run `pnpm run typecheck:libs`, both affected package typechecks, `pnpm --filter @workspace/api-server build`, and `pnpm --filter @workspace/adventure-zone build`. Compare baseline failures without hiding newly introduced errors. Run supported authenticated browser checks at 360px, 768px and desktop; record unavailable authentication/tool checks explicitly as unverified.
-- [ ] Document owner onboarding, conservative legacy review, source-selection rules, clearing/commitment limitations, migration behavior and verification results. No live data corrections are part of verification.
-- [ ] Commit: `test: verify booking date repair integration`.
+- [x] Add end-to-end regression `date-repair-flow.pglite.test.ts`: imported sales record → unresolved review → evidenced preview → apply → corrected overlap/readiness, preserving commercial status, packages and history. Assert source/audit failure rolls back. Run it red before filling any integration gaps.
+- [x] Wire CI to Node 22, frozen pnpm install, focused backend/frontend tests and PostgreSQL concurrency suite. Complete integration; run regression green.
+- [x] Run `pnpm run typecheck:libs`, both affected package typechecks, `pnpm --filter @workspace/api-server build`, and `pnpm --filter @workspace/adventure-zone build`. Compare baseline failures without hiding newly introduced errors.
+- [ ] Authenticated browser checks at 360px, 768px and desktop: **unverified**, because no supported authenticated browser runtime is available. Component tests are not visual verification.
+- [x] Document owner onboarding, conservative legacy review, source-selection rules, clearing/commitment limitations, migration behavior and verification results. No live data corrections are part of verification.
+- [x] Commit: `test: verify booking date repair integration`.
 - [ ] Complete the chosen execution method's independent review, address findings, then create a draft PR linked to the approved spec with concrete test evidence and limitations. Stop before merge/deployment.
+
+## Verified checkpoint
+
+Native run [36973212656](https://github.com/epivene/adventure-zone-command-center/actions/runs/36973212656) at `a63a71acd62178c9ff907e58438d1e77f216aa84`: backend88/88; frontend21/21; shared6/6; planning123/123; frontendplanning32/32; operations79/79; connectedviews73/73. Both builds pass. Package typechecks introduce zero errors: API104 inherited, frontend127 inherited. ACT/calendar/outreach gates retain two/three exact baseline failures, documented in the owner guide and progress ledger. Authenticated responsive browser checks are unverified. Final fresh review and draft synchronization are tracked separately below.
 
 ## Self-review
 

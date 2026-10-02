@@ -49,8 +49,14 @@ Commercial status, packages, notes, sibling bookings and history are preserved. 
 
 The additive migration is `lib/db/migrations/20261002_booking_date_provenance.sql`. Startup requires the evidence resolver and tables before planning/capacity writers run. Migration replay never rewrites existing booking rows. Existing records without explicit provenance enter conservative review; there is no automatic historical backfill.
 
-The focused GitHub Actions workflow uses Node 22, frozen pnpm dependencies, PGlite query/rollback regressions and a disposable PostgreSQL 16 database for actual allocation-lock races. Package typecheck diagnostics and ACT failures are compared with pinned base `37e71787153018ee366acf642537de97858fdc81`; new failures block delivery.
+The focused GitHub Actions workflow uses Node 22, frozen pnpm dependencies, PGlite query/rollback regressions and a disposable PostgreSQL 16 database for actual allocation-lock races. Package typecheck diagnostics, ACT failures and calendar/capacity failures are compared with pinned base `37e71787153018ee366acf642537de97858fdc81`; new failures block delivery.
 
 Verification results are recorded in the approved plan's progress ledger and draft PR. Authenticated browser checks at 360px, 768px and desktop are **unverified** because this execution environment exposes no supported authenticated browser runtime. Component tests do not substitute for those visual checks.
 
 No live corrections, merge or deployment were performed. Public dates for the 18 historical sentinel records still require source review before individual corrections. Equipment/crew onboarding and historical duplicate reconciliation remain separate work.
+
+### Verification checkpoint
+
+GitHub Actions run `36973212656` verifies the Native implementation. Package checks introduce **zero new diagnostics** (API: 104 inherited; frontend: 127 inherited), and both application builds pass. Focused backend/owner-route tests: 88/88; frontend visibility, repair UI and role evidence: 21/21. The operations job also passes shared contracts 6/6, planning 123/123, frontend planning 32/32, operations API 79/79 and connected views 73/73. Both compatibility baseline gates pass.
+
+The broad suites retain two baseline ACT failures (phone fixture missing organization_locations; quote-sensitive migration-contract assertion) and three baseline outreach failures (missing boss_accounts.session_version fixture; two active-pursuit rerank cases). These are disclosed rather than hidden. Authenticated responsive browser checks remain unverified as described above.
