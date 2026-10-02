@@ -62,3 +62,23 @@ Booking context means `bookingId`, `profileId`, `bookingName`, `bookingStatus`, 
 5. Reconcile with signed agreements and calendar entries. Report remaining uncertainties. This release does not authorize or implement assignment changes.
 
 The older `read_profile_context.eventYear` remains research context, not a history/bookings filter. Use `read_leg_schedule` for actual date-filtered operational booking results.
+
+
+## Season planning records
+
+The connector also reads the newer planning records. Empty legacy crew history does not imply an empty crew roster or season plan.
+
+| Tool | Section | ID filters | Date basis | Fields |
+|---|---|---|---|---|
+| read_leg_schedule | leg_seasons | legId | Entire saved season in Denver | legId, seasonYear, leadership, managerName, managerWorkerId, workerIds, baseAddress, transportResourceIds, revision, updatedAt |
+| read_leg_schedule | operating_plans | legId, bookingId | Committed season, falling back to draft season | bookingId, profileId, bookingName, legId, draft, committed, invalidationReasons, revision, updatedAt |
+| read_operational_resources | crew_roster | None | Unsupported | name, city, region, updatedAt |
+| read_operational_resources | crew_memberships | legId | Unsupported | workerId, workerName, legId, createdAt |
+| read_operational_resources | crew_availability | None | Saved startsAt/endsAt overlap | workerId, workerName, startsAt, endsAt, state, sourceWindow, source, revision |
+| read_operational_resources | package_sets | None | Unsupported | packageId, packageName, name, classification, state, verifiedAt, requirements, source, resourceIds, revision |
+
+For composite season/membership identities, id is a stable synthetic pagination key; use legId + seasonYear or workerId + legId as the business identity. No write tool accepts these synthetic IDs.
+
+Season filters select the saved season rather than event-date overlap. Use bookings, operational windows and crew availability separately for actual travel and staffing checks. Roster membership alone does not confirm availability. Operating-plan drafts, tentative leadership and unverified sets stay explicitly separate from committed plans, confirmed availability and verified sets. Package-set resourceIds come from saved set membership rather than a guessed package count.
+
+Worker phone, email, rehire decisions, personnel reviews and ratings are excluded. Reads do not create schema, initialize season plans, migrate legacy records, evaluate plans, refresh routing, contact customers or invoke paid AI. Missing planning tables continue to report unavailable rather than empty.
