@@ -97,7 +97,7 @@ function workspaceRenderer(data: any, onComplete: (input: unknown) => Promise<an
 }
 
 function startFocus() {
-  fireEvent.click(screen.getByRole("button", { name: "Start" }));
+  fireEvent.click(screen.getByRole("button", { name: "Start call" }));
 }
 
 describe("CallQueueWorkspace", () => {
@@ -115,7 +115,7 @@ describe("CallQueueWorkspace", () => {
     expect(screen.getByText("Next up")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Sarah Miller" })).toBeVisible();
     expect(screen.getByText("1 task remaining")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Start" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Start call" })).toBeVisible();
     expect(screen.queryByTestId("selected-call-workspace")).not.toBeInTheDocument();
     expect(loadWorkspace).not.toHaveBeenCalled();
   });
@@ -131,7 +131,7 @@ describe("CallQueueWorkspace", () => {
 
     startFocus();
 
-    expect(screen.getByRole("button", { name: "Back to Today" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /Back to Today/ })).toBeVisible();
     expect(screen.getByText("3 remaining")).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Calls to make" })).not.toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
@@ -147,7 +147,7 @@ describe("CallQueueWorkspace", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Back to Today" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /Back to Today/ })).toBeVisible();
     expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
   });
 
@@ -171,7 +171,7 @@ describe("CallQueueWorkspace", () => {
     startFocus();
 
     fireEvent.click(await screen.findByRole("button", { name: "Complete Sarah Miller" }));
-    expect(screen.getByText("Loading caller…")).toBeVisible();
+    expect(await screen.findByText("Loading caller…")).toBeVisible();
     resolveTom(workspace("Tom Erickson"));
     expect(await screen.findByRole("heading", { name: "Tom Erickson" })).toBeVisible();
   });
@@ -207,7 +207,7 @@ describe("CallQueueWorkspace", () => {
     expect(await screen.findByRole("button", { name: "Try again" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Open standalone workspace" })).toHaveAttribute(
       "href",
-      `/calls/new?contactId=${followUps[0].contactId}&bookingId=${followUps[0].bookingId}&followUpId=${followUps[0].id}`,
+      `/calls/workspace?contactId=${followUps[0].contactId}&bookingId=${followUps[0].bookingId}&followUpId=${followUps[0].id}`,
     );
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
