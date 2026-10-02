@@ -199,7 +199,7 @@ describe("TodayPage renewals", () => {
     expect(screen.getByText("New Lead · Needs follow-up decision")).toBeInTheDocument();
   });
 
-  it("starts the focused work disclosures closed even when contracts are the priority", async () => {
+  it("keeps later work collapsed alongside the invoice and contract workspace", async () => {
     mockDashboard(
       dashboard({
         contractCount: 2,
@@ -213,9 +213,8 @@ describe("TodayPage renewals", () => {
       expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
 
-    const contracts = summaryWithText("Contracts (2)").closest("details");
+    expect(screen.getByRole("heading", { name: "Invoices & Contracts" })).toBeVisible();
     const later = screen.getByText("Later").closest("details");
-    expect(contracts).not.toHaveAttribute("open");
     expect(later).not.toHaveAttribute("open");
   });
 });

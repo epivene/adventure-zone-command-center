@@ -171,7 +171,7 @@ describe("CallQueueWorkspace", () => {
     startFocus();
 
     fireEvent.click(await screen.findByRole("button", { name: "Complete Sarah Miller" }));
-    expect(screen.getByText("Loading caller…")).toBeVisible();
+    expect(await screen.findByText("Loading caller…")).toBeVisible();
     resolveTom(workspace("Tom Erickson"));
     expect(await screen.findByRole("heading", { name: "Tom Erickson" })).toBeVisible();
   });

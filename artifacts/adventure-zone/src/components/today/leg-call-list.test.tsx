@@ -24,6 +24,13 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.resetAllMocks(); sessionStorage.clear(); });
 describe("LegCallList", () => {
+  it("keeps profiles available without offering a disabled call workspace", async () => {
+    render(<LegCallList followUps={reminders} now={now} callingEnabled={false} />);
+    await screen.findByText("Fair callback");
+    expect(screen.queryByRole("button", { name: "Review contact and phone" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Event profile" })).toBeTruthy();
+    expect(mocks.apiGet).not.toHaveBeenCalled();
+  });
   it("shows requested calls and loads live contact data only when asked", async () => {
     render(<LegCallList followUps={reminders} now={now} />);
     await screen.findByText("Fair callback");

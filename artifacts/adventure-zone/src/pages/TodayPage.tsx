@@ -283,7 +283,7 @@ export default function TodayPage() {
         ) : null}
       </section>
 
-      <LegCallList followUps={followUps} followUpTotal={dashboard.followUpTotal} now={now} />
+      <LegCallList callingEnabled={callingConfig.assistedCallingEnabled} followUps={followUps} followUpTotal={dashboard.followUpTotal} now={now} />
       <OutreachPlanner />
 
       {visibleRouteWarningCount > 0 ? (

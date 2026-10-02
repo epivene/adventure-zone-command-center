@@ -59,7 +59,7 @@ function ContactPreview({ row }: { row: LegCallRow }) {
     </div>
   );
 }
-function CallRow({ row }: { row: LegCallRow }) {
+function CallRow({ row, callingEnabled }: { row: LegCallRow; callingEnabled: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const profileHref = eventProfileHref({ organizationId: row.organizationId, contactId: row.contactId, bookingId: row.bookingId, followUpId: row.followUpId });
   return (
@@ -69,18 +69,18 @@ function CallRow({ row }: { row: LegCallRow }) {
         {profileHref ? <Link className="button-secondary" href={profileHref}>Event profile</Link> : null}
       </div>
       <p className="mt-2 text-sm">Why: {row.reason}</p>
-      <p className="text-sm">Last recorded contact: {dateLabel(row.lastContactAt)}{row.dueAt ? " · Next action due: " + dateLabel(row.dueAt) : ""}</p>
+      <p className="text-sm">{row.followUpId ? "Last recorded activity: " : "Last recorded contact: "}{dateLabel(row.lastContactAt)}{row.dueAt ? " · Next action due: " + dateLabel(row.dueAt) : ""}</p>
       {row.contactName ? <p className="text-sm">Recorded contact: {row.contactName}</p> : null}
       {row.packages.length ? <p className="text-sm">Suggested packages: {row.packages.join(" · ")}</p> : null}
       {row.openingLabels.length ? <p className="text-sm">Route openings: {row.openingLabels.join("; ")}</p> : null}
       {row.reviewReason ? <p className="mt-2 font-semibold text-amber-800">Review before calling: {row.reviewReason}</p> : null}
       <details className="mt-2 text-sm"><summary className="cursor-pointer font-semibold">Questions to ask</summary><ul className="mt-2 list-disc pl-5">{row.questions.map((question) => <li key={question}>{question}</li>)}</ul></details>
-      <button type="button" className="button-secondary mt-3" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? "Close contact review" : "Review contact and phone"}</button>
-      {expanded ? <div className="mt-3 rounded-lg bg-slate-50 p-3"><ContactPreview row={row} /></div> : null}
+      {callingEnabled ? <button type="button" className="button-secondary mt-3" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? "Close contact review" : "Review contact and phone"}</button> : null}
+      {expanded && callingEnabled ? <div className="mt-3 rounded-lg bg-slate-50 p-3"><ContactPreview row={row} callingEnabled={callingEnabled} /></div> : null}
     </li>
   );
 }
-export function LegCallList({ followUps, followUpTotal, now }: { followUps: CallListFollowUp[]; followUpTotal?: number; now: Date }) {
+export function LegCallList({ followUps, followUpTotal, now, callingEnabled = true }: { followUps: CallListFollowUp[]; followUpTotal?: number; now: Date; callingEnabled?: boolean }) {
   const [planner, setPlanner] = useState<Planner | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -116,6 +116,7 @@ export function LegCallList({ followUps, followUpTotal, now }: { followUps: Call
         <label className="text-sm font-semibold">Season <select className="ml-2 rounded border p-2" value={filter.season} onChange={(event) => changeFilter({ ...filter, season: event.target.value })}><option value="all">All seasons</option>{years.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
         <label className="text-sm font-semibold">Leg <select className="ml-2 rounded border p-2" value={filter.legId} onChange={(event) => changeFilter({ ...filter, legId: event.target.value })}><option value="all">All legs</option>{[...legs].map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
       </div>
+      {!callingEnabled ? <p className="mb-3 text-sm text-amber-800">The call workspace is unavailable. Open the event profile to review contacts and next actions.</p> : null}
       {loading ? <p role="status">Loading route prospects…</p> : null}
       {error ? <p role="alert">Route prospects could not load. Showing loaded due calls; refresh to retry.</p> : null}
       {planner && !planner.enabled ? <p className="text-sm text-amber-800">Route prospect planning is unavailable. Showing loaded due calls.</p> : null}
