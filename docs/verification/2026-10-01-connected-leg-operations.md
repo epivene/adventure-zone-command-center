@@ -2,7 +2,39 @@
 
 ## Review status
 
-Draft delivery only. No merge, deployment, live booking edits, imports, outbound correspondence, or paid provider calls were performed by the feature. One fresh independent gpt-6-astra whole-branch review completed. Its six Important findings were fixed in one regression-tested pass; a repeated-name choice issue was re-graded Important and fixed too. One display minor remains deferred. Draft-only delivery is appropriate; baseline CI and visual checks remain unresolved.
+Draft delivery only. No merge, deployment, live booking edits, imports, outbound correspondence, or paid provider calls were performed by the feature. One fresh independent gpt-6-astra whole-branch review completed. Its six Important findings were fixed in one regression-tested pass; a repeated-name choice issue was re-graded Important and fixed too. The remaining calendar display minor was fixed during the October 2 continuation. Draft-only delivery is appropriate; baseline CI and visual checks remain unresolved.
+
+## October 2 continuation
+
+Owner and boss panels now label the Calendar connection section when its read is unavailable, retain the error message and offer the existing retry. Manager panels continue to omit office calendar details. The two owner/boss error assertions failed before the fix, then all nine panel tests passed, including a manager privacy regression. The affected five-suite recheck passed 19 tests.
+
+Added `.github/workflows/connected-leg-operations-ci.yml`, a read-only, path-scoped check using Node 22 and frozen dependencies. It explicitly selects local fixture API tests and the connected operations UI regressions; it does not invoke the blocked full API suite. Existing workflows remain unchanged. Its executable verification steps were run locally in workflow order: shared-library typecheck passed, shared contract 2/2, API 75/75 across 11 suites, UI 70/70 across 21 suites, frontend production build and API production build passed. This is **147 focused tests**, not a claim of full workspace coverage. The local runtime remains Node 24; hosted Node 22 results will be recorded separately.
+
+At remote head `aea95d1a58626c6f638fc5be36eb11b0d528c2af`, hosted checks were 7 successful and 11 failed. All failed job logs were inspected:
+
+| Workflow | Observed failure |
+|---|---|
+| Release Safety | API typecheck exhausted the default Node heap. Main `b6dbc807cbf936882d5a7304349382daa55a6fb0` job 110619448234 also failed with heap exhaustion. |
+| Guided Calling CI | Its API and frontend test groups passed; the workspace typecheck and root build exhausted the Node heap. |
+| Design Studio Current Templates CI | Node heap exhaustion. |
+| Google Workspace Sync CI | Five failures: old settings/source assertions, changed Gmail draft result fields, missing profile-email fixture, deployment sync setting assertion, and calendar app-window DB mock without `transaction`. |
+| Office Coordinator CI | Email draft fixture lacks current columns; owner middleware source assertion searches for an absent literal. |
+| Booking Master Work Queue Release 2 CI | Same absent owner middleware literal; recipient error wording expectation differs from its structured code. |
+| Calendar Route Handoff CI | Existing manager route anchor ID assertion expects a trip UUID, receives a manager navigation ID. Earlier test groups passed. |
+| Assistant General Mode CI | Root test harness lacks DOM, database configuration and backend aliases; some history assertions differ. |
+| Manager Assistant CI | Root alias/database setup and the same manager anchor assertion. |
+| Package Intelligence CI | Root backend alias/database setup and frontend React setup. |
+| Booking Assistant CI | Root Zod/alias/database setup and a history answer assertion. |
+
+To distinguish observed hosted failures from reproduced baseline failures, ran this safe selection in the unchanged `8c34ec1` baseline worktree:
+
+```sh
+env pnpm_config_verify_deps_before_run=false pnpm --filter @workspace/api-server test src/features/leg-manager/manager-map-data.test.ts src/routes/office-security-regression.test.ts src/routes/opportunity-email-index-mount.test.ts
+```
+
+Result: 3 failed, 18 passed. The manager anchor and both middleware source assertions reproduced exactly. Those tests and the manager map implementation are unchanged by this feature; the route index diff only adds the explicitly authenticated operations router. Other logged hosted failures were investigated, but their entire workflows were not rerun on baseline and are not claimed to have been fully reproduced. No broad check was suppressed or marked successful.
+
+Hosted focused workflow status: pending publication and execution. Phone/tablet/desktop visual checks and broad workspace failures remain pending; the PR stays draft.
 
 ## Implemented acceptance
 
@@ -207,9 +239,9 @@ Regression failures were observed before fixes. The full frontend recheck found 
 
 Final review commands: the previous focused frontend command plus `src/pages/BossSchedulePage.filters.test.tsx`; API command plus `src/routes/boss-schedule-route.test.ts`, `src/features/bookings/booking-leg-operations-providers.pglite.test.ts`, `src/features/google-workspace/calendar/calendar-operational-window-projection.test.ts`. Popup: `pnpm --filter @workspace/adventure-zone test src/components/routes/manager-route-map-layers.test.tsx`. Broad frontend: `pnpm --filter @workspace/adventure-zone test --maxWorkers=4` (168.55 seconds). Shared libs: `pnpm run typecheck:libs` passed; final API typecheck after rebuilding library declarations has no new diagnostic file/code locations against baseline. Production builds passed after corrections. The final boss-only selection recheck passed 5 tests.
 
-## Deferred minor
+## Previously deferred minor — resolved October 2
 
-Calendar connection failures expose the generic retry control, but the panel does not label an Unavailable calendar section. This was left for later review; no failed connection is shown as connected.
+Calendar connection failures originally exposed the generic retry control without a labeled Unavailable calendar section. The continuation adds that section for owner and boss, with regression tests. The original execution ledger below is retained as a historical record.
 
 ## Final execution record
 

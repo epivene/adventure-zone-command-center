@@ -1,8 +1,26 @@
-import { render, screen, cleanup } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
+import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
 import { LegOperationsPanel } from './leg-operations-panel';
 import { operationsFixture } from '@/test/booking-leg-operations-fixture';
 afterEach(cleanup);
+it.each(['owner', 'boss'] as const)('labels an unavailable calendar section for %s and permits retry', role => {
+  const data = operationsFixture(), retry = vi.fn();
+  data.calendar = { state: 'unavailable', message: 'Calendar connection could not be loaded. Retry to check the saved records.' };
+  render(<LegOperationsPanel operations={data} role={role} onRetry={retry} />);
+  const calendar = within(screen.getByRole('heading', { name: 'Calendar connection' }).closest('section')!);
+  expect(calendar.getByText('Unavailable')).toBeInTheDocument();
+  expect(calendar.getByText(/Calendar connection could not be loaded/)).toBeInTheDocument();
+  expect(screen.queryByText(/saved as connected/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Retry unavailable details' }));
+  expect(retry).toHaveBeenCalledOnce();
+});
+it('keeps office calendar error details hidden from managers', () => {
+  const data = operationsFixture();
+  data.calendar = { state: 'restricted', message: 'Office calendar connection is restricted.' };
+  render(<LegOperationsPanel operations={data} role="manager" onRetry={() => {}} />);
+  expect(screen.queryByRole('heading', { name: 'Calendar connection' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Office calendar connection is restricted.')).not.toBeInTheDocument();
+});
 it('shows_last_season_source_and_saved_assignment', () => {
   render(<LegOperationsPanel operations={operationsFixture()} role="owner" onRetry={() => {}} />);
   expect(screen.getByText('Angelo')).toBeInTheDocument();
