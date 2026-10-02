@@ -1,0 +1,29 @@
+name: Email Next Step Review
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/assistant-workspace/read-tools*"
+      - "artifacts/api-server/src/features/assistant-workspace/orchestrator.ts"
+      - "artifacts/api-server/src/features/email-next-step-review*"
+      - "artifacts/api-server/src/features/chatgpt-connection/**"
+      - ".github/workflows/email-next-step-review-ci.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Email next-step and read regressions
+        run: pnpm --filter @workspace/api-server exec vitest run --maxWorkers=2 src/features/assistant-workspace/read-tools.test.ts src/features/assistant-workspace/orchestrator.test.ts src/features/chatgpt-connection/mcp-server.test.ts src/features/chatgpt-connection/today-read-service.test.ts
+      - name: Build API
+        run: pnpm --filter @workspace/api-server build
