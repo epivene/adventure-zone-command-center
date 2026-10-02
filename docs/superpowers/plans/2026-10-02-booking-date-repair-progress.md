@@ -10,3 +10,5 @@ Task 1: initial RED run 36963795234: missing date-evidence module. Added API sca
 Ruling: Shell now rejects even Get-Location with sandbox provisioning failed (-32603); continue repository connector and CI execution — cost if wrong: no local test turnaround; all claims require remote results.
 Task 1: RED observed in CI run 36963926794, job 110703416477: 11 behavioral assertions fail against raw-window scaffold, plus 2 missing migration failures. Implementing evidence policy now.
 Ruling: Add publicEndExclusive/reservationEndExclusive to resolver response — overlap readers must distinguish exclusive boundaries without altering raw evidence — cost if wrong: additional additive response fields.
+Task 1: core resolver/migration GREEN step succeeded in run 36964086497; shared-library typecheck also passed. Full compatibility suite remains in progress; inspect its retained logs before final completion claim.
+Task 2: started; add normalizer and real SQL replay regressions before changing importer.
