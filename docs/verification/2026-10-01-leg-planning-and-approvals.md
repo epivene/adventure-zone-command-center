@@ -11,7 +11,7 @@ Executed with Node 22.23.2 and installed pnpm 11.25.0; CI specifies Node 22 and 
 | Check | Local result |
 | --- | --- |
 | New planning backend, auth/startup and affected connected-operations API tests | 33 files passed, 214 tests passed; one PostgreSQL file/four tests skipped |
-| New editors/client plus affected connected operations interface tests | 29 files passed, 103 tests passed |
+| New editors/client plus affected connected operations interface tests | 29 files passed, 103 tests passed; additional Boss contact-editing file: five tests passed |
 | Shared operations contract | Passed, three tests |
 | Shared-library typecheck | Passed |
 | Frontend and API production builds | Both passed on Node 22 |
@@ -33,7 +33,7 @@ Actual verified inventory, staffing requirements, availability, transport, accom
 
 Additional affected trip/crew regressions passed: four files, 18 tests. The preserved Com decision-review unit/MCP suites passed. Its connection-flow integration test still fails on an existing null operation receipt; the identical failure was reproduced on clean updated main. The complete outreach-allocation suite reproduces the same two active-pursuit reranking failures on this branch (52 passes, including the new legacy-writer test) and clean updated main (51 passes). These existing failures are reported, not suppressed or changed by this feature. The planning-specific legacy-writer regression is tested separately.
 
-Final review and GitHub CI results will be appended before handoff. Local blocked browser verification remains a release check.
+Whole-branch review and GitHub CI evidence are recorded below; current workflow status is linked from draft PR#991. Local blocked browser verification remains a release check.
 
 ## Rulings made during execution
 
@@ -75,3 +75,13 @@ One fresh read-only gpt-6-astra review identified seven Important findings and n
 - Final: Ruling: Manual sourced travel review — retain explicit endpoint-matched review and server-stamped evidence without provider calls as approved — cost if wrong: revise the travel-evidence workflow before commitment.
 
 Deferred minors: none.
+
+## First GitHub CI run
+
+[Connected Leg Operations run36960569900](https://github.com/epivene/adventure-zone-command-center/actions/runs/36960569900) executed all four real PostgreSQL cases successfully (2.483s for that file), establishing actual concurrent claim, competing hold, rollback and guard evidence. The step later failed on a5s timeout in the PGlite manager-receipt privacy test. That test keeps every assertion and now has a specific15s allowance for its included cold setup.
+
+Boss Unified Documents exposed an older BossProfileContactEditing mock missing bossFetch after the new planning import. Cleanmain passes its5tests; the branch reproduced the missing-export failure RED, then adds the actual mocked export. Other workflow failures include existing root-runner alias/database/jsdom issues, older route-mount string checks, office draft fixture columns and manager-map expectations. Three relevant route-mount/map failures were independently reproduced on cleanmain. The entire repository CI is not claimed green.
+
+- Final: Ruling: Allow15seconds for the PGlite receipt-scope integration test including cold database setup — CI's two-CPU runner exceeded5seconds while all four actual PostgreSQL cases passed — cost if wrong: measure and reduce fixture/setup cost rather than masking a performance defect.
+
+The CI corrections passed locally: Boss contact editing5/5 and receipt privacy2/2. No application behavior changed in this follow-up. The refreshed PR reruns GitHub checks.

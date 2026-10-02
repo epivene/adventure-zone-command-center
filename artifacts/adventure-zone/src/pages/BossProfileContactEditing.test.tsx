@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/boss-auth-context", () => ({
+  bossFetch: vi.fn(),
   bossGet: mocks.bossGet,
   bossPatch: mocks.bossPatch,
   bossPut: mocks.bossPut,

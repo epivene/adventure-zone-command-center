@@ -31,7 +31,7 @@ it("keeps off-leg affected booking identities out of manager mutation receipts",
     requestKey: "availability",
   });
   expect(result.affectedBookingIds).not.toContain(ids.otherBooking);
-});
+}, 15000);
 afterEach(async () => {
   await fixture?.pg.close();
   vi.unstubAllGlobals();
