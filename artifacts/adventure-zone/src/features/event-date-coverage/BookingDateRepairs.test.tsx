@@ -60,3 +60,14 @@ it("ignores a late preview from an earlier selection and retains per-booking dra
  await choose(b.bookingId);resolve(preview);await waitFor(()=>expect(screen.queryByRole("heading",{name:"Repair preview"})).not.toBeInTheDocument());
  await choose(a.bookingId);expect(screen.getByLabelText("Value for public_start")).toHaveValue("2027-07-21");
 });
+
+it("requires explicit signed-window reconciliation on the exact preview and clears it after edits",async()=>{
+ vi.mocked(api.previewDateRepair).mockResolvedValue({...preview,impacts:{...preview.impacts,blocked:true,reasons:["RECONCILE_CONFIRMED_WINDOW_FIRST"],confirmedWindowReview:{before:{publicWindow:{start:"2027-07-20",end:"2027-07-26"},reservationWindow:null},after:{publicWindow:preview.afterResolved.publicWindow,reservationWindow:null},obligationIds:[],acknowledged:false}}} as never);
+ setup();await choose();fill();fireEvent.click(screen.getByRole("button",{name:"Preview repair"}));
+ await screen.findByRole("heading",{name:"Repair preview"});
+ fireEvent.click(screen.getByRole("button",{name:"Reconcile signed window and preview again"}));
+ await waitFor(()=>expect(api.previewDateRepair).toHaveBeenLastCalledWith(expect.objectContaining({reconcileConfirmedWindow:true})));
+ fireEvent.change(screen.getByLabelText("Repair reason"),{target:{value:"Rechecked changed evidence"}});
+ fireEvent.click(screen.getByRole("button",{name:"Preview repair"}));
+ await waitFor(()=>expect(api.previewDateRepair).toHaveBeenLastCalledWith(expect.objectContaining({reconcileConfirmedWindow:false})));
+});

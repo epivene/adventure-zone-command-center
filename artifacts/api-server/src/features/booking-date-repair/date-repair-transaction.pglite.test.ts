@@ -122,11 +122,64 @@ it("requires a separate record for a different independently verified event seas
  const p=await service.preview(next as never,"owner");expect(p.impacts.reasons).toContain("SEPARATE_SEASON_REQUIRES_NEW_BOOKING");expect(p.impacts.blocked).toBe(true);
 },30000);
 
-it.each(["contract_received","confirmed","completed","definite"])("blocks unresolved obligations consistently when the selected booking is %s",async(state)=>{
+it.each(["contract_received","confirmed","completed","definite"])("records source proof while retaining unresolved-capacity warnings when the selected booking is %s",async(state)=>{
  const service=await setup();
  await fixture.pg.exec("ALTER TABLE bookings ADD COLUMN probability text");
  await fixture.pg.query("UPDATE bookings SET status=$1,probability=$2 WHERE id=$3",[state==="definite"?"new_lead":state,state==="definite"?"definite":"possible",ids.booking]);
  await fixture.pg.query("UPDATE bookings SET status='contract_received' WHERE id=$1",[ids.otherBooking]);
  const p=await service.preview(proposal() as never,"owner");
- expect(p.impacts.reasons).toContain("OTHER_COMMITMENT_DATE_REVIEW_REQUIRED");expect(p.impacts.blocked).toBe(true);
+ expect(p.impacts.reasons).toContain("OTHER_COMMITMENT_DATE_REVIEW_REQUIRED");expect(p.impacts.blocked).toBe(false);
+ await service.apply(applyInput(p),"owner");
+},30000);
+
+it("repairs two unresolved commitments sequentially while planning still reports the remaining unknown window",async()=>{
+ const service=await setup();
+ await fixture.pg.query("UPDATE bookings SET status='contract_received',starts_at=null,ends_at=null");
+ const first=await service.preview(proposal() as never,"owner");
+ expect(first.impacts.reasons).toContain("OTHER_COMMITMENT_DATE_REVIEW_REQUIRED");
+ expect(first.impacts.blocked).toBe(false);
+ await service.apply(applyInput(first,"first-commitment"),"owner");
+ const unknown=(await fixture.pg.query<{value:any}>("SELECT booking_resolved_dates(id,starts_at,ends_at,null,null) value FROM bookings WHERE id=$1",[ids.otherBooking])).rows[0].value;
+ expect(unknown.publicWindow).toBeNull();expect(unknown.evidenceState).toBe("needs_review");
+ await fixture.pg.query("UPDATE activities SET booking_id=null,body=body || ' Second event 2027-08-01 through 2027-08-03' WHERE id=$1",[noteId]);
+ const second=proposal();second.bookingId=ids.otherBooking;second.endpoints[0].value="2027-08-01";second.endpoints[1].value="2027-08-03";
+ const p=await service.preview(second as never,"owner");expect(p.impacts.blocked).toBe(false);
+ await service.apply(applyInput(p,"second-commitment"),"owner");
+ expect((await fixture.pg.query<{n:number}>("SELECT count(*)::int n FROM bookings WHERE status='contract_received' AND booking_resolved_dates(id,starts_at,ends_at,null,null)->>'evidenceState'='verified'")).rows[0].n).toBe(2);
+},30000);
+
+it("explicitly reconciles a signed correction only after assignments are resolved and rejects changed sources",async()=>{
+ const service=await setup(),first=await service.preview(proposal() as never,"owner");await service.apply(applyInput(first),"owner");
+ await fixture.pg.query("UPDATE bookings SET status='contract_received' WHERE id=$1",[ids.booking]);
+ await fixture.pg.query("UPDATE activities SET body=body || ' Corrected event start 2027-07-22' WHERE id=$1",[noteId]);
+ const changed={...proposal(),reconcileConfirmedWindow:true};changed.endpoints[0].value="2027-07-22";
+ await fixture.pg.query("INSERT INTO booking_resource_assignments(booking_id,resource_id) VALUES($1,$2)",[ids.booking,ids.resource]);
+ const assigned=await service.preview(changed as never,"owner");expect(assigned.impacts.blocked).toBe(true);
+ await fixture.pg.query("DELETE FROM booking_resource_assignments WHERE booking_id=$1",[ids.booking]);
+ const ordinary=await service.preview({...changed,reconcileConfirmedWindow:false} as never,"owner");expect(ordinary.impacts.blocked).toBe(true);
+ const reconciled=await service.preview(changed as never,"owner");expect(reconciled.impacts.blocked).toBe(false);
+ expect((reconciled.impacts as any).confirmedWindowReview.before.publicWindow.start).toBe("2027-07-21T06:00:00.000Z");
+ await fixture.pg.query("UPDATE activities SET body=body || ' revised' WHERE id=$1",[noteId]);
+ await expect(service.apply(applyInput(reconciled,"stale-reconcile"),"owner")).rejects.toMatchObject({status:409});
+ const fresh=await service.preview(changed as never,"owner");await service.apply(applyInput(fresh,"fresh-reconcile"),"owner");
+ expect((await fixture.pg.query<{status:string}>("SELECT status FROM bookings WHERE id=$1",[ids.booking])).rows[0].status).toBe("contract_received");
+},30000);
+
+it("discovers exact legacy ACT source snapshots without endpoint evidence and excludes sibling snapshots",async()=>{
+ const service=await setup(),source=ids.split,version=ids.resource,siblingVersion=ids.leg;
+ await fixture.pg.exec("CREATE TABLE act_source_record_versions(id uuid PRIMARY KEY,source_record_id uuid,source_database_key text,raw_snapshot jsonb); CREATE TABLE act_external_links(entity_type text,entity_id uuid,source_record_id uuid,source_database_key text); CREATE TABLE act_imported_field_origins(entity_type text,entity_id uuid,source_record_id uuid,source_version_id uuid)");
+ await fixture.pg.query("INSERT INTO act_source_record_versions VALUES($1,$2,'exact-db','{\"estimatedCloseDate\":\"2026-01-01\"}'),($3,$3,'sibling-db','{}')",[version,source,siblingVersion]);
+ await fixture.pg.query("INSERT INTO act_external_links VALUES('booking',$1,$2,'exact-db'),('booking',$3,$4,'sibling-db')",[ids.booking,source,ids.otherBooking,siblingVersion]);
+ const queue=await service.queue({bookingId:ids.booking});
+ expect(queue.records[0].sources.some(s=>s.type==="act_source_version"&&s.id===version)).toBe(true);
+ expect(queue.records[0].sources.some(s=>s.id===siblingVersion)).toBe(false);
+ const classify={...proposal(),endpoints:[{field:"public_start",kind:"sales_milestone",value:"2026-01-01T00:00:00.000Z",semantics:"instant",sourceRef:{type:"act_source_version",id:version}}]};
+ const p=await service.preview(classify as never,"owner");await service.apply(applyInput(p,"legacy-classify"),"owner");
+ await expect(service.preview({...classify,endpoints:[{...classify.endpoints[0],sourceRef:{type:"act_source_version",id:siblingVersion}}]} as never,"owner")).rejects.toMatchObject({status:422});
+},30000);
+
+it("rejects unsupported instant offsets before applying a source-proved date",async()=>{
+ const service=await setup(),input=proposal();input.endpoints[0].value="2027-07-21T12:00:00+16:00";input.endpoints[0].semantics="instant";
+ await fixture.pg.query("UPDATE activities SET body=body || ' 2027-07-21T12:00:00+16:00' WHERE id=$1",[noteId]);
+ await expect(service.preview(input as never,"owner")).rejects.toMatchObject({status:422});
 },30000);

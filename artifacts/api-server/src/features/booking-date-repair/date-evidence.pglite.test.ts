@@ -48,3 +48,16 @@ it("matches SQL for early supported years without throwing on padded ISO date co
   expect(value).toEqual(result.rows[0].value);
  }finally{await db.close();}
 },30000);
+
+it("uses the same strict clock and offset domains in SQL and JavaScript",async()=>{
+ const db=new PGlite();try{
+ await db.exec("create table bookings(id uuid primary key,starts_at timestamptz,ends_at timestamptz)");
+ await db.exec(await readFile(new URL("../../../../../lib/db/migrations/20261002_booking_date_provenance.sql",import.meta.url),"utf8"));
+ for(const value of ["2027-07-21T12:00:00+16:00","2027-07-21T12:00:60Z","2027-07-21T24:00:00Z","2027-07-21T12:00:00+15:59","2027-07-21T12:00:00-07:00","2027-07-21T19:00:00Z"]){
+ const sql=(await db.query<{value:string|null}>("SELECT booking_date_iso(booking_date_value($1,'instant','public_start')) value",[value])).rows[0].value;
+ const js=dateEndpointInstant(value,"instant","public_start");
+ expect(js,value).toEqual(sql);
+ if(/(\+16:|:60Z|T24:)/.test(value))expect(js,value).toBeNull();
+ }
+ }finally{await db.close();}
+},30000);
