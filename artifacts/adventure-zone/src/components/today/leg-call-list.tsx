@@ -76,7 +76,7 @@ function CallRow({ row, callingEnabled }: { row: LegCallRow; callingEnabled: boo
       {row.reviewReason ? <p className="mt-2 font-semibold text-amber-800">Review before calling: {row.reviewReason}</p> : null}
       <details className="mt-2 text-sm"><summary className="cursor-pointer font-semibold">Questions to ask</summary><ul className="mt-2 list-disc pl-5">{row.questions.map((question) => <li key={question}>{question}</li>)}</ul></details>
       {callingEnabled ? <button type="button" className="button-secondary mt-3" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? "Close contact review" : "Review contact and phone"}</button> : null}
-      {expanded && callingEnabled ? <div className="mt-3 rounded-lg bg-slate-50 p-3"><ContactPreview row={row} callingEnabled={callingEnabled} /></div> : null}
+      {expanded && callingEnabled ? <div className="mt-3 rounded-lg bg-slate-50 p-3"><ContactPreview row={row} /></div> : null}
     </li>
   );
 }
@@ -122,7 +122,7 @@ export function LegCallList({ followUps, followUpTotal, now, callingEnabled = tr
       {planner && !planner.enabled ? <p className="text-sm text-amber-800">Route prospect planning is unavailable. Showing loaded due calls.</p> : null}
       {(followUpTotal ?? followUps.length) > followUps.length ? <p className="text-sm text-amber-800">This list uses {followUps.length} loaded reminders of {followUpTotal}. Other pages may contain calls or scheduled callbacks. Review the complete follow-up list before outreach.</p> : null}
       {filter.season !== "all" ? <p className="mb-3 text-sm text-slate-600">Callbacks with an unconfirmed season remain visible for review.</p> : null}
-      {rows.length ? <ol className="grid gap-3">{rows.map((row) => <CallRow key={row.id + ":" + row.legId} row={row} />)}</ol> : !loading ? <p>No calls or prospect reviews match these filters.</p> : null}
+      {rows.length ? <ol className="grid gap-3">{rows.map((row) => <CallRow key={row.id + ":" + row.legId} row={row} callingEnabled={callingEnabled} />)}</ol> : !loading ? <p>No calls or prospect reviews match these filters.</p> : null}
     </section>
   );
 }
