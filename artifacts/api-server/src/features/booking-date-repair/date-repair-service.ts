@@ -60,21 +60,40 @@ export class BookingDateRepairService {
   if(resolved.reviewReasons.some(r=>r.startsWith("REVERSED_")))fail(422,"REVERSED_DATE_WINDOW");
   return {after,sources};
  }
+ private fingerprint(snapshot:RepairSnapshot,proposal:RepairProposalInput,sources:RepairSource[]){
+  const activeHoldIds=snapshot.operational.outreach_holds.filter(r=>r.value.state==="active"&&new Date(r.value.expires_at)>this.clock()).map(r=>r.value.id).sort();
+  return hash({snapshot,proposal,sources:sources.map(s=>({type:s.type,id:s.id,revision:s.revision})),activeHoldIds});
+ }
  private impacts(snapshot:RepairSnapshot,after:DateEvidenceInput){
   const resolved=resolveBookingDates(after),before=snapshot.resolved,op=snapshot.operational;
   const rows=(table:string)=>op[table].map(r=>r.value);
   const id=snapshot.booking.id;
-  const material=hash({public:before.publicWindow,reservation:before.reservationWindow,raw: snapshot.input.rawPublic,rawReservation:snapshot.input.rawReservation})
-   !==hash({public:resolved.publicWindow,reservation:resolved.reservationWindow,raw:after.rawPublic,rawReservation:after.rawReservation});
+  // Prior proof guards signed obligations even when a legacy writer made raw values disagree.
+  // It is used only for this guard; operational readers still require raw/proof agreement.
+  const priorInput=structuredClone(snapshot.input);
+  for(const e of before.endpointEvidence){
+   if(e.kind===(e.field.startsWith("public_")?"verified_event":"verified_reservation"))
+    setRaw(priorInput,e.field,dateEndpointInstant(e.value,e.semantics,e.field));
+  }
+  const prior=resolveBookingDates(priorInput);
+  const comparable=(input:DateEvidenceInput,dates:ReturnType<typeof resolveBookingDates>)=>({
+   public:dates.publicWindow,reservation:dates.reservationWindow,
+   unresolvedPublic:dates.publicWindow?null:input.rawPublic,
+   unresolvedReservation:dates.reservationWindow?null:input.rawReservation,
+   publicEndExclusive:dates.publicEndExclusive,reservationEndExclusive:dates.reservationEndExclusive,
+  });
+  const material=hash(comparable(snapshot.input,before))!==hash(comparable(after,resolved));
+  const signedWindowChanged=hash(comparable(priorInput,prior))!==hash(comparable(after,resolved));
   const holds=rows("outreach_holds").filter(r=>r.booking_id===id&&r.state==="active"&&new Date(r.expires_at)>this.clock());
   const resources=rows("booking_resource_assignments").filter(r=>r.booking_id===id);
   const crew=rows("leg_plan_crew_commitments").filter(r=>r.booking_id===id);
   const plans=rows("leg_event_plans").filter(r=>r.booking_id===id&&r.committed);
   const trips=rows("trip_stops").filter(r=>r.booking_id===id);
   const reasons:string[]=[];
+  if(prior.verifiedPublicStart&&resolved.verifiedPublicStart&&operationsSeason(new Date(prior.verifiedPublicStart))!==operationsSeason(new Date(resolved.verifiedPublicStart)))reasons.push("SEPARATE_SEASON_REQUIRES_NEW_BOOKING");
   if(material&&(holds.length||resources.length||crew.length||plans.length||trips.length))reasons.push("RECONCILE_EXISTING_COMMITMENTS_FIRST");
   // An already evidenced signed reservation is an obligation even before individual assignments.
-  if(material&&["confirmed","contract_received","deposit_received","invoice_sent","signed","booked"].includes(snapshot.booking.status)&&(before.reservationWindow||before.publicWindow))reasons.push("RECONCILE_CONFIRMED_WINDOW_FIRST");
+  if(signedWindowChanged&&["confirmed","contract_received","deposit_received","invoice_sent","signed","booked"].includes(snapshot.booking.status)&&(prior.reservationWindow||prior.publicWindow))reasons.push("RECONCILE_CONFIRMED_WINDOW_FIRST");
   const affected=new Set<string>([id]);
   for(const hold of holds)if(hold.booking_id)affected.add(hold.booking_id);
   const target=resolved.reservationWindow??resolved.publicWindow;
@@ -118,7 +137,7 @@ export class BookingDateRepairService {
   return this.database.transaction(async tx=>{
    const snapshot=await this.repository.snapshot(tx,p.bookingId),{after,sources}=await this.proposed(tx,p,snapshot);
    const preview:ReviewedPreview={id:randomUUID(),bookingId:p.bookingId,actorId,expiresAt:new Date(this.clock().getTime()+30*60*1000).toISOString(),
-    fingerprint:hash({snapshot,proposal:p,sources:sources.map(s=>({type:s.type,id:s.id,revision:s.revision}))}),
+    fingerprint:this.fingerprint(snapshot,p,sources),
     before:snapshot.input,after,impacts:this.impacts(snapshot,after),beforeResolved:snapshot.resolved,afterResolved:resolveBookingDates(after),
     selection:{bookingId:p.bookingId,name:snapshot.booking.name,profileId:snapshot.booking.organization_id??null,status:snapshot.booking.status,
      packages:snapshot.operational.booking_package_selections.filter(r=>r.value.booking_id===p.bookingId).map(r=>r.value)}};
@@ -146,7 +165,7 @@ export class BookingDateRepairService {
    let proposed:Awaited<ReturnType<BookingDateRepairService["proposed"]>>;
    try{proposed=await this.proposed(tx,p,snapshot,true);}catch(error){if((error as {status?:number}).status===422)fail(409,"SOURCE_STALE");throw error;}
    const {after,sources}=proposed;
-   if(hash({snapshot,proposal:p,sources:sources.map(s=>({type:s.type,id:s.id,revision:s.revision}))})!==input.fingerprint)fail(409,"PREVIEW_STALE");
+   if(this.fingerprint(snapshot,p,sources)!==input.fingerprint)fail(409,"PREVIEW_STALE");
    const impacts=this.impacts(snapshot,after);if(impacts.blocked)fail(409,impacts.reasons.join(","));
    await tx.execute(sql`UPDATE bookings SET starts_at=${after.rawPublic.start}::timestamptz,ends_at=${after.rawPublic.end}::timestamptz,updated_at=now() WHERE id=${p.bookingId}::uuid`);
    if(p.clearFields.includes("reservation_start"))await tx.execute(sql`DELETE FROM booking_operational_windows WHERE booking_id=${p.bookingId}::uuid`);

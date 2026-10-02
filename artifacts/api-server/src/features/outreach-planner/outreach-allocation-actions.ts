@@ -249,6 +249,11 @@ export async function changeCommitment(
     const b = facts.bookings.find((b) => b.id === id);
     if (!b) throw new OutreachError(404, "Booking not found.");
     validateDemand(facts, input.demand);
+    const dates=b.date_provenance;
+    const sameEndpoint=(value:string,raw:string|null,effective:string|null)=>
+      [raw,effective].some(saved=>saved&&new Date(saved).getTime()===new Date(value).getTime());
+    if(!dates?.publicWindow || !sameEndpoint(input.startsAt,dates.rawPublic.start,b.starts_at) || !sameEndpoint(input.endsAt,dates.rawPublic.end,b.ends_at))
+      throw new OutreachError(409,"Use booking date repairs with saved source evidence before changing event dates.");
     if (
       facts.holds.some(
         (h) =>
@@ -262,8 +267,6 @@ export async function changeCommitment(
         "Release the existing hold before changing its exact demand.",
       );
     Object.assign(b, {
-      starts_at: new Date(input.startsAt).toISOString(),
-      ends_at: new Date(input.endsAt).toISOString(),
       travel_leg_id: input.travelLegId,
       latitude: input.latitude,
       longitude: input.longitude,
@@ -313,7 +316,7 @@ export async function changeCommitment(
     a.db,
     async (tx) => {
       await tx.execute(
-        sql`update bookings set starts_at=${input.startsAt}::timestamptz,ends_at=${input.endsAt}::timestamptz,travel_leg_id=${input.travelLegId}::uuid,latitude=${input.latitude},longitude=${input.longitude} where id=${id}::uuid`,
+        sql`update bookings set travel_leg_id=${input.travelLegId}::uuid,latitude=${input.latitude},longitude=${input.longitude} where id=${id}::uuid`,
       );
       await tx.execute(
         sql`delete from booking_package_selections where booking_id=${id}::uuid`,

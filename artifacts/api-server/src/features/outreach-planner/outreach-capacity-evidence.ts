@@ -393,7 +393,7 @@ export function targetForBooking(
       );
   }
   if (reasons.length) return { target: null, reasons };
-  // Treat prospects with the same default -2/+1 operational occupancy as definite bookings.
+  // Project only the independently verified public/reservation windows.
   const [projected] = applyOperationalWindowsToCalendarBookings(
     [
       {
@@ -401,6 +401,7 @@ export function targetForBooking(
         startsAt: new Date(b.starts_at),
         endsAt: new Date(b.ends_at),
         status: "confirmed",
+        dateProvenance: b.date_provenance,
       },
     ],
     f.windows
@@ -526,6 +527,7 @@ export function projectReservations(
             endsAt: b.ends_at ? new Date(b.ends_at) : null,
             status: b.status,
             probability: b.probability,
+            dateProvenance: b.date_provenance,
           },
         ],
         f.windows
@@ -540,7 +542,7 @@ export function projectReservations(
       if (
         !p.startsAt ||
         !p.endsAt ||
-        overlaps(target, { startsOn: day(p.startsAt), endsOn: day(p.endsAt) })
+        overlaps(target, { startsOn: operationsDateKey(p.startsAt), endsOn: operationsDateKey(p.endsAt) })
       )
         projection.reasons.push(`Booking ${b.id}: ${result.reasons.join(" ")}`);
       // Adjacent stops still matter even if package demand is missing.
@@ -556,10 +558,10 @@ export function projectReservations(
       ) {
         projection.stops.push({
           bookingId: b.id,
-          eventStartsOn: b.starts_at ? day(b.starts_at) : day(p.startsAt),
-          eventEndsOn: b.ends_at ? day(b.ends_at) : day(p.endsAt),
-          startsOn: day(p.startsAt),
-          endsOn: day(p.endsAt),
+          eventStartsOn: b.starts_at ? operationsDateKey(b.starts_at) : operationsDateKey(p.startsAt),
+          eventEndsOn: b.ends_at ? operationsDateKey(b.ends_at) : operationsDateKey(p.endsAt),
+          startsOn: operationsDateKey(p.startsAt),
+          endsOn: operationsDateKey(p.endsAt),
           legId: b.travel_leg_id ?? "",
           quantities: {},
           resourceIds: f.assignments

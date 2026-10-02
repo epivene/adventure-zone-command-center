@@ -45,7 +45,7 @@ function denverMidnight(day: string): number {
   let guess = target + 7 * 3600000;
   for (let i = 0; i < 3; i++) {
     const p = Object.fromEntries(denverParts.formatToParts(guess).filter(x => x.type !== "literal").map(x => [x.type, x.value]));
-    const local = Date.parse(p.year + "-" + p.month + "-" + p.day + "T" + p.hour + ":" + p.minute + ":" + p.second + "Z");
+    const local = Date.parse(p.year.padStart(4,"0") + "-" + p.month + "-" + p.day + "T" + p.hour + ":" + p.minute + ":" + p.second + "Z");
     guess += target - local;
   }
   return guess;

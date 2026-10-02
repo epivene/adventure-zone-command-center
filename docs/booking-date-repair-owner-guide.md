@@ -33,11 +33,13 @@ Year 9999, impossible calendar dates, reversed ranges, sales-only endpoints and 
 
 Classification preserves canonical values unless the owner explicitly selects **clear**. A reservation row can be cleared only as a whole: both endpoints must be explicitly classified and cleared. No missing reservation endpoint is invented.
 
+Confirming a source or normalizing its timestamp encoding does not move an unchanged verified window. A different verified start season requires a separate booking. The legacy demand/commitment action cannot edit public dates; use this saved-source workflow.
+
 Material changes are blocked while active holds, staffing, equipment, trips or committed plans remain, and for changes to an already verified confirmed/signed window. Use the existing explicit reconciliation flow first. Repair never shortens an obligation or silently rewrites crew, equipment, hold or route windows.
 
 ## Preview expiry, stale data and retries
 
-Previews last 30 minutes and do not change bookings or create reservations. Apply re-reads booking/window/source revisions and operational facts under the existing allocation mutex. Changed or expired evidence returns 409. The screen retains the draft and requires a fresh preview.
+Previews last 30 minutes and do not change bookings or create reservations. Apply re-reads booking/window/source revisions and operational facts under the existing allocation mutex. Changed evidence, an expired preview, or a changed active-hold set (including natural hold expiry) returns 409. The screen retains the draft and requires a fresh preview.
 
 An identical retry with the same request key returns its original receipt, including after preview expiry. A reused key with a different payload is rejected. Date writes, appended evidence, receipt, audit and planning/allocation invalidation are atomic. Failed source checks or audit persistence commit no repair.
 

@@ -1,6 +1,6 @@
 # Booking date provenance and repair design
 Date: October 1, 2026 (America/Denver)
-Status: Awaiting written-design review. Feature scope approved in conversation; implementation has not started.
+Status: Approved in conversation October 2, 2026. Implementation and verification tracked in the linked plan and draft PR #993; delivery remains draft-only.
 
 ## Purpose
 Make schedules and leg planning distinguish real public event dates, real operational reservations, unknown imported dates and sales milestones. Give the owner an evidence-backed before/after repair preview. Preserve leads, commercial status, history and commitments.
