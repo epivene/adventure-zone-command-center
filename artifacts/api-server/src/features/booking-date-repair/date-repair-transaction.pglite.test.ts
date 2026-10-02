@@ -94,3 +94,30 @@ it("cannot bypass a verified signed-window obligation by first changing raw date
  const p=await service.preview(changed as never,"owner");expect(p.impacts.blocked).toBe(true);
  await expect(service.apply(applyInput(p,"legacy-bypass"),"owner")).rejects.toMatchObject({status:409});
 },30000);
+
+it("allows source confirmation and canonical encoding normalization without moving an assigned signed window",async()=>{
+ const service=await setup(),first=await service.preview(proposal() as never,"owner");await service.apply(applyInput(first),"owner");
+ await fixture.pg.query("UPDATE bookings SET status='contract_received',starts_at='2027-07-21T00:00:00Z',ends_at='2027-07-26T00:00:00Z' WHERE id=$1",[ids.booking]);
+ await fixture.pg.query("INSERT INTO booking_resource_assignments(booking_id,resource_id) VALUES($1,$2)",[ids.booking,ids.resource]);
+ const preview=await service.preview(proposal() as never,"owner");expect(preview.impacts.blocked).toBe(false);
+ await service.apply(applyInput(preview,"same-window-confirmation"),"owner");
+ expect((await fixture.pg.query("SELECT status FROM bookings WHERE id=$1",[ids.booking])).rows[0].status).toBe("contract_received");
+},30000);
+it("applies and explicitly clears the whole reservation while retaining public proof and append-only history",async()=>{
+ const service=await setup(),input=proposal();
+ input.endpoints.push({field:"reservation_start",kind:"verified_reservation",value:"2027-07-20",semantics:"inclusive_date",sourceRef:{type:"saved_note",id:noteId}} as never,{field:"reservation_end",kind:"verified_reservation",value:"2027-07-27",semantics:"exclusive_date",sourceRef:{type:"saved_note",id:noteId}} as never);
+ const p=await service.preview(input as never,"owner");await service.apply(applyInput(p),"owner");
+ const clearing=proposal();clearing.endpoints=([{field:"reservation_start",kind:"unknown_import",value:null,semantics:"instant",sourceRef:{type:"saved_note",id:noteId}},{field:"reservation_end",kind:"unknown_import",value:null,semantics:"instant",sourceRef:{type:"saved_note",id:noteId}}] as never);clearing.clearFields=["reservation_start","reservation_end"] as never;
+ const q=await service.preview(clearing as never,"owner");await service.apply(applyInput(q,"whole-reservation-clear"),"owner");
+ const resolved=(await fixture.pg.query<{value:any}>("SELECT booking_resolved_dates(id,starts_at,ends_at,null,null) value FROM bookings WHERE id=$1",[ids.booking])).rows[0].value;
+ expect(resolved.evidenceState).toBe("verified");expect(resolved.publicWindow).not.toBeNull();expect(resolved.reservationWindow).toBeNull();
+ expect((await fixture.pg.query("SELECT * FROM booking_operational_windows WHERE booking_id=$1",[ids.booking])).rows).toHaveLength(0);
+ expect((await fixture.pg.query("SELECT * FROM booking_date_evidence WHERE booking_id=$1 AND field LIKE 'reservation_%'",[ids.booking])).rows).toHaveLength(4);
+},30000);
+
+it("requires a separate record for a different independently verified event season",async()=>{
+ const service=await setup(),first=await service.preview(proposal() as never,"owner");await service.apply(applyInput(first),"owner");
+ await fixture.pg.query("UPDATE activities SET body=body || ' Next event 2028-07-21 through 2028-07-26' WHERE id=$1",[noteId]);
+ const next=proposal();next.endpoints[0].value="2028-07-21";next.endpoints[1].value="2028-07-26";
+ const p=await service.preview(next as never,"owner");expect(p.impacts.reasons).toContain("SEPARATE_SEASON_REQUIRES_NEW_BOOKING");expect(p.impacts.blocked).toBe(true);
+},30000);

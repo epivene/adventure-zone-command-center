@@ -2781,3 +2781,11 @@ describe("final review base migration and late reply lifecycle", () => {
     expect(f.read).toHaveBeenCalled();
   });
 });
+
+it("rejects legacy date changes that have no saved endpoint source and leaves the signed booking untouched",async()=>{
+ const s=await setup(),other=await secondContender(s,"2026-10-22","2026-10-23");
+ await s.client.query("update bookings set status='confirmed' where id=$1",[other]);
+ const before=(await s.client.query("select starts_at,ends_at from bookings where id=$1",[other])).rows;
+ await expect(changeCommitment(s.allocation,other,{startsAt:"2026-10-10T00:00:00Z",endsAt:"2026-10-11T00:00:00Z",travelLegId:leg2,latitude:40,longitude:-80,demand:demandReview},"owner")).rejects.toThrow("Use booking date repairs with saved source evidence");
+ expect((await s.client.query("select starts_at,ends_at from bookings where id=$1",[other])).rows).toEqual(before);
+});

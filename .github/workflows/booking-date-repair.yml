@@ -72,11 +72,13 @@ jobs:
         run: |
           pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000 --reporter=json --outputFile="$RUNNER_TEMP/head-act.json" src/features/act-replacement || true
       - name: Checkout ACT compatibility baseline
+        if: success() || failure()
         uses: actions/checkout@v4
         with:
           ref: 37e71787153018ee366acf642537de97858fdc81
           path: baseline
       - name: Install baseline dependencies
+        if: success() || failure()
         working-directory: baseline
         run: pnpm install --frozen-lockfile
       - name: Test baseline ACT compatibility
@@ -158,13 +160,30 @@ jobs:
           src/pages/BossSchedulePage.filters.test.tsx
           src/components/routes/manager-route-map-layers.test.tsx
       - name: Test calendar source parsing and capacity reads
-        run: >-
-          pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000
-          src/features/google-workspace/calendar/operational-calendar-matcher.test.ts
-          src/features/outreach-planner/outreach-capacity-evidence.test.ts
-          src/features/outreach-planner/outreach-allocation.pglite.test.ts
-          src/features/outreach-planner/capacity-policy.test.ts
-          src/routes/event-date-coverage.test.ts
+        if: success() || failure()
+        run: |
+          pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000 --reporter=json --outputFile="$RUNNER_TEMP/head-capacity.json" src/features/google-workspace/calendar/operational-calendar-matcher.test.ts src/features/outreach-planner/outreach-capacity-evidence.test.ts src/features/outreach-planner/outreach-allocation.pglite.test.ts src/features/outreach-planner/capacity-policy.test.ts src/routes/event-date-coverage.test.ts || true
+      - name: Test baseline calendar and capacity compatibility
+        if: success() || failure()
+        working-directory: baseline
+        run: |
+          pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000 --reporter=json --outputFile="$RUNNER_TEMP/base-capacity.json" src/features/google-workspace/calendar/operational-calendar-matcher.test.ts src/features/outreach-planner/outreach-capacity-evidence.test.ts src/features/outreach-planner/outreach-allocation.pglite.test.ts src/features/outreach-planner/capacity-policy.test.ts src/routes/event-date-coverage.test.ts || true
+      - name: Reject new calendar and capacity failures
+        if: success() || failure()
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync} from "node:fs";
+          const failures = path => {
+            const report=JSON.parse(readFileSync(path,"utf8"));
+            if(!report.testResults.length || report.testResults.some(s=>s.status==="failed"&&!s.assertionResults.some(t=>t.status==="failed")))throw new Error("Test collection/runtime failure: "+path);
+            return report.testResults.flatMap(s=>s.assertionResults.filter(t=>t.status==="failed").map(t=>({name:t.fullName,message:t.failureMessages.map(m=>m.replace(/\u001b\[[0-9;]*m/g,"").split("\n").find(line=>line.trim())).join(" | ")})));
+          };
+          const base=failures(process.env.RUNNER_TEMP+"/base-capacity.json"),head=failures(process.env.RUNNER_TEMP+"/head-capacity.json");
+          console.log("Existing baseline failures:",base);console.log("Branch failures:",head);
+          const remaining=[...base],regressions=[];
+          for(const failure of head){const i=remaining.findIndex(b=>b.name===failure.name&&b.message===failure.message);if(i<0)regressions.push(failure);else remaining.splice(i,1);}
+          if(regressions.length)throw new Error("New calendar/capacity failures: "+JSON.stringify(regressions));
+          NODE
       - name: Typecheck API and frontend and retain diagnostics
         run: |
           if pnpm --filter @workspace/api-server run typecheck >"$RUNNER_TEMP/head-api-types.txt" 2>&1; then echo 0 >"$RUNNER_TEMP/head-api-types.exit"; else echo 1 >"$RUNNER_TEMP/head-api-types.exit"; fi
