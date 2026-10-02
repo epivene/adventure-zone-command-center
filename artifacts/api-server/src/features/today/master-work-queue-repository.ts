@@ -1,3 +1,4 @@
+import { kindFor, reasonFor } from "./work-classification";
 import { attachVerifiedAttentionIdentity } from "./thread-attention-identity";
 import {
   sql,
@@ -30,7 +31,6 @@ import {
   buildMasterTodayQueue,
   type MasterTodayQueue,
   type MasterWorkCandidate,
-  type MasterWorkKind,
 } from "./master-work-queue";
 
 const closedOpportunityStatuses: OpportunityStatus[] = [
@@ -82,49 +82,6 @@ type QueueOverrideProjection = {
   manualOrder: number | null;
   snoozedUntil: Date | null;
 };
-
-function kindFor(
-  actionKind: string | null,
-  status: OpportunityStatus | null,
-  hasFollowUp: boolean,
-): MasterWorkKind {
-  const value = actionKind?.trim().toLowerCase().replaceAll("-", "_") ?? "";
-  if (value.includes("reply") || value.includes("response")) return "reply";
-  if (value.includes("callback") || value === "call" || value.includes("returned_call")) {
-    return "callback";
-  }
-  if (value.includes("draft") || value.includes("ready_to_send")) return "draft";
-  if (value.includes("research") || value.includes("scout")) return "research";
-  if (value.includes("review") || value.includes("check")) return "review";
-  if (value.includes("booking") || value.includes("contract")) return "booking";
-  if (status === "ready_to_contact") return "draft";
-  if (status === "new_lead") return "new_outreach";
-  if (status === "researching") return "research";
-  if (status === "needs_review") return "review";
-  if (
-    status === "interested" ||
-    status === "booking_in_progress" ||
-    status === "booked"
-  ) {
-    return "booking";
-  }
-  return hasFollowUp || value ? "follow_up" : "cleanup";
-}
-
-function reasonFor(kind: MasterWorkKind, completed: boolean): string {
-  if (completed) return "Completed today";
-  return {
-    reply: "New reply needs attention",
-    callback: "Call is due",
-    follow_up: "Follow-up is due",
-    draft: "Ready to Send",
-    research: "Research is needed",
-    review: "Needs review",
-    new_outreach: "New outreach",
-    booking: "Booking work",
-    cleanup: "Profile cleanup",
-  }[kind];
-}
 
 function chooseOpportunity(
   followUp: FollowUpProjection,
@@ -188,7 +145,7 @@ function candidateFor(
       opportunity?.organizationRegion ??
       null,
     kind,
-    reason: reasonFor(kind, completedAt !== null),
+    reason: reasonFor(kind, completedAt !== null, actionKind),
     dueAt: followUp?.dueAt ?? opportunity?.nextActionDueAt ?? null,
     opportunityStatus: opportunity?.status ?? null,
     priority: opportunity?.priority ?? "normal",

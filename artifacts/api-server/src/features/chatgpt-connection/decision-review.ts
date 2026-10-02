@@ -8,8 +8,8 @@ export function decisionReview(item: MasterWorkItem, now: Date) {
   const followup = {
     category: "follow_up",
     recommendedNextStep:
-      "Read the latest conversation and existing drafts; if still unanswered, prepare a follow-up for review.",
-    ownerDecision: "Review the proposed follow-up before sending.",
+      "Read the saved task, latest conversation and existing drafts. Verify the requested next step, including whether an approved send already occurred; prepare a follow-up only if still needed.",
+    ownerDecision: "Review the verified next step; approve any proposed email before sending.",
   };
   let advice;
   if (item.attentionState === "waiting_for_their_reply") {
