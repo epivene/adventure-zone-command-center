@@ -48,4 +48,10 @@ describe("booking date evidence", () => {
     expect(dates.resolveBookingDates({ ...empty, rawPublic: { start, end }, evidence }).publicWindow).toBeNull();
     expect(dates.resolveBookingDates({ ...empty, rawPublic: { start, end }, evidence: [...evidence].reverse() }).publicWindow).toBeNull();
   });
+  it("interprets an explicitly verified Google all-day midnight-UTC encoding as Denver dates", () => {
+    const result = dates.resolveBookingDates({...empty,rawReservation:{start:"2027-03-13T00:00:00Z",end:"2027-03-15T00:00:00Z"},
+      evidence:[endpoint("reservation_start","2027-03-13","verified_reservation","inclusive_date"),endpoint("reservation_end","2027-03-15","verified_reservation","exclusive_date")]});
+    expect(result.reservationWindow).toEqual({start:"2027-03-13T07:00:00.000Z",end:"2027-03-15T06:00:00.000Z"});
+  });
+
 });
