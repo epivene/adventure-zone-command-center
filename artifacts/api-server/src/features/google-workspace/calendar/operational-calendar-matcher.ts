@@ -174,7 +174,22 @@ export function parseOperationalEventDateText(text: string | null, fallbackYear:
     if (inheritedMonth && /^\d{1,2}(?:,?\s*20\d{2})?$/.test(source)) source = `${inheritedMonth} ${source}`;
     if (!/\b20\d{2}\b/.test(source)) source = `${source}, ${year}`;
     const date = new Date(`${source} 00:00:00 UTC`);
-    return Number.isFinite(date.getTime()) ? date : null;
+    if (!Number.isFinite(date.getTime())) return null;
+    // Date.parse rolls February 30 into March. Compare the supplied calendar components.
+    const named = /^([A-Za-z]+)\\s+(\\d{1,2})(?:,?\\s+(\\d{4}))?$/.exec(source);
+    const numeric = /^(\\d{1,2})[\/](\\d{1,2})[\/](\\d{4})$/.exec(source);
+    const iso = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(source);
+    if (named) {
+      const monthNumber = new Date(`${named[1]} 1, ${year} 00:00:00 UTC`).getUTCMonth();
+      if (date.getUTCMonth() !== monthNumber || date.getUTCDate() !== Number(named[2])
+        || date.getUTCFullYear() !== Number(named[3] ?? year)) return null;
+    } else if (numeric) {
+      if (date.getUTCMonth()+1 !== Number(numeric[1]) || date.getUTCDate() !== Number(numeric[2])
+        || date.getUTCFullYear() !== Number(numeric[3])) return null;
+    } else if (iso) {
+      if (date.toISOString().slice(0,10) !== source) return null;
+    } else return null;
+    return date;
   };
 
   const month = /^([A-Za-z]+)\s+/.exec(pieces[0] ?? "")?.[1];
