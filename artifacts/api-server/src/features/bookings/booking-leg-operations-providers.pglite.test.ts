@@ -20,7 +20,7 @@ it('real provider retains equipment conflict without exposing another leg custom
   await db.query(`INSERT INTO resources(id,code,name,category,status,counts_as_attraction,movable,setup_minutes,teardown_minutes,minimum_transfer_minutes) VALUES($1,'pool','Pool','attraction','active',true,true,0,0,0)`,[resource]);
   await db.query(`INSERT INTO booking_resource_assignments(id,booking_id,resource_id) VALUES('40000000-0000-4000-8000-000000000001',$1,$3),('40000000-0000-4000-8000-000000000002',$2,$3)`,[own,other,resource]);
   const service=createBookingLegOperationsService(db,drizzle(db) as unknown as Parameters<typeof createBookingLegOperationsService>[1]);
-  const owner=await service.get(own,{kind:'owner'},30_000);
+  const owner=await service.get(own,{kind:'owner'});
   expect(owner?.resources.state).toBe('loaded');
   expect(JSON.stringify(owner?.resources)).toContain('Private other-leg customer');
   const manager=await service.get(own,{kind:'manager',legId:leg});

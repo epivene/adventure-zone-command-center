@@ -5,7 +5,7 @@ it.each([null,"9999-12-31"])("does not call an incomplete or sentinel lead booke
  expect(resolveEffectiveEventDate({today:"2027-01-01",bookings:[{id:"lead",status:"new_lead",startsOn:"2027-04-03",endsOn:end}],facts:[]})).toBeNull();
 });
 it("does not project an unsupported raw operational window onto the calendar",()=>{
- const [result]=applyOperationalWindowsToCalendarBookings([{id:"lead",status:"confirmed",startsAt:null,endsAt:null,dateProvenance:{publicWindow:null,reservationWindow:null,rawPublic:{start:"2026-04-03",end:"9999-12-31"},rawReservation:{start:"2026-04-03",end:"9999-12-31"},evidenceState:"needs_review",reviewReasons:["UNVERIFIED_PUBLIC_WINDOW"]}}],[{bookingId:"lead",startsAt:new Date("2026-04-03"),endsAt:new Date("9999-12-31"),source:"app"}]);
+ const [result]=applyOperationalWindowsToCalendarBookings([{id:"lead",status:"confirmed",startsAt:null,endsAt:null,dateProvenance:{publicWindow:null,reservationWindow:null,rawPublic:{start:"2026-04-03",end:"9999-12-31"},rawReservation:{start:"2026-04-03",end:"9999-12-31"},publicEndExclusive:false,reservationEndExclusive:false,endpointEvidence:[],evidenceState:"needs_review",reviewReasons:["UNVERIFIED_PUBLIC_WINDOW"]}}],[{bookingId:"lead",startsAt:new Date("2026-04-03"),endsAt:new Date("9999-12-31"),source:"app"}]);
  expect(result.startsAt).toBeNull(); expect(result.endsAt).toBeNull();
 });
 it("preserves reviewed timestamp reservation endpoints instead of dropping a day",()=>{

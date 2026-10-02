@@ -12,7 +12,7 @@ export const hash=(value:unknown):string=>{
  return createHash("sha256").update(JSON.stringify(stable(value))).digest("hex");
 };
 export const query=async<T extends Row=Row>(db:PlanningDatabase,q:SQL)=>planningRows<T>(await db.execute(q));
-export const fail=(status:number,code:string):never=>{throw new PlanningError(status,code);};
+export function fail(status:number,code:string):never{throw new PlanningError(status,code);}
 export type RepairSource={type:string;id:string;revision:string;label:string;content:string;allowed?:Partial<Record<EndpointEvidence["field"],{value:string;semantics:EndpointEvidence["semantics"]}>>;classifyOnly?:boolean};
 export type RepairSnapshot={booking:Row;window:Row|null;input:DateEvidenceInput;resolved:ResolvedDates;operational:Record<string,Row[]>};
 const tables=["booking_date_evidence","bookings","booking_operational_windows","booking_package_selections","booking_resource_assignments","booking_leg_assignments","trips","trip_stops","trip_resource_assignments","outreach_holds","leg_event_plans","leg_plan_crew_commitments","leg_season_plans","crew_availability","package_sets","package_set_members","resources","package_templates","leg_plan_splits","leg_plan_authorities","leg_plan_approval_requests","leg_plan_approval_decisions"] as const;

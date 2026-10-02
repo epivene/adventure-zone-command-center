@@ -101,7 +101,7 @@ it("allows source confirmation and canonical encoding normalization without movi
  await fixture.pg.query("INSERT INTO booking_resource_assignments(booking_id,resource_id) VALUES($1,$2)",[ids.booking,ids.resource]);
  const preview=await service.preview(proposal() as never,"owner");expect(preview.impacts.blocked).toBe(false);
  await service.apply(applyInput(preview,"same-window-confirmation"),"owner");
- expect((await fixture.pg.query("SELECT status FROM bookings WHERE id=$1",[ids.booking])).rows[0].status).toBe("contract_received");
+ expect((await fixture.pg.query<{status:string}>("SELECT status FROM bookings WHERE id=$1",[ids.booking])).rows[0].status).toBe("contract_received");
 },30000);
 it("applies and explicitly clears the whole reservation while retaining public proof and append-only history",async()=>{
  const service=await setup(),input=proposal();
