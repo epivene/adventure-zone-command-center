@@ -179,6 +179,35 @@ jobs:
           for(const failure of head){const i=remaining.findIndex(b=>b.name===failure.name&&b.message===failure.message);if(i<0)regressions.push(failure);else remaining.splice(i,1);}
           if(regressions.length)throw new Error("New calendar/capacity failures: "+JSON.stringify(regressions));
           NODE
+
+  package-verification:
+    name: Package typechecks and builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/leg_planning_test_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Checkout typecheck baseline
+        uses: actions/checkout@v4
+        with:
+          ref: 37e71787153018ee366acf642537de97858fdc81
+          path: baseline
+      - name: Install baseline dependencies
+        working-directory: baseline
+        run: pnpm install --frozen-lockfile
+      - name: Build shared library declarations
+        run: pnpm run typecheck:libs
       - name: Typecheck API and frontend and retain diagnostics
         run: |
           if pnpm --filter @workspace/api-server run typecheck >"$RUNNER_TEMP/head-api-types.txt" 2>&1; then echo 0 >"$RUNNER_TEMP/head-api-types.exit"; else echo 1 >"$RUNNER_TEMP/head-api-types.exit"; fi
