@@ -1,3 +1,4 @@
+import { operationsDateKey,operationsSeason } from "../bookings/booking-leg-operations-history";
 import { describe, expect, it } from "vitest";
 import * as dates from "./date-evidence";
 const empty = { bookingId: "one", rawPublic: { start: null, end: null }, rawReservation: { start: null, end: null }, evidence: [] };
@@ -54,4 +55,9 @@ describe("booking date evidence", () => {
     expect(result.reservationWindow).toEqual({start:"2027-03-13T07:00:00.000Z",end:"2027-03-15T06:00:00.000Z"});
   });
 
+});
+
+it("keeps supported early-year effective dates and seasons in canonical ISO form",()=>{
+ const instant=dates.dateEndpointInstant("0001-01-01","inclusive_date","public_start")!;
+ expect(operationsDateKey(instant)).toBe("0001-01-01");expect(operationsSeason(instant)).toBe(1);
 });

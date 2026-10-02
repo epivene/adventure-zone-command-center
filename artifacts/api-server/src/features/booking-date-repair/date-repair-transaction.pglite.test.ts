@@ -121,3 +121,12 @@ it("requires a separate record for a different independently verified event seas
  const next=proposal();next.endpoints[0].value="2028-07-21";next.endpoints[1].value="2028-07-26";
  const p=await service.preview(next as never,"owner");expect(p.impacts.reasons).toContain("SEPARATE_SEASON_REQUIRES_NEW_BOOKING");expect(p.impacts.blocked).toBe(true);
 },30000);
+
+it.each(["contract_received","confirmed","completed","definite"])("blocks unresolved obligations consistently when the selected booking is %s",async(state)=>{
+ const service=await setup();
+ await fixture.pg.exec("ALTER TABLE bookings ADD COLUMN probability text");
+ await fixture.pg.query("UPDATE bookings SET status=$1,probability=$2 WHERE id=$3",[state==="definite"?"new_lead":state,state==="definite"?"definite":"possible",ids.booking]);
+ await fixture.pg.query("UPDATE bookings SET status='contract_received' WHERE id=$1",[ids.otherBooking]);
+ const p=await service.preview(proposal() as never,"owner");
+ expect(p.impacts.reasons).toContain("OTHER_COMMITMENT_DATE_REVIEW_REQUIRED");expect(p.impacts.blocked).toBe(true);
+},30000);

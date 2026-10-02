@@ -339,8 +339,8 @@ describe("shared allocation evidence and holds", () => {
     expect(check.target).toMatchObject({
       eventStartsOn: "2026-10-10",
       eventEndsOn: "2026-10-11",
-      startsOn: "2026-10-08",
-      endsOn: "2026-10-12",
+      startsOn: "2026-10-10",
+      endsOn: "2026-10-11",
     });
     const hold = await allocation.createHold(
       candidate.id,

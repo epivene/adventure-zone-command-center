@@ -72,13 +72,11 @@ jobs:
         run: |
           pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000 --reporter=json --outputFile="$RUNNER_TEMP/head-act.json" src/features/act-replacement || true
       - name: Checkout ACT compatibility baseline
-        if: success() || failure()
         uses: actions/checkout@v4
         with:
           ref: 37e71787153018ee366acf642537de97858fdc81
           path: baseline
       - name: Install baseline dependencies
-        if: success() || failure()
         working-directory: baseline
         run: pnpm install --frozen-lockfile
       - name: Test baseline ACT compatibility
@@ -160,16 +158,13 @@ jobs:
           src/pages/BossSchedulePage.filters.test.tsx
           src/components/routes/manager-route-map-layers.test.tsx
       - name: Test calendar source parsing and capacity reads
-        if: success() || failure()
         run: |
           pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000 --reporter=json --outputFile="$RUNNER_TEMP/head-capacity.json" src/features/google-workspace/calendar/operational-calendar-matcher.test.ts src/features/outreach-planner/outreach-capacity-evidence.test.ts src/features/outreach-planner/outreach-allocation.pglite.test.ts src/features/outreach-planner/capacity-policy.test.ts src/routes/event-date-coverage.test.ts || true
       - name: Test baseline calendar and capacity compatibility
-        if: success() || failure()
         working-directory: baseline
         run: |
           pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000 --reporter=json --outputFile="$RUNNER_TEMP/base-capacity.json" src/features/google-workspace/calendar/operational-calendar-matcher.test.ts src/features/outreach-planner/outreach-capacity-evidence.test.ts src/features/outreach-planner/outreach-allocation.pglite.test.ts src/features/outreach-planner/capacity-policy.test.ts src/routes/event-date-coverage.test.ts || true
       - name: Reject new calendar and capacity failures
-        if: success() || failure()
         run: |
           node --input-type=module <<'NODE'
           import {readFileSync} from "node:fs";
