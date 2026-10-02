@@ -27,3 +27,10 @@ describe("booking list visibility", () => {
     }, now)).toBe(true);
   });
 });
+
+it("keeps a legacy booking available for review when backend evidence is unresolved",()=>{
+ expect(isBookingCurrentOrFuture({startsAt:new Date("2026-01-01"),endsAt:new Date("2026-02-01"),dateProvenance:{publicWindow:null,reservationWindow:null,evidenceState:"needs_review"}},new Date("2027-01-01"))).toBe(true);
+});
+it("uses an evidenced public end rather than a stale raw sentinel",()=>{
+ expect(isBookingCurrentOrFuture({startsAt:new Date("2026-01-01"),endsAt:new Date("9999-12-31"),dateProvenance:{publicWindow:{start:"2027-01-03T12:00:00Z",end:"2027-01-04T12:00:00Z"},reservationWindow:null,evidenceState:"verified"}},new Date("2027-01-01"))).toBe(true);
+});

@@ -1,3 +1,4 @@
+import { bookingDateProvenanceSchema } from "./booking-date-provenance";
 import { z } from "zod";
 
 const nullableText = z.string().nullable();
@@ -22,6 +23,7 @@ export const operationsBookingOptionSchema = z.object({
   seasonYear: z.number().int().nullable(),
   startsAt: nullableText,
   endsAt: nullableText,
+  dateProvenance:bookingDateProvenanceSchema.optional(),
 });
 export type OperationsBookingOption = z.infer<
   typeof operationsBookingOptionSchema
@@ -36,6 +38,7 @@ export const operationsHistoryItemSchema = z.object({
   packageNames: z.array(z.string()),
   startsAt: nullableText,
   endsAt: nullableText,
+  dateProvenance:bookingDateProvenanceSchema.optional(),
   sources: z.array(operationsSourceSchema),
 });
 export type OperationsHistoryItem = z.infer<typeof operationsHistoryItemSchema>;
@@ -68,6 +71,10 @@ export const operationsDateWindowsSchema = z.object({
   reservedEndsAt: nullableText,
   reservedSource: nullableText,
   reservedEndExclusive: z.boolean().optional(),
+  rawPublicStartsAt: nullableText.optional(),rawPublicEndsAt: nullableText.optional(),
+  rawReservedStartsAt:nullableText.optional(),rawReservedEndsAt:nullableText.optional(),
+  evidenceState:z.enum(['verified','needs_review']).optional(),reviewReasons:z.array(z.string()).optional(),
+  dateProvenance:bookingDateProvenanceSchema.optional(),
 });
 export type DateWindows = z.infer<typeof operationsDateWindowsSchema>;
 export const operationsResourcesSchema = z.object({
@@ -96,6 +103,7 @@ const stop = z.object({
   name: z.string(),
   startsAt: nullableText,
   endsAt: nullableText,
+  dateProvenance:bookingDateProvenanceSchema.optional(),
 });
 export const operationsRouteSchema = z.object({
   previous: stop.nullable(),
