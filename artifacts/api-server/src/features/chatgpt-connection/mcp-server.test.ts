@@ -220,6 +220,7 @@ it("requires read permission before exposing Today data",async()=>{
  expect(JSON.parse(result.body.result.content[0].text).code).toBe("CONNECTION_ACCESS_DENIED");
  const list=(await rpc(setup().app,"tools/list")).body.result.tools;
  const tool=list.find((t:any)=>t.name==="read_today_queue");
+ expect(tool.inputSchema.properties.section.enum).toContain("decisionReview");
  expect(tool.annotations.readOnlyHint).toBe(true);
  expect(tool._meta.securitySchemes).toEqual([{type:"oauth2",scopes:["crm:read"]}]);
 });

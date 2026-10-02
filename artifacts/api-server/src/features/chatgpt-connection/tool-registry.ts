@@ -296,7 +296,7 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
   });
   // Discovery must not cache a permission-dependent subset. Calls remain scope-checked.
   tools.push({name:"read_today_queue",scope:"crm:read",readOnly:true,
-    description:"Read the app's current master Today queue: needsAttention (default), active, or completedToday. Optional profileId filter. Follow nextCursor until null; restart without cursor on TODAY_QUEUE_CHANGED. This is current data, not visual UI verification. Absence does not prove resolution: use read_email_profile_assignment for an exact thread's current state. Operation receipts are historical. No writes or paid app AI.",
+    description:"Read the app's current master Today queue: needsAttention (default), active, completedToday, or decisionReview. decisionReview combines open work with saved reasons, profile links, suggested next steps and owner decisions; omits completed and not-yet-due waiting/follow-up work. Recommendations require source verification; draft items are not proof of ready drafts. Optional profileId filter. Follow nextCursor until null; restart without cursor on TODAY_QUEUE_CHANGED. This is current data, not visual UI verification. Absence does not prove resolution: use read_email_profile_assignment for an exact thread's current state. Operation receipts are historical. No writes or paid app AI.",
     schema:todayReadInput,call:a=>{if(!s.today)throw new Error("TODAY_READ_UNAVAILABLE");return s.today.read(p,a);},
   });
   tools.push(...emailAttentionTools(s.attention, p));

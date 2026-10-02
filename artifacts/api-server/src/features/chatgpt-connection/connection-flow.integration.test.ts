@@ -107,6 +107,12 @@ it("reads and saves through MCP, replays once, reloads owner drafts, and refuses
     const today=await call("read_today_queue",{profileId:f.profileId});
     expect(today.items[0].attentionState).toBe("waiting_for_their_reply");
     expect(today.nextCursor).toBeNull();
+    const decisions = await call("read_today_queue", {section:"decisionReview",profileId:f.profileId});
+    expect(decisions.items).toEqual([]);
+    todayRows[0].attentionState = "needs_your_reply";
+    const replyDecision = await call("read_today_queue", {section:"decisionReview",profileId:f.profileId});
+    expect(replyDecision.items[0].decision.category).toBe("reply");
+    expect(replyDecision.items[0].decision.sourceReviewRequired).toBe(true);
     todayRows.splice(0);
     expect((await call("read_today_queue",{profileId:f.profileId})).items).toEqual([]);
     const preview = await call("preview_email_profile_assignment", {messageId:"attention-message",profileId:f.profileId,eventYear:null,state:"needs_your_reply",reason:"Question awaiting reply"});
