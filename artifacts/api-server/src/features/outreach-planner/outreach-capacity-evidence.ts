@@ -1,3 +1,4 @@
+import { operationsDateKey } from "../bookings/booking-leg-operations-history";
 import type { ResolvedDates } from "../booking-date-repair/date-evidence";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -279,11 +280,11 @@ export async function loadAllocationFacts(
     )[0].facts,
   );
   facts.bookings = facts.bookings.map(b => ({
-    ...b, starts_at: b.date_provenance?.publicWindow?.start ?? null, ends_at: b.date_provenance?.publicWindow?.end ?? null,
+    ...b, starts_at: b.date_provenance?.publicWindow?.start ?? null, ends_at: b.date_provenance?.publicWindow ? new Date(new Date(b.date_provenance.publicWindow.end).getTime()-(b.date_provenance.publicEndExclusive?1:0)).toISOString() : null,
   }));
   facts.windows = facts.windows.flatMap(w => {
     const dates = facts.bookings.find(b => b.id === w.booking_id)?.date_provenance;
-    return dates?.reservationWindow ? [{...w,starts_at:dates.reservationWindow.start,ends_at:dates.reservationWindow.end,source:"reviewed_timestamp"}] : [];
+    return dates?.reservationWindow ? [{...w,starts_at:dates.reservationWindow.start,ends_at:new Date(new Date(dates.reservationWindow.end).getTime()-(dates.reservationEndExclusive?1:0)).toISOString(),source:"reviewed_timestamp"}] : [];
   });
   return facts;
 }
@@ -298,6 +299,7 @@ export function bookingDemandFacts(
     id,
     starts_at,
     ends_at,
+    date_provenance:b.date_provenance,
     travel_leg_id,
     latitude,
     longitude,
@@ -412,10 +414,10 @@ export function targetForBooking(
   );
   const target = {
     bookingId,
-    eventStartsOn: day(b.starts_at),
-    eventEndsOn: day(b.ends_at),
-    startsOn: day(projected.startsAt!),
-    endsOn: day(projected.endsAt!),
+    eventStartsOn: operationsDateKey(b.starts_at),
+    eventEndsOn: operationsDateKey(b.ends_at),
+    startsOn: operationsDateKey(projected.startsAt!),
+    endsOn: operationsDateKey(projected.endsAt!),
     legId: b.travel_leg_id!,
     quantities: d!.quantities,
     resourceIds: [...d!.resource_ids].sort(),

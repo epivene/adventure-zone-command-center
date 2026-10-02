@@ -74,14 +74,13 @@ describe("runRequiredSchemaStartup", () => {
     expect(timeouts.get("required paper notes schema")).toBe(120_000);
     expect(timeoutHooks.get("required paper notes schema")).toBeUndefined();
     expect(calls).toEqual([
-      "required booking work schema",
+      "required booking date evidence schema",      "required booking work schema",
       "required email thread attention schema",
       "required paper notes schema",
       "required inbound calling schema",
       "required Google Workspace schema",
       "required lead intake schema",
       "required leg assignment schema",
-      "required booking date evidence schema",
       "required year-end inspection schema",
       "required event review dismissal schema",
       "required follow-up dismissal persistence",

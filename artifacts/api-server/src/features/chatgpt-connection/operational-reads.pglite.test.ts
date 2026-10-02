@@ -1,3 +1,4 @@
+import { installReviewedDateFixtures } from "../booking-date-repair/date-fixtures";
 import { beforeEach, afterEach, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -56,6 +57,7 @@ beforeEach(async () => {
     .exec(`CREATE TABLE outreach_holds(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),booking_id uuid,leg_id uuid,event_starts_on date,event_ends_on date,starts_on date,ends_on date,quantities jsonb,resource_ids jsonb,state text,expires_at timestamptz,ended_at timestamptz,revision integer);
   CREATE TABLE outreach_route_anchors(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),leg_id uuid,resource_id uuid,direction text,latitude double precision,longitude double precision,available_at timestamptz,valid_until timestamptz,source text,reason text,revision integer,recorded_at timestamptz,revoked_at timestamptz);
   CREATE TABLE outreach_booking_demand(booking_id uuid PRIMARY KEY,quantities jsonb,resource_ids jsonb,revision integer,updated_at timestamptz);`);
+  await installReviewedDateFixtures(f.db);
   await f.db.query(
     `INSERT INTO travel_legs(id,name,sort_order) VALUES($1,'Leg A',1)`,
     [leg],

@@ -1,3 +1,4 @@
+import { installReviewedDateFixtures } from "../booking-date-repair/date-fixtures";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -48,6 +49,7 @@ describe.skipIf(!url)("real PostgreSQL allocation serialization", () => {
         secondFixtureSql +
         "CREATE TABLE outreach_candidates(checked_at timestamptz,source_snapshot jsonb);",
     );
+    await installReviewedDateFixtures({exec:(s)=>pool.query(s)});
     await pool.query(
       await readFile(
         new URL(

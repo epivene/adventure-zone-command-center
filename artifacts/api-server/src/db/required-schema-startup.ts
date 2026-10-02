@@ -89,9 +89,6 @@ export async function runRequiredSchemaStartup(dependencies?: {
   sleep?: (delayMs: number) => Promise<void>;
 }): Promise<void> {
   const run = dependencies?.run ?? runStartupStep;
-  if (legPlanningEnabled() || dependencies?.ensureLegPlanning) {
-    await run('required leg planning schema', dependencies?.ensureLegPlanning ?? ensureLegPlanningSchemaBeforeListen, REQUIRED_SCHEMA_TIMEOUT_MS);
-  }
   const sleep = dependencies?.sleep ?? systemSleep;
   const runRequired = async (
     name: string,
@@ -110,6 +107,10 @@ export async function runRequiredSchemaStartup(dependencies?: {
       }
     }
   };
+  await runRequired("required booking date evidence schema", dependencies?.ensureBookingDates ?? ensureBookingDateSchemaBeforeListen);
+  if (legPlanningEnabled() || dependencies?.ensureLegPlanning) {
+    await runRequired('required leg planning schema', dependencies?.ensureLegPlanning ?? ensureLegPlanningSchemaBeforeListen);
+  }
   await runRequired("required booking work schema", dependencies?.ensureBookingWork ?? ensureBookingWorkSchemaBeforeListen);
   await runRequired("required email thread attention schema", dependencies?.ensureEmailThreadAttention ?? ensureEmailThreadAttentionSchemaBeforeListen);
   if (process.env.CHATGPT_CONNECTION_ENABLED === "true" || dependencies?.ensureChatGPTConnection) {
@@ -137,7 +138,6 @@ export async function runRequiredSchemaStartup(dependencies?: {
     "required leg assignment schema",
     dependencies?.ensureLegAssignment ?? ensureLegAssignmentSchemaBeforeListen,
   );
-  await runRequired("required booking date evidence schema", dependencies?.ensureBookingDates ?? ensureBookingDateSchemaBeforeListen);
   await runRequired(
     "required year-end inspection schema",
     dependencies?.ensureYearEndInspections ?? ensureYearEndInspectionSchemaBeforeListen,

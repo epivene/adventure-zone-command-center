@@ -1,3 +1,5 @@
+import { drizzle } from "drizzle-orm/pglite";
+import { DrizzleCoverageDataSource } from "../event-date-coverage/coverage-repository";
 import { beforeEach, afterEach, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -83,6 +85,9 @@ it("keeps 18 sentinel imports in review and returns only two verified 2027 windo
   await f.db.exec(`insert into booking_date_evidence(booking_id,field,kind,value,semantics,revision,source_type,source_id,source_revision,actor)
     select id,'public_start','verified_event',booking_date_iso(starts_at),'instant',1,'saved_note','verified-start','1','owner' from bookings where name in ('Fair','Second genuine show')
     union all select id,'public_end','verified_event',booking_date_iso(ends_at),'instant',1,'saved_note','verified-end','1','owner' from bookings where name in ('Fair','Second genuine show');`);
+  const coverageBookings = await new DrizzleCoverageDataSource(drizzle(f.db) as any).loadBookings();
+  expect(coverageBookings.filter((x:any)=>x.dateProvenance?.publicWindow).length).toBe(1);
+  expect(coverageBookings.find(x=>x.id===booking)?.startsOn).toBe("2027-07-22");
   const overlap = await read("bookings",{eventYear:2027});
   expect(overlap.items.map((x:any)=>x.name).sort()).toEqual(["Fair","Second genuine show"]);
   const names:string[] = [];

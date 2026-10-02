@@ -1,3 +1,4 @@
+import { installReviewedDateFixtures } from "../booking-date-repair/date-fixtures";
 import * as productionAllocation from "./production-outreach-allocation";
 import { DrizzleBookingRepository } from "../bookings/booking-repository";
 import { sql } from "drizzle-orm";
@@ -115,6 +116,7 @@ insert into booking_package_selections values ('${booking}','${pkg}');
     create table convention_editions(id uuid primary key,year integer);
     create table convention_members(id uuid primary key,edition_id uuid,organization_id uuid);
   `);
+  await installReviewedDateFixtures(client);
   for (const name of [
     "20260909_outreach_planner.sql",
     "20260909_outreach_allocation.sql",

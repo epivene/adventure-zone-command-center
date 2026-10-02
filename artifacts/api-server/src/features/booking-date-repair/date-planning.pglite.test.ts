@@ -5,7 +5,7 @@ import { planningDatabase } from "../leg-planning/planning-test-database";
 import { loadPlanFacts } from "../leg-planning/planning-facts";
 import { ids } from "../leg-planning/planning-fixtures";
 it("keeps an unverified committed date as a readiness obligation", async () => {
- const {pg,db}=await planningDatabase();
+ const {pg,db}=await planningDatabase({reviewDates:false});
  try {
   await pg.exec(readFileSync(new URL("../../../../../lib/db/migrations/20261002_booking_date_provenance.sql",import.meta.url),"utf8"));
   const facts=await loadPlanFacts(db as any,[ids.booking],{kind:"owner",id:"owner"} as any,new Date("2027-01-01"));
