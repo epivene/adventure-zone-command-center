@@ -1,0 +1,132 @@
+name: Booking Date Repairs
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/adventure-zone/**"
+      - "artifacts/api-server/**"
+      - "lib/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig*.json"
+      - ".github/workflows/booking-date-repair.yml"
+  push:
+    branches: [main, feat/booking-date-provenance-repair]
+    paths:
+      - "artifacts/adventure-zone/**"
+      - "artifacts/api-server/**"
+      - "lib/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig*.json"
+      - ".github/workflows/booking-date-repair.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: booking-date-repair-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  booking-date-repair:
+    name: Operations regressions and builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: leg_planning_test_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d leg_planning_test_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/leg_planning_test_ci
+      LEG_PLANNING_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/leg_planning_test_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test booking date evidence
+        run: pnpm --filter @workspace/api-server test --maxWorkers=2 src/features/booking-date-repair src/features/act-replacement/normalizers/opportunity-date-provenance.test.ts src/routes/booking-date-repairs.test.ts
+      - name: Typecheck shared libraries
+        run: pnpm run typecheck:libs
+      - name: Test shared operations contract
+        run: pnpm exec vitest run lib/api-zod/src/booking-leg-operations.test.ts
+      - name: Test planning policy, scope and concurrent commitments
+        run: >-
+          pnpm --filter @workspace/api-server test --maxWorkers=2
+          src/features/leg-planning
+          src/routes/leg-planning.test.ts
+          src/db/leg-planning-required-startup.test.ts
+          src/db/required-schema-startup.test.ts
+          src/features/leg-manager/leg-manager-middleware.test.ts
+      - name: Test planning editors and connected navigation
+        run: >-
+          pnpm --filter @workspace/adventure-zone test --maxWorkers=2
+          src/features/leg-planning
+          src/components/leg-planning
+          src/pages/LegPlanning.integration.test.tsx
+          src/components/routes/travel-leg-manager-cards.test.tsx
+          src/pages/ManagerCrewPage.test.tsx
+          src/pages/BossAssignmentsPage.test.tsx
+          src/pages/SettingsPackagesResourcesPage.collapsible.test.tsx
+      - name: Test operations API with local fixtures
+        run: >-
+          pnpm --filter @workspace/api-server test --maxWorkers=2
+          src/features/bookings/booking-leg-operations-history.test.ts
+          src/features/bookings/booking-leg-operations-repository.pglite.test.ts
+          src/features/bookings/booking-leg-operations-service.test.ts
+          src/routes/booking-leg-operations.test.ts
+          src/features/chatgpt-connection/operational-reads.pglite.test.ts
+          src/features/routes/travel-leg-map-windows.pglite.test.ts
+          src/routes/calendar.test.ts
+          src/features/routes/location-resolver.test.ts
+          src/routes/boss-schedule-route.test.ts
+          src/features/bookings/booking-leg-operations-providers.pglite.test.ts
+          src/features/bookings/booking-leg-operations-planning.test.ts
+          src/features/google-workspace/calendar/calendar-operational-window-projection.test.ts
+      - name: Test connected operations views
+        run: >-
+          pnpm --filter @workspace/adventure-zone test --maxWorkers=2
+          src/pages/ConnectedLegOperations.integration.test.tsx
+          src/components/bookings/leg-operations-panel.test.tsx
+          src/components/bookings/profile-leg-operations.test.tsx
+          src/features/bookings/use-booking-leg-operations.test.tsx
+          src/features/bookings/booking-operations-changes.test.ts
+          src/pages/BookingEditPage.test.tsx
+          src/pages/BookingDetailPage.assistant-context.test.tsx
+          src/pages/BossProfilePage.leg-operations.test.tsx
+          src/pages/ManagerOperationsPage.test.tsx
+          src/pages/SchedulePage.test.tsx
+          src/pages/SchedulePage.filters.test.tsx
+          src/components/routes/event-map.combined-controls.test.ts
+          src/components/routes/event-map.test.tsx
+          src/features/bookings/operations-navigation.test.ts
+          src/features/routes/map-focus.test.ts
+          src/pages/BossSchedulePage.test.tsx
+          src/pages/BossSchedulePage.event-data.test.tsx
+          src/components/calendar/event-calendar.profile-navigation.test.tsx
+          src/components/profiles/profile-booking-creator.test.tsx
+          src/pages/BossSchedulePage.filters.test.tsx
+          src/components/routes/manager-route-map-layers.test.tsx
+      - name: Build frontend
+        run: pnpm --filter @workspace/adventure-zone run build
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
