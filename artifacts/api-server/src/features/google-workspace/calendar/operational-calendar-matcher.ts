@@ -176,9 +176,9 @@ export function parseOperationalEventDateText(text: string | null, fallbackYear:
     const date = new Date(`${source} 00:00:00 UTC`);
     if (!Number.isFinite(date.getTime())) return null;
     // Date.parse rolls February 30 into March. Compare the supplied calendar components.
-    const named = /^([A-Za-z]+)\\s+(\\d{1,2})(?:,?\\s+(\\d{4}))?$/.exec(source);
-    const numeric = /^(\\d{1,2})[\/](\\d{1,2})[\/](\\d{4})$/.exec(source);
-    const iso = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(source);
+    const named = /^([A-Za-z]+)\s+(\d{1,2})(?:,?\s+(\d{4}))?$/.exec(source);
+    const numeric = /^(\d{1,2})[\/](\d{1,2})[\/](\d{4})$/.exec(source);
+    const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(source);
     if (named) {
       const monthNumber = new Date(`${named[1]} 1, ${year} 00:00:00 UTC`).getUTCMonth();
       if (date.getUTCMonth() !== monthNumber || date.getUTCDate() !== Number(named[2])

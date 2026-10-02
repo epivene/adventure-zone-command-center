@@ -33,6 +33,9 @@ CREATE TRIGGER booking_date_evidence_immutable BEFORE UPDATE OR DELETE ON bookin
 DROP TRIGGER IF EXISTS booking_date_receipt_immutable ON booking_date_repair_receipts;
 CREATE TRIGGER booking_date_receipt_immutable BEFORE UPDATE OR DELETE ON booking_date_repair_receipts FOR EACH ROW EXECUTE FUNCTION booking_date_history_immutable();
 
+DROP TRIGGER IF EXISTS booking_date_preview_immutable ON booking_date_repair_previews;
+CREATE TRIGGER booking_date_preview_immutable BEFORE UPDATE OR DELETE ON booking_date_repair_previews FOR EACH ROW EXECUTE FUNCTION booking_date_history_immutable();
+
 CREATE OR REPLACE FUNCTION booking_date_value(v text, semantics text, field_name text)
 RETURNS timestamptz LANGUAGE plpgsql IMMUTABLE AS $$
 DECLARE result timestamptz; day_value date;
@@ -85,7 +88,7 @@ BEGIN
   pend := booking_date_endpoint(booking,'public_end',pe);
   rstart := booking_date_endpoint(booking,'reservation_start',rs);
   rend := booking_date_endpoint(booking,'reservation_end',re);
-  reservation_present := rs IS NOT NULL OR re IS NOT NULL OR EXISTS(SELECT 1 FROM booking_date_evidence WHERE booking_id=booking AND field LIKE 'reservation_%');
+  reservation_present := rs IS NOT NULL OR re IS NOT NULL OR EXISTS(SELECT 1 FROM booking_date_evidence WHERE booking_id=booking AND field LIKE 'reservation_%' AND (value IS NOT NULL OR kind NOT IN ('unknown_import','sales_milestone')) AND revision=(SELECT max(c.revision) FROM booking_date_evidence c WHERE c.booking_id=booking_date_evidence.booking_id AND c.field=booking_date_evidence.field));
   IF pstart IS NULL OR pend IS NULL THEN reasons := reasons || '["INCOMPLETE_PUBLIC_WINDOW"]'::jsonb;
   ELSIF (pstart->>'value')::timestamptz>(pend->>'value')::timestamptz OR (pstart->>'value'=pend->>'value' AND (pend->>'exclusive')::boolean) THEN reasons := reasons || '["REVERSED_PUBLIC_WINDOW"]'::jsonb;
   ELSE public_window := jsonb_build_object('start',pstart->>'value','end',pend->>'value'); END IF;

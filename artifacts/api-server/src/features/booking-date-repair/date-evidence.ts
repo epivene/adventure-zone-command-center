@@ -92,7 +92,7 @@ export function resolveBookingDates(input: DateEvidenceInput): ResolvedDates {
     if (start.value > end.value || (end.exclusive && start.value === end.value)) { reasons.push("REVERSED_" + label + "_WINDOW"); return null; }
     return { start: start.value, end: end.value };
   }
-  const reservationPresent = !!(input.rawReservation.start || input.rawReservation.end || input.evidence.some(e => e.field.startsWith("reservation_")));
+  const reservationPresent = !!(input.rawReservation.start || input.rawReservation.end || input.evidence.some(e => e.field.startsWith("reservation_") && e.revision === Math.max(...input.evidence.filter(other => other.field===e.field).map(other=>other.revision)) && (e.value !== null || !["unknown_import","sales_milestone"].includes(e.kind))));
   const publicWindow = window(publicStart, publicEnd, "PUBLIC", true);
   const reservationWindow = window(reservedStart, reservedEnd, "RESERVATION", reservationPresent);
   return {
