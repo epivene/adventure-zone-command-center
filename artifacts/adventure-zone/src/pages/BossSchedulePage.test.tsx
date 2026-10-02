@@ -9,10 +9,13 @@ afterEach(() => {
   cleanup();
   localStorage.clear();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("Boss schedule planning views", () => {
   it("matches the Admin schedule presentation while keeping planning view-only", async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-08-01T18:00:00Z'));
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
       legs: [{
         id: "10000000-0000-4000-8000-000000000001",
@@ -119,7 +122,8 @@ describe("Boss schedule planning views", () => {
     expect(screen.getByRole("button", { name: "Map" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
 
-    screen.getByRole("button", { name: "Show potential (1)" }).click();
+    screen.getByRole("button", { name: "Show potential (2)" }).click();
+    screen.getByRole("button", { name: "Upcoming" }).click();
     expect(await screen.findAllByText("Potential County Fair")).not.toHaveLength(0);
     expect(screen.getAllByRole("link", { name: /Potential County Fair/i })).toEqual(
       expect.arrayContaining([expect.objectContaining({ href: expect.stringContaining("/boss/profiles/30000000-0000-4000-8000-000000000001") })]),
@@ -131,10 +135,10 @@ describe("Boss schedule planning views", () => {
     expect(await screen.findByRole("region", { name: "Route schedule conflicts" })).toBeInTheDocument();
     expect(screen.getAllByText("Booked Fair One").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Booked Fair Two").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: "Booked Fair One" }).every((link) => link.getAttribute("href") === "/boss/profiles/30000000-0000-4000-8000-000000000002")).toBe(true);
-    expect(screen.getAllByRole("link", { name: "Booked Fair Two" }).every((link) => link.getAttribute("href") === "/boss/profiles/30000000-0000-4000-8000-000000000003")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Booked Fair One" }).every((link) => link.getAttribute("href")?.split("?")[0] === "/boss/profiles/30000000-0000-4000-8000-000000000002")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Booked Fair Two" }).every((link) => link.getAttribute("href")?.split("?")[0] === "/boss/profiles/30000000-0000-4000-8000-000000000003")).toBe(true);
     expect(await screen.findAllByText("Potential County Fair")).not.toHaveLength(0);
-    expect(screen.getAllByRole("link", { name: /Potential County Fair/i }).every((link) => link.getAttribute("href") === "/boss/profiles/30000000-0000-4000-8000-000000000001")).toBe(true);
+    expect(screen.getAllByRole("link", { name: /Potential County Fair/i }).every((link) => link.getAttribute("href")?.split("?")[0] === "/boss/profiles/30000000-0000-4000-8000-000000000001")).toBe(true);
     expect(screen.queryByRole("button", { name: "Retry location" })).not.toBeInTheDocument();
 
     const overlaps = screen.getByRole("region", { name: "Route schedule conflicts" });
@@ -151,7 +155,7 @@ describe("Boss schedule planning views", () => {
     const bossLeg = screen.getByTestId("leg-card-10000000-0000-4000-8000-000000000001");
     expect(bossLeg.tagName).toBe("DETAILS");
     expect(bossLeg).not.toHaveAttribute("open");
-    expect(screen.getAllByRole("link", { name: "Booked Fair One" }).some((link) => link.getAttribute("href") === "/boss/profiles/30000000-0000-4000-8000-000000000002")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Booked Fair One" }).some((link) => link.getAttribute("href")?.split("?")[0] === "/boss/profiles/30000000-0000-4000-8000-000000000002")).toBe(true);
     expect(document.querySelector('[data-testid^="button-leg-edit-"]')).toBeNull();
     expect(document.querySelector('[data-testid^="button-leg-archive-"]')).toBeNull();
   });

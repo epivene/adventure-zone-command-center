@@ -1,0 +1,33 @@
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { notifyBookingOperationsChanged } from './booking-operations-changes';
+import { useBookingLegOperations } from './use-booking-leg-operations';
+import { operationsFixture } from '@/test/booking-leg-operations-fixture';
+import type { BookingLegOperations } from '@workspace/api-zod';
+afterEach(cleanup);
+it('slow_old_request_cannot_replace_new_selection', async () => {
+  let resolveOld!: (value: BookingLegOperations) => void;
+  const client = { getBooking: (id: string) => id === 'old' ? new Promise<BookingLegOperations>(resolve => { resolveOld = resolve; }) : Promise.resolve(operationsFixture(id)), listProfileBookings: async () => [] };
+  const hook = renderHook(({ id }) => useBookingLegOperations(id, client), { initialProps: { id: 'old' } });
+  hook.rerender({ id: 'new' });
+  await waitFor(() => expect(hook.result.current.data?.bookingId).toBe('new'));
+  await act(async () => resolveOld(operationsFixture('old')));
+  expect(hook.result.current.data?.bookingId).toBe('new');
+});
+it('focus_refreshes_external_change and older_reload_cannot_restore_previous_leg', async () => {
+  let resolveOld!: (value: BookingLegOperations) => void;
+  const saved = operationsFixture('fair');
+  saved.assignment = { state: 'loaded', data: { assignedLeg: { id: 'hulk', name: 'Hulk', archived: false }, suggestion: null, assignmentSource: 'manual' } };
+  const getBooking = vi.fn().mockResolvedValueOnce(operationsFixture('fair')).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; })).mockResolvedValue(saved);
+  const client = { getBooking, listProfileBookings: async () => [] };
+  const hook = renderHook(() => useBookingLegOperations('fair', client));
+  await waitFor(() => expect(hook.result.current.data).not.toBeNull());
+  act(() => notifyBookingOperationsChanged('fair'));
+  act(() => window.dispatchEvent(new Event('focus')));
+  await waitFor(() => expect(hook.result.current.data?.assignment).toEqual(saved.assignment));
+  await act(async () => resolveOld(operationsFixture('fair')));
+  expect(hook.result.current.data?.assignment).toEqual(saved.assignment);
+  hook.unmount();
+  act(() => notifyBookingOperationsChanged('fair'));
+  expect(getBooking).toHaveBeenCalledTimes(3);
+});

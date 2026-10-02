@@ -1,3 +1,6 @@
+import { BookingLegOperationsCard } from '@/components/bookings/leg-operations-panel';
+import { ownerOperationsClient } from '@/features/bookings/booking-leg-operations-client';
+import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { apiGet } from "@/lib/auth-token";
@@ -97,21 +100,26 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
   const [bookingBrief, setBookingBrief] = useState<BookingBrief | null>(null);
   const [contractBooking, setContractBooking] = useState<{ id: string; name: string; openDraftId: string | null } | null>(null);
   const [contractVersions, setContractVersions] = useState<ContractVersion[]>([]);
+  const revision = useBookingOperationsRevision(bookingId);
 
   useEffect(() => {
+    let active = true;
+    setError(null);
     Promise.all([
       apiGet<any>(`/bookings/${bookingId}`),
       apiGet<any>(`/event-wrap-up-admin/${bookingId}`).catch(() => null),
     ])
       .then(([raw, wrap]) => {
+        if (!active) return;
         const d = coerceBookingDetailPayload(raw);
         setData(d);
         setWrapUp(wrap?.wrapUp ? wrap : null);
         setFollowUpItems(d.followUps ?? []);
         setLoading(false);
       })
-      .catch((e) => { setError(e.message); setLoading(false); });
-  }, [bookingId]);
+      .catch((e) => { if (active) { setError(e.message); setLoading(false); } });
+    return () => { active = false; };
+  }, [bookingId, revision]);
 
   useEffect(() => {
     const context = {
@@ -199,6 +207,7 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
       </section> : null}
 
       <InvoiceContractSummaryCard bookingId={bookingId} contractApi={contractsWorkspaceApi} invoiceApi={invoicesApi} />
+      <BookingLegOperationsCard bookingId={bookingId} client={ownerOperationsClient} role="owner" />
 
       {bookingBrief ? (
         <BookingBriefCard brief={bookingBrief} context={assistantBundle} />

@@ -1,9 +1,12 @@
+import { ProfileLegOperations } from '@/components/bookings/profile-leg-operations';
+import { ownerOperationsClient } from '@/features/bookings/booking-leg-operations-client';
+import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
 import { ProfileWorkActivity } from "@/features/booking-work/ProfileWorkActivity";
 import { ProfilePageFrame } from "@/components/profiles/profile-page-frame";
 import { useWorkspaceSession } from "@/features/assistant-workspace/WorkspaceSessionProvider";
 import { FollowUpDialog } from "@/components/follow-ups/follow-up-dialog";
 import { profileReturnPath, profileOriginLabel } from "@/lib/profile-navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ConventionHistory } from "@/components/profiles/convention-history";
 import { useLocation, useParams, useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
@@ -56,6 +59,8 @@ export default function EventProfilePage() {
   const [profileOrigin, setProfileOrigin] = useState("Profiles");
   const [contractBookings, setContractBookings] = useState<Array<{ id: string; name: string; openDraftId: string | null }>>([]);
   const [contractVersions, setContractVersions] = useState<ContractVersion[]>([]);
+  const revision = useBookingOperationsRevision();
+  const readGeneration = useRef(0);
 
   const params = new URLSearchParams(search);
   const contactId = params.get("contactId") ?? undefined;
@@ -78,6 +83,7 @@ export default function EventProfilePage() {
 
   async function loadProfile() {
     if (!profileId) return;
+    const generation = ++readGeneration.current;
     const qs = new URLSearchParams();
     if (contactId) qs.set("contactId", contactId);
     try {
@@ -121,22 +127,23 @@ export default function EventProfilePage() {
         return [contact.id as string, callablePhone?.number ?? null] as const;
       }));
 
+      if (generation !== readGeneration.current) return;
       setCallablePhoneByContactId(Object.fromEntries(callablePhones));
       setFamilyNotes([]);
       setFamilyNotesError(null);
       if (normalized.familyContext?.kind === "event_family") {
-        listFamilyNotes(normalized.familyContext.id).then(setFamilyNotes).catch(() => setFamilyNotesError("Could not load family notes."));
+        listFamilyNotes(normalized.familyContext.id).then(value => { if (generation === readGeneration.current) setFamilyNotes(value); }).catch(() => { if (generation === readGeneration.current) setFamilyNotesError("Could not load family notes."); });
       }
       setData(normalized);
       setError(null);
     } catch (reason: any) {
-      setError(reason.message);
+      if (generation === readGeneration.current) setError(reason.message);
     } finally {
-      setLoading(false);
+      if (generation === readGeneration.current) setLoading(false);
     }
   }
 
-  useEffect(() => { void loadProfile(); }, [profileId, contactId]);
+  useEffect(() => { void loadProfile(); return () => { readGeneration.current++; }; }, [profileId, contactId, revision]);
   useEffect(() => {
     setProfileOrigin(profileOriginLabel(profileReturnPath(search)));
   }, [profileId]);
@@ -237,6 +244,7 @@ export default function EventProfilePage() {
         ) : null}
 
         {!profileEditing && profileId ? <ProfileWorkActivity profileId={profileId} /> : null}
+        {!profileEditing && profileId ? <ProfileLegOperations profileId={profileId} client={ownerOperationsClient} role="owner" search={search} onSearchChange={(query) => setLocation(`/profiles/${profileId}?${query}`, { replace: true })} /> : null}
         {!profileEditing && profileId ? <OutreachProfileSummary organizationId={profileId} /> : null}
 
         {!profileEditing && profileSection === "documents" && profileId ? <ProfileDocuments profileId={profileId} /> : null}

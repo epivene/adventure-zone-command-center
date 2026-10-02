@@ -135,7 +135,13 @@ describe("ManagerRouteMapLayers", () => {
     expect(handoffIconCall?.[0].html).toContain("az-handoff-marker--suggested");
 
     const popup = mocks.markerObject.bindPopup.mock.calls.map(([html]) => String(html)).find((html) => html.includes("Eastern Montana Fair"));
-    expect(popup).toContain('href="/boss/profiles/profile-miles"');
+    const markup = document.createElement('div'); markup.innerHTML = popup;
+    const profileHref = markup.querySelector('a')!.getAttribute('href')!;
+    const destination = new URL(profileHref, 'http://localhost');
+    expect(destination.pathname).toBe('/boss/profiles/profile-miles');
+    expect(destination.searchParams.get('bookingId')).toBe('miles');
+    expect(destination.searchParams.get('season')).toBe('2026');
+    expect(destination.searchParams.get('leg')).toBe('leg-kristy');
     expect(popup).toContain("Event profile");
     expect(popup).toContain("Directions to event");
     expect(popup).toContain("google.com/maps/dir/");

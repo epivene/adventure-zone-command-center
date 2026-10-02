@@ -59,6 +59,8 @@ const rawEvents = [{
   region: "WY",
   latitude: null,
   longitude: null,
+  reservedStartsAt: new Date("2026-07-07T00:00:00.000Z"),
+  reservedEndsAt: new Date("2026-07-13T00:00:00.000Z"),
   startsAt: new Date("2026-07-09T12:00:00.000Z"),
   endsAt: new Date("2026-07-11T12:00:00.000Z"),
   status: "confirmed",
@@ -249,4 +251,10 @@ describe("Boss schedule route parity", () => {
     expect(response.body.bookings[0]).not.toHaveProperty("address1");
     expect(response.body.bookings[0].locationLabel).not.toContain("123 Main St");
   });
+});
+
+it('carries owner reserved windows into the boss schedule transport', async () => {
+ const response = await request(express().use((await import('./boss-operations')).default)).get('/boss/legs');
+ expect(response.status).toBe(200);
+ expect(response.body.bookings.find((b: any) => b.id === 'booking-kristy')).toMatchObject({ reservedStartsAt: '2026-07-07T00:00:00.000Z', reservedEndsAt: '2026-07-13T00:00:00.000Z' });
 });

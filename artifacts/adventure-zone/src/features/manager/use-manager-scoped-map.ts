@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
 import { managerScopedMapResponseSchema, type ManagerScopedMapResponse } from "@workspace/api-zod";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import type { ManagerScopedMapData } from "./manager-map-types";
@@ -22,21 +23,25 @@ export function useManagerScopedMap() {
   const [data, setData] = useState<ManagerScopedMapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const revision = useBookingOperationsRevision();
+  const readGeneration = useRef(0);
 
   const reload = useCallback(async () => {
+    const generation = ++readGeneration.current;
     setLoading(true);
     setError(null);
     try {
       const payload = managerScopedMapResponseSchema.parse(await managerApi<unknown>("/manager/map"));
+      if (generation !== readGeneration.current) return;
       setData(normalize(payload));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load manager map");
+      if (generation === readGeneration.current) setError(e instanceof Error ? e.message : "Could not load manager map");
     } finally {
-      setLoading(false);
+      if (generation === readGeneration.current) setLoading(false);
     }
   }, [managerApi]);
 
-  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => { void reload(); return () => { readGeneration.current++; }; }, [reload, revision]);
 
   return { data, loading, error, reload };
 }

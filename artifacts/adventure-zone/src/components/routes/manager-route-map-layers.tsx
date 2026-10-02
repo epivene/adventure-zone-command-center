@@ -1,3 +1,4 @@
+import { operationsProfileHref } from '@/features/bookings/operations-navigation';
 "use client";
 
 import { useEffect } from "react";
@@ -78,7 +79,7 @@ function eventPopup(event: RenderEvent, managerMode: ManagerMapMode, showBooking
   const assignmentLabel = event.travelLegAssignmentKind === "suggested" ? "Suggested leg" : "Leg";
   const warning = warningText(event);
   const detailsHref = event.organizationId
-    ? `${profileBasePath}/${encodeURIComponent(event.organizationId)}`
+    ? operationsProfileHref(profileBasePath, event.organizationId, event.id, event.startsAt, event.travelLegId, event.dateOnly)
     : showBookingDetailsLink && profileBasePath === "/profiles"
       ? `/bookings/${encodeURIComponent(event.id)}`
       : null;

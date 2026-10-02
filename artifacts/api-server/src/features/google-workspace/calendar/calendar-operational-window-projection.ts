@@ -91,6 +91,8 @@ export function applyOperationalWindowsToCalendarBookings<T extends CalendarBook
 
     return {
       ...booking,
+      actualDateOnly: booking.dateOnly,
+      dateOnly: window.source === "google_calendar" || booking.dateOnly,
       actualStartsAt: booking.startsAt,
       actualEndsAt: booking.endsAt,
       startsAt: window.startsAt,

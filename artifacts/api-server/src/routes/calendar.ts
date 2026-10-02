@@ -274,7 +274,7 @@ router.get("/calendar", async (req, res): Promise<void> => {
     };
 
     const [bookingEvents, actActivities] = await Promise.all([
-      getMapEvents(calendarFilters),
+      getMapEvents(allEvents),
       getActCalendarActivities(undefined, validFrom, validTo),
     ]);
 
@@ -300,7 +300,7 @@ router.get("/calendar", async (req, res): Promise<void> => {
       calendarFilters.dateTo,
     ));
 
-    const bookingsWithSource = calendarBookings.map((event) => ({
+    const bookingsWithSource = calendarBookings.filter(event => !event.startsAt || eventOverlapsBusinessWindow(event, calendarFilters.dateFrom, calendarFilters.dateTo)).map((event) => ({
       ...event,
       source: "booking" as const,
     }));

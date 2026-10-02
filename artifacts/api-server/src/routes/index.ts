@@ -4,6 +4,12 @@ import assistantWorkspaceRouter from "./assistant-workspace";
 import { createOutreachPlannerRouter } from "./outreach-planner";
 import { Router, type IRouter } from "express";
 import { db, pool } from "@workspace/db";
+import { createBookingLegOperationsRouter } from './booking-leg-operations';
+import { createBookingLegOperationsService } from '@/features/bookings/booking-leg-operations-providers';
+import { createRequireBossMiddleware } from '@/features/boss/boss-middleware';
+import { DrizzleBossAccountRepository } from '@/features/boss/boss-account-repository';
+import { createRequireLegManagerMiddleware } from '@/features/leg-manager/leg-manager-middleware';
+import { DrizzleLegManagerRepository } from '@/features/leg-manager/leg-manager-repository';
 import { createBookingWorkRouter } from "./booking-work";
 import healthRouter from "./health";
 import todayRouter from "./today";
@@ -197,6 +203,12 @@ router.use(bossYearEndInspectionsRouter);
 router.use(bossDocumentsRouter);
 router.use(bossBusinessDocumentsRouter);
 router.use(bossProfilesRouter);
+router.use(createBookingLegOperationsRouter({
+  service: createBookingLegOperationsService(pool, db),
+  requireOwner: requireOwnerMiddleware,
+  requireBoss: createRequireBossMiddleware(new DrizzleBossAccountRepository(db)),
+  requireManager: createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db)),
+}));
 router.use(coiCertificatesRouter);
 router.use(officeProfilesRouter);
 router.use(officeDocumentsRouter);
@@ -353,5 +365,4 @@ router.use(invoicesRouter);
 router.use("/follow-ups", followUpsRouter);
 
 export default router;
-
 

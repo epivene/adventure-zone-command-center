@@ -8,10 +8,11 @@ const organizationId = "10000000-0000-4000-8000-000000000001";
 const contactId = "20000000-0000-4000-8000-000000000001";
 const bookingId = "30000000-0000-4000-8000-000000000001";
 
-vi.mock("@/lib/auth-token", () => ({ apiGet, apiPatch }));
+vi.mock("@/lib/auth-token", () => ({ apiGet, apiPatch, apiFetch: vi.fn(async () => new Response(JSON.stringify({ items: [], nextCursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })) }));
 vi.mock("@/features/assistant/assistant-context", () => ({
   useAssistantContext: () => ({ openAssistant: vi.fn() }),
 }));
+vi.mock('@/features/assistant-workspace/WorkspaceSessionProvider', () => ({ useWorkspaceSession: () => ({ openProfile: vi.fn() }) }));
 vi.mock("@/components/assistant/assistant-context-registration", () => ({
   AssistantContextRegistration: () => null,
 }));

@@ -2,14 +2,14 @@ import { commitmentTransaction, reconcileCapacityFacts } from "@/features/outrea
 import { asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
-import { bookingLegAssignments, bookings, resources, travelLegs } from "@/db/schema";
+import { bookingLegAssignments, bookingOperationalWindows, bookings, resources, travelLegs } from "@/db/schema";
+import { operationsSeason, isImportedCalendarDate } from '@/features/bookings/booking-leg-operations-history';
 import type {
   BookingStatus,
   Probability,
 } from "@/features/bookings/booking-types";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import { classifyRouteBucket, type RouteBucket } from "@/features/routes/route-view";
-import { businessDateKey } from "@/lib/business-date";
 import type {
   TravelLegAuditChange,
   TravelLegEditorTransaction,
@@ -52,6 +52,12 @@ export type MapEventRecord = {
   legAssignmentExplanation: string | null;
   startsAt: Date | null;
   endsAt: Date | null;
+  dateOnly?: boolean;
+  reservedDateOnly?: boolean;
+  reservedEndExclusive?: boolean;
+  actualDateOnly?: boolean;
+  reservedStartsAt?: Date | null;
+  reservedEndsAt?: Date | null;
   routeBucket: RouteBucket;
   locationQuality: "coordinates" | "address" | "city" | "missing";
   locationLabel: string | null;
@@ -83,9 +89,10 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
   async listMapEvents(): Promise<MapEventRecord[]> {
     const [records, assignmentRows, allLegs] = await Promise.all([
       this.database
-        .select({ booking: bookings, travelLeg: travelLegs })
+        .select({ booking: bookings, travelLeg: travelLegs, reservedWindow: bookingOperationalWindows, importedDates: sql<boolean>`EXISTS(SELECT 1 FROM google_operational_calendar_links c WHERE c.booking_id=${bookings.id} AND c.last_app_snapshot->>'imported'='true')` })
         .from(bookings)
         .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
+        .leftJoin(bookingOperationalWindows, eq(bookings.id, bookingOperationalWindows.bookingId))
         .orderBy(asc(bookings.startsAt), asc(bookings.name), asc(bookings.id)),
       this.database.select().from(bookingLegAssignments),
       this.database.select(travelLegSelection).from(travelLegs),
@@ -93,7 +100,7 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
     const assignmentByBooking = new Map(assignmentRows.map((row) => [row.bookingId, row]));
     const legById = new Map(allLegs.map((leg) => [leg.id, leg]));
 
-    return records.map(({ booking, travelLeg }) => {
+    return records.map(({ booking, travelLeg, reservedWindow, importedDates }) => {
       const assignment = assignmentByBooking.get(booking.id) ?? null;
       const routeBucket = classifyRouteBucket(booking.status, booking.probability);
       const canProjectSuggestion = routeBucket === "potential";
@@ -141,10 +148,15 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
         legAssignmentExplanation: assignment?.explanation ?? null,
         startsAt: booking.startsAt,
         endsAt: booking.endsAt,
+        dateOnly: isImportedCalendarDate(booking.startsAt, importedDates),
+        reservedDateOnly: reservedWindow?.source === 'google_calendar',
+        reservedEndExclusive: reservedWindow?.source === 'google_calendar',
+        reservedStartsAt: reservedWindow?.startsAt ?? null,
+        reservedEndsAt: reservedWindow?.endsAt ?? null,
         routeBucket,
         locationQuality,
         locationLabel,
-        seasonYear: booking.startsAt ? Number(businessDateKey(booking.startsAt).slice(0, 4)) : null,
+        seasonYear: operationsSeason(booking.startsAt, isImportedCalendarDate(booking.startsAt, importedDates)),
       };
     });
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { Link } from "wouter";
+import { operationsProfileHref } from '@/features/bookings/operations-navigation';
 import { useEffect, useMemo, useState } from "react";
 
 import type { MapEvent } from "@/features/routes/map-data";
@@ -123,7 +124,7 @@ function positionWeekSegments(segments: MonthSpanSegment[]): PositionedSegment[]
 
 function bookingHref(event: BookingEvent, profileBasePath: string) {
   if (event.organizationId) {
-    return `${profileBasePath}/${encodeURIComponent(event.organizationId)}`;
+    return operationsProfileHref(profileBasePath, event.organizationId, event.id, event.actualStartsAt ?? event.startsAt, event.travelLegId, event.actualDateOnly ?? event.dateOnly);
   }
   return profileBasePath === "/profiles" ? `/bookings/${encodeURIComponent(event.id)}` : null;
 }

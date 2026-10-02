@@ -1,4 +1,5 @@
 import { apiPost, apiPatch } from "@/lib/auth-token";
+import { notifyBookingOperationsChanged } from '@/features/bookings/booking-operations-changes';
 import type { BookingFormInput, BookingEditInput } from "@/features/bookings/booking-input";
 import type { CompleteFollowUpInput } from "@/features/bookings/booking-service";
 import type { ConfigureBookingPackagesInput } from "@/features/packages/package-input";
@@ -29,7 +30,7 @@ export async function updateBookingAction(
       `/bookings/${bookingId}`,
       input,
     );
-    if (res.ok) return { ok: true };
+    if (res.ok) { notifyBookingOperationsChanged(bookingId); return { ok: true }; }
     return { ok: false, error: res.error ?? "Could not update booking." };
   } catch (e: any) {
     return { ok: false, error: e.message ?? "Could not update booking." };
@@ -48,7 +49,9 @@ export async function configureBookingPackagesAction(
   input: ConfigureBookingPackagesInput,
 ): Promise<BookingActionResult> {
   try {
-    return await apiPost<BookingActionResult>("/bookings/configure-packages", input);
+    const result = await apiPost<BookingActionResult>("/bookings/configure-packages", input);
+    if (result.ok) notifyBookingOperationsChanged(input.bookingId);
+    return result;
   } catch (e: any) {
     return { ok: false, error: e.message };
   }
@@ -59,7 +62,9 @@ export async function configureBookingResourcesAction(input: {
   resourceIds: string[];
 }) {
   try {
-    return await apiPost<BookingActionResult>("/bookings/configure-resources", input);
+    const result = await apiPost<BookingActionResult>("/bookings/configure-resources", input);
+    if (result.ok) notifyBookingOperationsChanged(input.bookingId);
+    return result;
   } catch (e: any) {
     return { ok: false, error: e.message };
   }
@@ -71,7 +76,9 @@ export async function acknowledgeResourceConflictAction(input: {
   reason: string;
 }) {
   try {
-    return await apiPost<BookingActionResult>("/bookings/acknowledge-conflict", input);
+    const result = await apiPost<BookingActionResult>("/bookings/acknowledge-conflict", input);
+    if (result.ok) notifyBookingOperationsChanged(input.bookingId);
+    return result;
   } catch (e: any) {
     return { ok: false, error: e.message };
   }
@@ -83,7 +90,9 @@ export async function addSpecialRequestAction(input: {
   treatment: string;
 }) {
   try {
-    return await apiPost<BookingActionResult>("/bookings/add-special-request", input);
+    const result = await apiPost<BookingActionResult>("/bookings/add-special-request", input);
+    if (result.ok) notifyBookingOperationsChanged(input.bookingId);
+    return result;
   } catch (e: any) {
     return { ok: false, error: e.message };
   }
@@ -95,7 +104,9 @@ export async function decideSpecialRequestAction(input: {
   reason: string;
 }) {
   try {
-    return await apiPost<BookingActionResult>("/bookings/decide-special-request", input);
+    const result = await apiPost<BookingActionResult>("/bookings/decide-special-request", input);
+    if (result.ok) notifyBookingOperationsChanged('*');
+    return result;
   } catch (e: any) {
     return { ok: false, error: e.message };
   }

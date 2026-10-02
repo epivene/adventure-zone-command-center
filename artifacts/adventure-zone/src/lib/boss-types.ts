@@ -18,6 +18,11 @@ export type BossBooking = {
   name?: string | null;
   startsAt?: string | null;
   endsAt?: string | null;
+  reservedStartsAt?: string | null;
+  reservedEndsAt?: string | null;
+  dateOnly?: boolean;
+  reservedDateOnly?: boolean;
+  reservedEndExclusive?: boolean;
   travelLegId?: string | null;
   eventDate?: string | null;
   status?: string | null;
