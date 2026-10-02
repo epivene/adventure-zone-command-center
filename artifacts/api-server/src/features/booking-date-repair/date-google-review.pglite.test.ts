@@ -1,3 +1,4 @@
+import { parseOperationalEventDateText } from "../google-workspace/calendar/operational-calendar-matcher";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { getTableConfig } from "drizzle-orm/pg-core";
@@ -15,6 +16,7 @@ it.each([null,"March 14 - 15, 2027"])("records reviewed Google reservation proof
    const cfg=getTableConfig(table);
    await pg.exec(`CREATE TABLE "${cfg.name}" (${cfg.columns.map(col=>`"${col.name}" ${"enumValues" in col && col.enumValues ? "text":col.getSQLType()}${col.name==="id"?" PRIMARY KEY DEFAULT gen_random_uuid()":""}`).join(",")})`);
   }
+  await pg.exec("ALTER TABLE booking_operational_windows ADD PRIMARY KEY(booking_id); CREATE UNIQUE INDEX fixture_calendar_source_identity ON google_operational_calendar_links(connection_id,calendar_id,booking_id,package_key);");
   await pg.exec(readFileSync(new URL("../../../../../lib/db/migrations/20261002_booking_date_provenance.sql",import.meta.url),"utf8"));
   await pg.query("insert into package_templates(code,name) values('adventure_zone','Zone')");
   const reviewId=randomUUID();
@@ -29,3 +31,7 @@ it.each([null,"March 14 - 15, 2027"])("records reviewed Google reservation proof
   expect(dates.endpointEvidence.every((e:any)=>e.sourceRef.id===reviewId)).toBe(true);
  } finally {await pg.close();vi.unstubAllEnvs();}
 },30_000);
+
+it("does not roll an impossible source event date into a different month",()=>{
+ expect(parseOperationalEventDateText("February 30 - 31, 2027",2027)).toBeNull();
+});

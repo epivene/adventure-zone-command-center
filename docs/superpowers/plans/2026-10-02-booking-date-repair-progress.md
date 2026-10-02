@@ -43,3 +43,5 @@ Task 3: run36966553520 core49/49, frontendvisibility5/5, sharedcontract6/6, plan
 
 Task 3: RED real planning commit with fixture stamp disabled and verified partial-season card confirmed in job110712555946 (48passed/2failed). Bind reservation endpoints to the actual committed planning mutation receipt, and expose separately verified public start solely for a season review card; no complete window is invented.
 Ruling: human-reviewed calendar import must record actual saved Google reservation evidence independently; only explicitly parsed public-event dates may be verified, never the reserved-date fallback — otherwise genuine future calendar imports would become perpetually unresolved or infer public duration — cost if wrong: unparsed public dates remain in owner review and require source confirmation.
+
+Task 3: planning source-proof and partial-season cases GREEN in job110713308682. Google real-query fixture failed before the expected assertion because required ON CONFLICT identities were omitted; add operational-window PK/calendar-link composite identity and a source-parser impossible-day regression, then rerun RED before writer/parser changes.
