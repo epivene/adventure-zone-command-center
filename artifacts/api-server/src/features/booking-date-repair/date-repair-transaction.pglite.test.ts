@@ -66,3 +66,11 @@ it("rejects a sibling-only saved source and date values absent from selected evi
  await fixture.pg.exec("UPDATE activities SET booking_id='"+ids.booking+"',body='Close date only' WHERE id='"+noteId+"'");
  await expect(service.preview(proposal() as never,"owner")).rejects.toMatchObject({status:422});
 },30000);
+
+it("filters a bounded review queue by independently proved season and reason",async()=>{
+ const service=await setup();
+ await fixture.pg.query("UPDATE bookings SET starts_at='2027-07-21T06:00:00Z' WHERE id=$1",[ids.booking]);
+ await fixture.pg.query("INSERT INTO booking_date_evidence(booking_id,field,kind,value,semantics,revision,source_type,source_id,source_revision,actor) VALUES($1,'public_start','verified_event','2027-07-21','inclusive_date',1,'saved_note',$2,'1','owner')",[ids.booking,noteId]);
+ const result=await service.queue({season:2027,reason:"INCOMPLETE_PUBLIC_WINDOW",limit:1} as never);
+ expect(result.records.map(r=>r.bookingId)).toEqual([ids.booking]);expect(result.nextCursor).toBeNull();
+},30000);

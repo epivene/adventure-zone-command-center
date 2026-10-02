@@ -25,9 +25,9 @@ describe.skipIf(!url)("PostgreSQL date repair serialization",()=>{
  expect((await pool.query("SELECT count(*)::int n FROM booking_date_repair_receipts")).rows[0].n).toBe(1);
  await expect(pool.query("UPDATE booking_date_repair_receipts SET reason='tampered'")).rejects.toThrow("BOOKING_DATE_HISTORY_IMMUTABLE");
  },30000);
- it("locks mutable source proof and rejects a source revision changed during the competing write",async()=>{
+ it.each(["body","updated_at"])("locks mutable source proof and rejects a source %s revision changed during the competing write",async(field)=>{
  const preview=await service.preview(proposal() as never,"owner");const sourceWriter=await pool.connect();
- try{await sourceWriter.query("BEGIN");await sourceWriter.query("UPDATE activities SET body=body || ' source changed' WHERE id=$1",[noteId]);
+ try{await sourceWriter.query("BEGIN");await sourceWriter.query("UPDATE activities SET "+(field==="body"?"body=body || ' source changed'":"updated_at=updated_at+interval '1 second'")+" WHERE id=$1",[noteId]);
  const apply=service.apply({previewId:preview.id,fingerprint:preview.fingerprint,requestKey:"source-race"},"owner");
  // The source writer already holds the row lock; apply must read its committed revision.
  await sourceWriter.query("COMMIT");await expect(apply).rejects.toMatchObject({status:409});

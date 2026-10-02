@@ -60,3 +60,13 @@ it('identifies the dates attached to historical leg evidence', () => {
  render(<LegOperationsPanel operations={operationsFixture()} role="owner" onRetry={() => {}} />);
  expect(screen.getByText('Jul 4, 2026 – Jul 4, 2026')).toBeInTheDocument();
 });
+
+it.each(["boss","manager"] as const)("shows read-only date evidence without owner repair controls for %s",role=>{
+ const data=operationsFixture();
+ if(data.dates.state!=="loaded")throw new Error("Fixture dates required");
+ data.dates.data.dateProvenance={rawPublic:{start:"2026-01-01T00:00:00Z",end:"9999-12-31T00:00:00Z"},rawReservation:{start:null,end:null},publicWindow:null,reservationWindow:null,publicEndExclusive:false,reservationEndExclusive:false,evidenceState:"needs_review",reviewReasons:["INCOMPLETE_PUBLIC_WINDOW"],endpointEvidence:[{field:"public_start",kind:"sales_milestone",value:"2026-01-01T00:00:00Z",semantics:"instant",revision:1,sourceRef:{type:"act_source_record",id:"sales-source",revision:"saved-v1"}}]};
+ render(<LegOperationsPanel operations={data} role={role} onRetry={()=>{}}/>);
+ expect(screen.getByText("Date evidence: needs_review")).toBeInTheDocument();
+ expect(screen.getByText(/sales_milestone/)).toBeInTheDocument();
+ expect(screen.queryByRole("link",{name:"Review booking dates"})).not.toBeInTheDocument();
+});
