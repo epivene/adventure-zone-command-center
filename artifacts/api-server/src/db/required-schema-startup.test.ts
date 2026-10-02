@@ -8,6 +8,12 @@ vi.hoisted(() => {
 import { runRequiredSchemaStartup } from "./required-schema-startup";
 
 describe("runRequiredSchemaStartup", () => {
+  it("cannot become ready when booking date evidence is unavailable",async()=>{
+    await expect(runRequiredSchemaStartup({
+      run: async(name,step)=>name==="required booking date evidence schema"?step():true,
+      ensureBookingDates: async()=>{throw new Error("BOOKING_DATE_SCHEMA_REQUIRED");},
+    })).rejects.toThrow("BOOKING_DATE_SCHEMA_REQUIRED");
+  });
   it("does not become ready when required leg planning verification fails", async () => {
     await expect(runRequiredSchemaStartup({
       run: async (name, step) => name === 'required leg planning schema' ? step() : true,
@@ -46,6 +52,7 @@ describe("runRequiredSchemaStartup", () => {
         return true;
       },
       ensureLegAssignment: async () => false,
+      ensureBookingDates: async () => true,
       ensureYearEndInspections: async () => false,
       ensureEventReviewDismissals: async () => false,
       ensureFollowUpDismissals: async () => true,
@@ -74,6 +81,7 @@ describe("runRequiredSchemaStartup", () => {
       "required Google Workspace schema",
       "required lead intake schema",
       "required leg assignment schema",
+      "required booking date evidence schema",
       "required year-end inspection schema",
       "required event review dismissal schema",
       "required follow-up dismissal persistence",
@@ -108,6 +116,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureGoogleWorkspace: unchanged,
       ensureLeadIntake: unchanged,
       ensureLegAssignment: unchanged,
+      ensureBookingDates: unchanged,
       ensureYearEndInspections: unchanged,
       ensureEventReviewDismissals: unchanged,
       ensureFollowUpDismissals: unchanged,
@@ -150,6 +159,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureGoogleWorkspace: unchanged,
       ensureLeadIntake: unchanged,
       ensureLegAssignment: unchanged,
+      ensureBookingDates: unchanged,
       ensureYearEndInspections: unchanged,
       ensureEventReviewDismissals: unchanged,
       ensureFollowUpDismissals: unchanged,
