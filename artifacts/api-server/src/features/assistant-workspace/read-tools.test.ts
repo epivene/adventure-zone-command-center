@@ -121,3 +121,51 @@ it("returns complete live sent-only threads with attachment references", async (
     messages: [{ attachments: [{ attachmentId: "a" }] }],
   });
 });
+
+async function reviewThread(messages: any[]) {
+  const tools = createReadTools({
+    ownerId: "owner",
+    gmail: async () => ({connectionId: "g1", client: {
+      getThreadDetail: async () => ({id: "buffalo", subject: "Buffalo Bill Days", originalGmailUrl: "https://mail.google.com/mail/u/0/#all/buffalo", messages}),
+    } as any}),
+  });
+  return tools.execute(context, {id: "review", name: "read_email_thread", arguments: '{"threadId":"buffalo"}'});
+}
+const email = (id: string, direction: string, bodyText: string, internalDateMs = 1) => ({
+  id, direction, bodyText, internalDateMs, from: "event@example.com", to: "owner@example.com",
+  cc: "", subject: "Buffalo Bill Days", date: "", attachments: [],
+});
+it("retains an automatic acknowledgment's website instruction as work requiring verification and owner approval", async () => {
+  const r = await reviewThread([email("ack", "incoming",
+    "This is an automatic acknowledgment. Our inbox is not constantly monitored.\nPlease visit https://goldenbuffalobilldays.com/ for vendor applications.")]);
+  expect(r.data).toMatchObject({nextStepReview: {
+    sourceMessageId: "ack", state: "verification_required",
+    candidates: [{messageId: "ack", sourceText: "Please visit https://goldenbuffalobilldays.com/ for vendor applications.",
+      urls: ["https://goldenbuffalobilldays.com/"]}],
+    approvalRequired: {sendEmail: true, submitForm: true},
+  }});
+  expect(r.receipts).toEqual([]);
+  expect(r.evidence[0].text).toContain("automatic acknowledgment");
+});
+it("does not turn a bare receipt into an application requirement", async () => {
+  const r = await reviewThread([email("ack", "incoming", "Thank you. This is an automatic acknowledgment. We received your email.")]);
+  expect(r.data).toMatchObject({nextStepReview: {sourceMessageId: "ack", candidates: [],
+    state: "verification_required", approvalRequired: {sendEmail: true, submitForm: true}}});
+});
+it("reviews the latest incoming source without treating sent mail or quoted old applications as new instructions", async () => {
+  const r = await reviewThread([
+    email("old", "incoming", "Please apply using https://old.example/form", 1),
+    email("new", "incoming", "We received your message.\nOn Monday, Owner wrote:\nPlease apply using https://old.example/form", 2),
+    email("sent", "outgoing", "Please apply using https://sent.example/form", 3),
+  ]);
+  expect(r.data).toMatchObject({nextStepReview: {sourceMessageId: "new", candidates: []}});
+  expect((r.data as any).messages).toHaveLength(3);
+});
+it("surfaces deadlines and alternate contacts even without an application URL", async () => {
+  const r = await reviewThread([email("ack", "incoming",
+    "Applications close March 1.\nPlease contact the entertainment coordinator for attractions.")]);
+  expect(r.data).toMatchObject({nextStepReview: {candidates: [
+    {sourceText: "Applications close March 1."},
+    {sourceText: "Please contact the entertainment coordinator for attractions."},
+  ]}});
+});

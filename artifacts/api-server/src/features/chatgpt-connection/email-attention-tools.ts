@@ -1,3 +1,4 @@
+import { emailReviewToolReminder } from "../email-next-step-review";
 import { z } from "zod";
 import {
   ConnectionError,
@@ -33,7 +34,7 @@ export function emailAttentionTools(
       scope: "crm:read" as ConnectionScope,
       readOnly: true,
       description:
-        "Preview filing a verified Gmail conversation under a profile and keeping ongoing work in Needs Attention. Unknown event year must be null. Does not change Gmail; preview expires in 15 minutes. Stop for ambiguous or conflicting matches.",
+        "Preview filing a verified Gmail conversation under a profile and keeping ongoing work in Needs Attention. Unknown event year must be null. Does not change Gmail; preview expires in 15 minutes. Stop for ambiguous or conflicting matches." + " " + emailReviewToolReminder,
       schema: attentionInputSchema,
       call: (a: any) => call(() => service!.preview(actor, a)),
     },
@@ -52,7 +53,7 @@ export function emailAttentionTools(
       scope: "crm:read" as ConnectionScope,
       readOnly: true,
       description:
-        "Read the saved conversation attention state and filing synchronization receipt.",
+        "Read the saved conversation attention state and filing synchronization receipt." + " " + emailReviewToolReminder,
       schema: z
         .object({
           gmailConnectionId: z.string().uuid(),
