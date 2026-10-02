@@ -25,7 +25,7 @@ export type Opportunity = {
   postalCode: string | null;
   startsAt: string | null;
   endsAt: string | null;
-  salesMilestones: { estimatedCloseDate: string | null; actualCloseDate: string | null };
+  salesMilestones?: { estimatedCloseDate: string | null; actualCloseDate: string | null };
   actStatus: string | null;
   localStatus: string | null;
   probabilityPercent: number | null;
