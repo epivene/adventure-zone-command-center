@@ -66,6 +66,7 @@ jobs:
       - name: Test booking date evidence
         run: pnpm --filter @workspace/api-server test --maxWorkers=2 src/features/event-date-coverage/effective-event-date.test.ts src/features/event-date-coverage/coverage-repository.pglite.test.ts src/features/bookings/booking-leg-operations-repository.pglite.test.ts src/db/required-schema-startup.test.ts src/features/routes/travel-leg-map-windows.pglite.test.ts src/features/booking-date-repair src/features/act-replacement/normalizers/opportunity-date-provenance.test.ts src/features/act-replacement/opportunity-date-provenance.pglite.test.ts src/routes/booking-date-repairs.test.ts
       - name: Test booking review visibility
+        if: success() || failure()
         run: pnpm --filter @workspace/adventure-zone test --maxWorkers=2 src/features/bookings/booking-list-visibility.test.ts
       - name: Test ACT import compatibility and retain failures
         run: |
