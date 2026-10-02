@@ -38,7 +38,7 @@ function sourceWindow(row: Row, publicOnly = false): WindowInput | null {
 }
 function emptyDraft(booking: Row, actor: PlanningActor): PlanDraft {
   const sourceYear = operationsSeason(
-    booking.date_provenance?.publicWindow?.start ?? null, false,
+    booking.date_provenance?.verifiedPublicStart ?? booking.date_provenance?.publicWindow?.start ?? null, false,
   );
   return {
     bookingId: booking.id,
@@ -494,7 +494,7 @@ export async function loadPlanFacts(
         legId: b.travel_leg_id,
         status: b.status,
         seasonYear: operationsSeason(
-          b.date_provenance?.publicWindow?.start ?? null, false,
+          b.date_provenance?.verifiedPublicStart ?? b.date_provenance?.publicWindow?.start ?? null, false,
         ),
         window,
         publicWindow: sourceWindow(b, true),

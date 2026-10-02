@@ -1,3 +1,4 @@
+import type { ResolvedDates } from "../booking-date-repair/date-evidence";
 import { operationsDateKey } from '@/features/bookings/booking-leg-operations-history';
 import type {
   BookingStatus,
@@ -17,6 +18,7 @@ export type RouteMappingState =
   | "needs_mapping_missing_location";
 
 export type MapEvent = {
+  dateProvenance?: ResolvedDates;
   id: string;
   organizationId?: string | null;
   name: string;
@@ -138,7 +140,8 @@ export function filterMapEvents(
     }
     if (
       (from !== null || to !== null) &&
-      !eventOverlapsBusinessWindow(event, from, to)
+      !eventOverlapsBusinessWindow(event, from, to) &&
+      !(event.dateProvenance?.evidenceState === 'needs_review' && event.seasonYear != null && from === `${event.seasonYear}-01-01` && to === `${event.seasonYear}-12-31`)
     ) {
       return false;
     }

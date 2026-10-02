@@ -96,6 +96,7 @@ BEGIN
   RETURN jsonb_build_object('rawPublic',jsonb_build_object('start',booking_date_iso(ps),'end',booking_date_iso(pe)),
     'rawReservation',jsonb_build_object('start',booking_date_iso(rs),'end',booking_date_iso(re)),
     'publicWindow',public_window,'reservationWindow',reservation_window,
+    'verifiedPublicStart',pstart->>'value',
     'publicEndExclusive',coalesce((pend->>'exclusive')::boolean,false),
     'reservationEndExclusive',coalesce((rend->>'exclusive')::boolean,false),
     'evidenceState',CASE WHEN jsonb_array_length(reasons)>0 THEN 'needs_review' ELSE 'verified' END,'reviewReasons',reasons,

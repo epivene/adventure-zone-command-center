@@ -142,8 +142,8 @@ export class LegPlanningService {
       ),
       query(
         actor.kind === "manager"
-          ? sql`SELECT b.id,b.name,b.travel_leg_id,b.starts_at,EXISTS(SELECT 1 FROM google_operational_calendar_links c WHERE c.booking_id=b.id AND c.last_app_snapshot->>'imported'='true') AS imported_dates FROM bookings b WHERE travel_leg_id=${actor.legId}::uuid ORDER BY starts_at NULLS LAST,id`
-          : sql`SELECT b.id,b.name,b.travel_leg_id,b.starts_at,EXISTS(SELECT 1 FROM google_operational_calendar_links c WHERE c.booking_id=b.id AND c.last_app_snapshot->>'imported'='true') AS imported_dates FROM bookings b ORDER BY starts_at NULLS LAST,id`,
+          ? sql`SELECT b.id,b.name,b.travel_leg_id,b.starts_at,booking_resolved_dates(b.id,b.starts_at,b.ends_at,w.starts_at,w.ends_at) AS date_provenance,EXISTS(SELECT 1 FROM google_operational_calendar_links c WHERE c.booking_id=b.id AND c.last_app_snapshot->>'imported'='true') AS imported_dates FROM bookings b LEFT JOIN booking_operational_windows w ON w.booking_id=b.id WHERE travel_leg_id=${actor.legId}::uuid ORDER BY b.starts_at NULLS LAST,b.id`
+          : sql`SELECT b.id,b.name,b.travel_leg_id,b.starts_at,booking_resolved_dates(b.id,b.starts_at,b.ends_at,w.starts_at,w.ends_at) AS date_provenance,EXISTS(SELECT 1 FROM google_operational_calendar_links c WHERE c.booking_id=b.id AND c.last_app_snapshot->>'imported'='true') AS imported_dates FROM bookings b LEFT JOIN booking_operational_windows w ON w.booking_id=b.id ORDER BY b.starts_at NULLS LAST,b.id`,
       ),
       actor.kind === "manager"
         ? query(
@@ -209,8 +209,7 @@ export class LegPlanningService {
       bookings: bookings.map((b) => ({
         splitSeasonYears: (() => {
           const p = planningStartCalendar(
-            b.starts_at,
-            isImportedCalendarDate(b.starts_at, b.imported_dates === true),
+            b.date_provenance?.verifiedPublicStart ?? b.date_provenance?.publicWindow?.start ?? null, false,
           );
           return p
             ? p.month === 1 && p.year > 1900
@@ -222,8 +221,7 @@ export class LegPlanningService {
         name: b.name,
         legId: b.travel_leg_id,
         seasonYear: operationsSeason(
-          b.starts_at,
-          isImportedCalendarDate(b.starts_at, b.imported_dates),
+          b.date_provenance?.verifiedPublicStart ?? b.date_provenance?.publicWindow?.start ?? null, false,
         ),
       })),
       ...(actor.kind === "owner"
@@ -308,6 +306,7 @@ export class LegPlanningService {
     input: { requestKey: string },
     work: (
       tx: PlanningDatabase,
+      context: {receiptId:string;bodyHash:string},
     ) => Promise<{ value: T; affectedBookingIds: string[] }>,
     authorize?: (tx: PlanningDatabase) => Promise<void>,
   ): Promise<MutationResult<T>> {
@@ -353,9 +352,10 @@ export class LegPlanningService {
             idempotent: true,
           });
         }
-        const result = await work(tx);
+        const receiptId=randomUUID();
+        const result = await work(tx,{receiptId,bodyHash:hash});
         const value: MutationResult<T> = await scopedResult({
-          receiptId: randomUUID(),
+          receiptId,
           ...result,
           idempotent: false,
         });
@@ -920,7 +920,7 @@ export class LegPlanningService {
       actor,
       "commit",
       p,
-      async (tx) => {
+      async (tx, context) => {
         let facts = await loadPlanFacts(tx, p.bookingIds, actor, this.clock());
         for (const f of facts) {
           revision(f.revision || null, p.expectedRevisions[f.booking.id]);
@@ -995,6 +995,13 @@ export class LegPlanningService {
           await tx.execute(
             sql`INSERT INTO booking_operational_windows(booking_id,starts_at,ends_at,source) VALUES(${f.booking.id}::uuid,${new Date(window.window.startMs).toISOString()}::timestamptz,${new Date(window.window.endMs).toISOString()}::timestamptz,'manual') ON CONFLICT(booking_id) DO UPDATE SET starts_at=EXCLUDED.starts_at,ends_at=EXCLUDED.ends_at,source=EXCLUDED.source`,
           );
+          for (const [field,value] of [
+            ["reservation_start",new Date(window.window.startMs).toISOString()],
+            ["reservation_end",new Date(window.window.endMs).toISOString()],
+          ]) await tx.execute(sql`INSERT INTO booking_date_evidence(booking_id,field,kind,value,semantics,revision,source_type,source_id,source_revision,actor)
+            SELECT ${f.booking.id}::uuid,${field},'verified_reservation',${value},'instant',coalesce(max(revision),0)+1,
+              'leg_plan_mutation_receipt',${context.receiptId},${context.bodyHash},${actorKey(actor)}
+            FROM booking_date_evidence WHERE booking_id=${f.booking.id}::uuid AND field=${field}`);
           await tx.execute(
             sql`DELETE FROM booking_resource_assignments WHERE booking_id=${f.booking.id}::uuid`,
           );

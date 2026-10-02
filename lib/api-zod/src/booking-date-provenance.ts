@@ -3,6 +3,7 @@ const endpoints = z.object({start:z.string().nullable(),end:z.string().nullable(
 const window = z.object({start:z.string(),end:z.string()}).nullable();
 export const bookingDateProvenanceSchema = z.object({
  rawPublic:endpoints,rawReservation:endpoints,publicWindow:window,reservationWindow:window,
+ verifiedPublicStart:z.string().nullable().optional(),
  publicEndExclusive:z.boolean(),reservationEndExclusive:z.boolean(),
  evidenceState:z.enum(["verified","needs_review"]),reviewReasons:z.array(z.string()),
  endpointEvidence:z.array(z.object({

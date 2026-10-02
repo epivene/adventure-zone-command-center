@@ -18,6 +18,7 @@ export type ResolvedDates = {
   publicEndExclusive: boolean; reservationEndExclusive: boolean;
   evidenceState: "verified" | "needs_review"; reviewReasons: string[];
   endpointEvidence: EndpointEvidence[];
+  verifiedPublicStart?: string | null;
 };
 export type DateRepairProposal = { bookingId: string; reason: string; endpoints: EndpointEvidence[]; clearFields: EndpointEvidence["field"][] };
 export type DateRepairPreview = {
@@ -96,6 +97,7 @@ export function resolveBookingDates(input: DateEvidenceInput): ResolvedDates {
   const reservationWindow = window(reservedStart, reservedEnd, "RESERVATION", reservationPresent);
   return {
     rawPublic: input.rawPublic, rawReservation: input.rawReservation, publicWindow, reservationWindow,
+    verifiedPublicStart:publicStart?.value ?? null,
     publicEndExclusive: publicEnd?.exclusive ?? false, reservationEndExclusive: reservedEnd?.exclusive ?? false,
     evidenceState: reasons.length ? "needs_review" : "verified", reviewReasons: reasons,
     endpointEvidence: input.evidence.filter(e => e.revision === Math.max(...input.evidence.filter(other => other.field === e.field).map(other => other.revision))),

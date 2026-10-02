@@ -159,7 +159,7 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
         routeBucket,
         locationQuality,
         locationLabel,
-        seasonYear: operationsSeason(dateProvenance.publicWindow?.start ?? null, false),
+        seasonYear: operationsSeason(dateProvenance.verifiedPublicStart ?? dateProvenance.publicWindow?.start ?? null, false),
       };
     });
   }

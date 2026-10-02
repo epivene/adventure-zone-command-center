@@ -34,7 +34,7 @@ export class BookingLegOperationsRepository {
     const dates = row.date_provenance as ResolvedDates;
     const suggestedLeg = leg(row.suggested_leg_id, row.suggested_leg_name, row.suggested_leg_archived_at);
     return {
-      booking: { id: row.id, name: row.name, status: row.status, profileId: row.organization_id, travelLegId: row.travel_leg_id, seasonYear: operationsSeason(dates.publicWindow?.start ?? null), startsAt: dates.publicWindow?.start ?? null, endsAt: dates.publicWindow ? new Date(new Date(dates.publicWindow.end).getTime()-(dates.publicEndExclusive?1:0)).toISOString() : null, dateProvenance:dates },
+      booking: { id: row.id, name: row.name, status: row.status, profileId: row.organization_id, travelLegId: row.travel_leg_id, seasonYear: operationsSeason(dates.verifiedPublicStart ?? dates.publicWindow?.start ?? null), startsAt: dates.publicWindow?.start ?? null, endsAt: dates.publicWindow ? new Date(new Date(dates.publicWindow.end).getTime()-(dates.publicEndExclusive?1:0)).toISOString() : null, dateProvenance:dates },
       windows: { publicStartsAt:dates.publicWindow?.start ?? null,publicEndsAt:dates.publicWindow ? new Date(new Date(dates.publicWindow.end).getTime()-(dates.publicEndExclusive?1:0)).toISOString() : null,reservedStartsAt:dates.reservationWindow?.start ?? null,reservedEndsAt:dates.reservationWindow?.end ?? null,reservedEndExclusive:dates.reservationEndExclusive,reservedSource:row.reserved_source ?? null,rawPublicStartsAt:dates.rawPublic.start,rawPublicEndsAt:dates.rawPublic.end,rawReservedStartsAt:dates.rawReservation.start,rawReservedEndsAt:dates.rawReservation.end,evidenceState:dates.evidenceState,reviewReasons:dates.reviewReasons,dateProvenance:dates },
       assignment: {
         assignedLeg: leg(row.travel_leg_id, row.leg_name, row.leg_archived_at), assignmentSource: row.assignment_source ?? (row.travel_leg_id ? 'existing_assignment' : null),
@@ -49,7 +49,7 @@ export class BookingLegOperationsRepository {
     const profile = await this.db.query('SELECT id FROM organizations WHERE id=$1', [profileId]);
     if (!profile.rows.length) throw new OperationsAccessError(404, 'Profile not found');
     const { rows } = await this.db.query(`SELECT b.id,b.name,b.status,b.starts_at,b.ends_at,booking_resolved_dates(b.id,b.starts_at,b.ends_at,w.starts_at,w.ends_at) AS date_provenance,EXISTS(SELECT 1 FROM google_operational_calendar_links c WHERE c.booking_id=b.id AND c.last_app_snapshot->>'imported'='true') AS imported_dates FROM bookings b LEFT JOIN booking_operational_windows w ON w.booking_id=b.id WHERE b.organization_id=$1 ORDER BY b.starts_at DESC NULLS LAST,b.id`, [profileId]);
-    return rows.map(row => ({ id: row.id, name: row.name, status: row.status, seasonYear: operationsSeason(row.date_provenance.publicWindow?.start ?? null), startsAt: row.date_provenance.publicWindow?.start ?? null, endsAt: row.date_provenance.publicWindow ? new Date(new Date(row.date_provenance.publicWindow.end).getTime()-(row.date_provenance.publicEndExclusive?1:0)).toISOString() : null, dateProvenance:row.date_provenance }));
+    return rows.map(row => ({ id: row.id, name: row.name, status: row.status, seasonYear: operationsSeason(row.date_provenance.verifiedPublicStart ?? row.date_provenance.publicWindow?.start ?? null), startsAt: row.date_provenance.publicWindow?.start ?? null, endsAt: row.date_provenance.publicWindow ? new Date(new Date(row.date_provenance.publicWindow.end).getTime()-(row.date_provenance.publicEndExclusive?1:0)).toISOString() : null, dateProvenance:row.date_provenance }));
   }
 
   async loadHistory(bookingId: string, viewer: OperationsViewer): Promise<OperationsHistoryItem[]> {
@@ -66,7 +66,7 @@ export class BookingLegOperationsRepository {
       AND ($3::uuid IS NULL OR b.travel_leg_id=$3::uuid)
       ORDER BY b.starts_at DESC NULLS LAST,b.id`, [bookingId, base.booking.profileId, viewer.kind === 'manager' ? viewer.legId : null]);
     return rows.map(row => ({
-      bookingId: row.id, profileId: row.organization_id, name: row.name, seasonYear: operationsSeason(row.date_provenance.publicWindow?.start ?? null), relation: row.organization_id === base.booking.profileId ? 'same_profile' : 'event_family',
+      bookingId: row.id, profileId: row.organization_id, name: row.name, seasonYear: operationsSeason(row.date_provenance.verifiedPublicStart ?? row.date_provenance.publicWindow?.start ?? null), relation: row.organization_id === base.booking.profileId ? 'same_profile' : 'event_family',
       leg: leg(row.travel_leg_id, row.leg_name, row.archived_at), packageNames: (row.packages as string[]).sort(), startsAt: row.date_provenance.publicWindow?.start ?? null, endsAt: row.date_provenance.publicWindow ? new Date(new Date(row.date_provenance.publicWindow.end).getTime()-(row.date_provenance.publicEndExclusive?1:0)).toISOString() : null,
       dateProvenance:row.date_provenance,
       sources: [{ label: 'Saved booking', href: `/bookings/${row.id}` }, ...(row.calendar_sources as Array<{ googleEventId: string; calendarId: string }>).map(source => ({ label: 'Calendar source', href: `https://calendar.google.com/calendar/event?eid=${Buffer.from(`${source.googleEventId} ${source.calendarId}`).toString('base64url')}` }))],
