@@ -36,3 +36,5 @@ Ruling: fictional existing test fixtures receive explicit reviewed all-day seman
 Task 3: RED real coverage projection and profile window checks confirmed in job110709999747 (3 failed,35passed). Implement additive provenance in booking/profile responses. Map/readiness/calendar/startup checks now green. Add focused resource-unknown and frontend review-visibility regressions before final reader integration.
 
 Ruling: finish native test iterations on a temporary verification branch, then fast-forward the original draft-PR branch to the final tested commit — each draft synchronization triggered many unrelated repository workflows and delayed/redoubled checks — cost if wrong: the draft PR temporarily shows the earlier checkpoint; retain exact ancestry and synchronize before delivery.
+
+Task 3: RED resource blocker and both frontend evidence visibility assertions observed in job110710679356 (backend48passed/1failed, frontend3passed/2failed). Implement an unoverrideable unresolved-date resource warning and effective-date visibility while retaining review records. Booking/profile/coverage/map/readiness/startup checks are green in this run.

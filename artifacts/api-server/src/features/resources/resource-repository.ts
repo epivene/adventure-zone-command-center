@@ -1,10 +1,12 @@
+import { effectiveResourceDates, type ResolvedDates } from "../booking-date-repair/date-evidence";
 import { commitmentTransaction, reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
-import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
   bookingResourceAssignments,
   bookings,
+  bookingOperationalWindows,
   packageTemplates,
   resourceConflictOverrides,
   resourcePackageTags,
@@ -36,6 +38,7 @@ const terminalBookingStatuses: ReadonlySet<string> = new Set(
 export type AuditEntry = AuditChange;
 
 export type BookingResourceState = {
+  dateProvenance?: ResolvedDates;
   id: string;
   name: string;
   startsAt: Date | null;
@@ -140,6 +143,7 @@ class DrizzleResourceTransaction implements ResourceTransaction {
   ): Promise<BookingResourceState | null> {
     const [booking] = await this.database
       .select({
+        dateProvenance:sql<ResolvedDates>`booking_resolved_dates(${bookings.id},${bookings.startsAt},${bookings.endsAt},${bookingOperationalWindows.startsAt},${bookingOperationalWindows.endsAt})`,
         id: bookings.id,
         name: bookings.name,
         startsAt: bookings.startsAt,
@@ -148,11 +152,11 @@ class DrizzleResourceTransaction implements ResourceTransaction {
         longitude: bookings.longitude,
         physicalAttractionTotal: bookings.physicalAttractionTotal,
       })
-      .from(bookings)
+      .from(bookings).leftJoin(bookingOperationalWindows,eq(bookings.id,bookingOperationalWindows.bookingId))
       .where(eq(bookings.id, bookingId))
       .limit(1)
-      .for("update");
-    return booking ?? null;
+      .for("update",{of:bookings});
+    return booking ? {...booking,...effectiveResourceDates(booking.dateProvenance)} : null;
   }
 
   async findCurrentAssignmentsForUpdate(
@@ -251,6 +255,7 @@ class DrizzleResourceTransaction implements ResourceTransaction {
       .select({
         assignment: bookingResourceAssignments,
         booking: bookings,
+        dateProvenance:sql<ResolvedDates>`booking_resolved_dates(${bookings.id},${bookings.startsAt},${bookings.endsAt},${bookingOperationalWindows.startsAt},${bookingOperationalWindows.endsAt})`,
         resource: resources,
       })
       .from(bookingResourceAssignments)
@@ -258,6 +263,7 @@ class DrizzleResourceTransaction implements ResourceTransaction {
         bookings,
         eq(bookings.id, bookingResourceAssignments.bookingId),
       )
+      .leftJoin(bookingOperationalWindows,eq(bookings.id,bookingOperationalWindows.bookingId))
       .innerJoin(
         resources,
         eq(resources.id, bookingResourceAssignments.resourceId),
@@ -308,7 +314,7 @@ class DrizzleResourceTransaction implements ResourceTransaction {
     );
     const bookingReservations = rows
       .filter(({ booking }) => !terminalBookingStatuses.has(booking.status))
-      .map(({ assignment, booking, resource }) => ({
+      .map(({ assignment, booking, resource, dateProvenance }) => ({
         assignmentId: assignment.id,
         bookingId: booking.id,
         bookingName: booking.name,
@@ -321,8 +327,8 @@ class DrizzleResourceTransaction implements ResourceTransaction {
         setupMinutes: resource.setupMinutes,
         teardownMinutes: resource.teardownMinutes,
         minimumTransferMinutes: resource.minimumTransferMinutes,
-        startsAt: booking.startsAt,
-        endsAt: booking.endsAt,
+        ...effectiveResourceDates(dateProvenance),
+        dateProvenance,
         location:
           booking.latitude === null || booking.longitude === null
             ? null

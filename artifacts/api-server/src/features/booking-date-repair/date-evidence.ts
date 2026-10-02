@@ -101,3 +101,11 @@ export function resolveBookingDates(input: DateEvidenceInput): ResolvedDates {
     endpointEvidence: input.evidence.filter(e => e.revision === Math.max(...input.evidence.filter(other => other.field === e.field).map(other => other.revision))),
   };
 }
+
+/** Complete effective occupancy only; partial raw endpoints never imply a one-day reservation. */
+export function effectiveResourceDates(dates: ResolvedDates) {
+  const unsupportedReservation=(dates.rawReservation.start || dates.rawReservation.end) && !dates.reservationWindow;
+  const window=unsupportedReservation ? null : dates.reservationWindow ?? dates.publicWindow;
+  const exclusive=dates.reservationWindow ? dates.reservationEndExclusive : dates.publicEndExclusive;
+  return {startsAt:window ? new Date(window.start) : null,endsAt:window ? new Date(new Date(window.end).getTime()-(exclusive?1:0)) : null};
+}

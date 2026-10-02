@@ -1,5 +1,7 @@
+import type { ResolvedDates } from "../booking-date-repair/date-evidence";
 export const resourceWarningCodeValues = [
   "RESOURCE_OVERLAP",
+  "RESOURCE_DATE_EVIDENCE_UNRESOLVED",
   "PAINTBALL_TRANSFER_TIME",
   "TRANSFER_TRIP_MISSING",
   "RESOURCE_LOCATION_UNKNOWN",
@@ -21,6 +23,7 @@ export type ResourceLocation = {
 };
 
 export type ResourceReservation = {
+  dateProvenance?: ResolvedDates;
   assignmentId: string;
   bookingId: string;
   bookingName: string;

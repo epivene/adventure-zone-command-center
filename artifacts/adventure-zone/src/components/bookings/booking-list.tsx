@@ -50,7 +50,7 @@ function latestBooking(bookings: BookingListItem[]) {
 }
 
 export function BookingList({
-  bookings,
+  bookings: suppliedBookings,
   now = new Date(),
   initialStatus = "",
   initialShowPast = false,
@@ -60,6 +60,11 @@ export function BookingList({
   initialStatus?: BookingStatus | "";
   initialShowPast?: boolean;
 }) {
+  const bookings = suppliedBookings.map(booking => booking.dateProvenance ? {
+    ...booking,
+    startsAt:booking.dateProvenance.publicWindow ? new Date(booking.dateProvenance.publicWindow.start) : null,
+    endsAt:booking.dateProvenance.publicWindow ? new Date(new Date(booking.dateProvenance.publicWindow.end).getTime()-(booking.dateProvenance.publicEndExclusive?1:0)) : null,
+  } : booking);
   const [status, setStatus] = useState(initialStatus);
   const [probability, setProbability] = useState("");
   const [region, setRegion] = useState("");
