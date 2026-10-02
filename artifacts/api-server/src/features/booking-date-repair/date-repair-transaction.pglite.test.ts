@@ -25,10 +25,11 @@ it("previews without changing dates and atomically applies exact source proof, p
 it.each([
  ["booking","UPDATE bookings SET name='changed' WHERE id='"+ids.booking+"'"],
  ["window","INSERT INTO booking_operational_windows VALUES('"+ids.booking+"','2027-07-20','2027-07-27','manual',now())"],
+ ["source_revision","UPDATE activities SET updated_at=updated_at+interval '1 second' WHERE id='"+noteId+"'"],
  ["source","UPDATE activities SET body=body || ' changed' WHERE id='"+noteId+"'"],
  ["assignment","INSERT INTO booking_resource_assignments(booking_id,resource_id) VALUES('"+ids.booking+"','"+ids.resource+"')"],
  ["hold","INSERT INTO outreach_holds VALUES('"+ids.split+"','"+ids.booking+"','"+ids.leg+"','2027-07-20','2027-07-27','[]','{}','active','2030-01-01')"],
- ["plan","INSERT INTO leg_event_plans(booking_id,draft) VALUES('"+ids.booking+"','"+JSON.stringify(draft())+"')"],
+ ["plan","INSERT INTO leg_event_plans(booking_id,leg_id,draft) VALUES('"+ids.booking+"','"+ids.leg+"','"+JSON.stringify(draft())+"')"],
 ])("rejects stale %s without writes",async(_kind,mutation)=>{
  const service=await setup();const p=await service.preview(proposal() as never,"owner");await fixture.pg.exec(mutation);
  await expect(service.apply(applyInput(p),"owner")).rejects.toMatchObject({status:409});

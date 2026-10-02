@@ -67,7 +67,7 @@ jobs:
         run: pnpm --filter @workspace/api-server test --maxWorkers=2 src/features/event-date-coverage/effective-event-date.test.ts src/features/event-date-coverage/coverage-repository.pglite.test.ts src/features/bookings/booking-leg-operations-repository.pglite.test.ts src/db/required-schema-startup.test.ts src/features/routes/travel-leg-map-windows.pglite.test.ts src/features/booking-date-repair src/features/act-replacement/normalizers/opportunity-date-provenance.test.ts src/features/act-replacement/opportunity-date-provenance.pglite.test.ts src/routes/booking-date-repairs.test.ts
       - name: Test booking review visibility
         if: success() || failure()
-        run: pnpm --filter @workspace/adventure-zone test --maxWorkers=2 src/features/bookings/booking-list-visibility.test.ts
+        run: pnpm --filter @workspace/adventure-zone test --maxWorkers=2 src/features/bookings/booking-list-visibility.test.ts src/features/event-date-coverage/BookingDateRepairs.test.tsx
       - name: Test ACT import compatibility and retain failures
         run: |
           pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000 --reporter=json --outputFile="$RUNNER_TEMP/head-act.json" src/features/act-replacement || true
@@ -157,6 +157,28 @@ jobs:
           src/components/profiles/profile-booking-creator.test.tsx
           src/pages/BossSchedulePage.filters.test.tsx
           src/components/routes/manager-route-map-layers.test.tsx
+      - name: Test calendar source parsing and capacity reads
+        run: >-
+          pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000
+          src/features/google-workspace/calendar/operational-calendar-matcher.test.ts
+          src/features/outreach-planner/outreach-capacity-evidence.test.ts
+          src/features/outreach-planner/outreach-allocation.pglite.test.ts
+          src/features/outreach-planner/capacity-policy.test.ts
+          src/routes/event-date-coverage.test.ts
+      - name: Typecheck API and frontend and retain diagnostics
+        run: |
+          if pnpm --filter @workspace/api-server run typecheck >"$RUNNER_TEMP/head-api-types.txt" 2>&1; then echo 0 >"$RUNNER_TEMP/head-api-types.exit"; else echo 1 >"$RUNNER_TEMP/head-api-types.exit"; fi
+          if pnpm --filter @workspace/adventure-zone run typecheck >"$RUNNER_TEMP/head-ui-types.txt" 2>&1; then echo 0 >"$RUNNER_TEMP/head-ui-types.exit"; else echo 1 >"$RUNNER_TEMP/head-ui-types.exit"; fi
+      - name: Build baseline library declarations
+        working-directory: baseline
+        run: pnpm run typecheck:libs
+      - name: Typecheck baseline API and frontend
+        working-directory: baseline
+        run: |
+          if pnpm --filter @workspace/api-server run typecheck >"$RUNNER_TEMP/base-api-types.txt" 2>&1; then echo 0 >"$RUNNER_TEMP/base-api-types.exit"; else echo 1 >"$RUNNER_TEMP/base-api-types.exit"; fi
+          if pnpm --filter @workspace/adventure-zone run typecheck >"$RUNNER_TEMP/base-ui-types.txt" 2>&1; then echo 0 >"$RUNNER_TEMP/base-ui-types.exit"; else echo 1 >"$RUNNER_TEMP/base-ui-types.exit"; fi
+      - name: Reject new package type errors
+        run: node scripts/check-booking-date-repair-typecheck.mjs
       - name: Build frontend
         run: pnpm --filter @workspace/adventure-zone run build
       - name: Build API server
