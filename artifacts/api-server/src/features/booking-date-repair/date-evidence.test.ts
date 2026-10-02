@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as dates from "./date-evidence";
 const empty = { bookingId: "one", rawPublic: { start: null, end: null }, rawReservation: { start: null, end: null }, evidence: [] };
-const endpoint = (field: string, value: string, kind = "verified_event", semantics = "instant", revision = 1) => ({ field, value, kind, semantics, revision, sourceRef: { type: "manual", id: "saved-source", revision: String(revision) } });
+const endpoint = (field: dates.EndpointEvidence["field"], value: string, kind: dates.EvidenceKind = "verified_event", semantics: dates.EndpointEvidence["semantics"] = "instant", revision = 1) => ({ field, value, kind, semantics, revision, sourceRef: { type: "manual", id: "saved-source", revision: String(revision) } });
 describe("booking date evidence", () => {
   it("does not interpret imported sales milestones or a sentinel as event dates", () => {
     expect(dates.resolveBookingDates({ ...empty, rawPublic: { start: "2026-03-01T00:00:00Z", end: "9999-12-31T00:00:00Z" },
