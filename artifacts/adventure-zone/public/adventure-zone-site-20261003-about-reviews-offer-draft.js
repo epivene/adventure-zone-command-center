@@ -308,10 +308,10 @@
     .about-team-photo figcaption { padding: 8px 0; font-weight: 800; font-size: 13px; }
     .section.reviews { padding-top: 24px; padding-bottom: 30px; position: relative; z-index: 36; background: var(--az-cream); color: var(--az-navy); }
     .review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
-    .review-card { padding: 18px; border: 3px solid var(--az-navy); background: var(--az-white); box-shadow: 6px 6px 0 var(--az-pink); }
+    .review-card { padding: 18px; border: 3px solid var(--az-navy); background: linear-gradient(135deg, #fff8d6, var(--az-white) 65%); box-shadow: 6px 6px 0 var(--az-pink); }
     .review-card[hidden] { display: none; }
-    .review-card blockquote { margin: 0; font-size: 17px; line-height: 1.55; }
-    .review-card .review-attribution { margin: 14px 0 0; font-weight: 800; font-size: 14px; }
+    .review-card blockquote { position: relative; margin: 0; padding-left: 14px; border-left: 4px solid var(--az-pink); font-size: 17px; line-height: 1.55; }
+    .review-card .review-attribution { display: inline-block; margin: 14px 0 0; padding: 5px 9px; background: var(--az-yellow); font-weight: 800; font-size: 13px; border: 2px solid var(--az-navy); }
     .early-invitation { display: flex; align-items: center; justify-content: center; gap: 18px; padding-top: 24px; padding-bottom: 24px; }
     .early-invitation .button { white-space: normal; text-align: center; }
     .early-mascot { flex: 0 0 64px; width: 64px; }
