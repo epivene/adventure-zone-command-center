@@ -12,7 +12,9 @@ beforeEach(async () => {
     connection_id uuid NOT NULL,message_id text NOT NULL,thread_id text NOT NULL,
     organization_id uuid NOT NULL,contact_id uuid,evidence_codes jsonb,
     created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY(connection_id,message_id));`);
+    PRIMARY KEY(connection_id,message_id));
+    CREATE TABLE google_workspace_profile_labels(connection_id uuid,organization_id uuid,
+      gmail_label_id text,gmail_label_name text,state text); `);
   account = randomUUID(); message = "current-after-edit"; raw = "full-current-mime";
   labels = ["DRAFT", "INBOX", "attention", "old-profile"]; readbackFails = false;
   modify.mockReset(); resolve.mockReset();
@@ -128,4 +130,16 @@ it("registers separate draft-only filing and conflict reads with the correct per
   await draftTools[1].call({ ...input(), expectedRevision: preview.expectedRevision, requestKey: "tool" });
   expect(modify).toHaveBeenCalledTimes(1);
   expect(await draftTools[2].call({ gmailConnectionId: account, threadId: "thread" })).toMatchObject({ mappings: [{ profileId: f.profileId }] });
+});
+
+it("reconciles only when both the app mapping and current Gmail label still prove filing", async () => {
+  const a = await ready();
+  await service.apply(f.principal, { requestKey: "reconcile-source" }, a);
+  await expect(service.verifyCurrent(a)).rejects.toMatchObject({ code: "CONNECTION_DRAFT_FILING_READBACK_FAILED" });
+  await f.db.query("INSERT INTO google_workspace_profile_labels VALUES($1,$2,'profile-label','Profiles/County Fair','active')", [account, f.profileId]);
+  expect(await service.verifyCurrent(a)).toMatchObject({ state: "draft_filed", messageId: message, sent: false });
+  const count = modify.mock.calls.length;
+  labels = labels.filter(id => id !== "profile-label");
+  await expect(service.verifyCurrent(a)).rejects.toMatchObject({ code: "CONNECTION_DRAFT_FILING_READBACK_FAILED" });
+  expect(modify).toHaveBeenCalledTimes(count);
 });

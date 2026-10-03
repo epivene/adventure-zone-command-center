@@ -3,8 +3,6 @@ import { activeConnection, ConnectionError, inputHash, requireConnectionScope, t
 import { OperationStore } from "./operation-store";
 import { profileRow } from "./read-service";
 import { receipt } from "./lead-note-service";
-import { PostgresGoogleConnectionRepository } from "../google-workspace/google-connection-repository";
-import { PostgresGoogleProfileLabelRepository } from "../google-workspace/google-profile-label-repository";
 import { GoogleProfileLabelResolver } from "../google-workspace/google-profile-label-resolver";
 import { isCurrentProfileLabelPath } from "../google-workspace/google-profile-label-config";
 import type { GoogleGmailDraftRaw, GoogleLabelSummary } from "../google-workspace/google-api-types";
@@ -43,6 +41,11 @@ export class GmailDraftFilingService {
   async preview(p: ConnectionPrincipal, raw: z.infer<typeof draftFilingInput>) {
     requireConnectionScope(p, "crm:read");
     await activeConnection(this.db, p);
+    return this.previewCurrent(raw);
+  }
+  // Internal app entry points: callers must enforce the signed-in owner,
+  // selected profile and (for writes) the existing ActionExecutor grant.
+  async previewCurrent(raw: z.infer<typeof draftFilingInput>) {
     const input = draftFilingInput.parse(raw);
     const s = await this.source(this.db, input);
     return { draftId: s.draft.draftId, messageId: s.draft.messageId, threadId: s.draft.threadId,
@@ -62,6 +65,9 @@ export class GmailDraftFilingService {
   async inspect(p: ConnectionPrincipal, input: { gmailConnectionId: string; threadId: string }) {
     requireConnectionScope(p, "crm:read");
     await activeConnection(this.db, p);
+    return this.inspectCurrent(input);
+  }
+  async inspectCurrent(input: { gmailConnectionId: string; threadId: string }) {
     const access = await this.access();
     if (access.connectionId !== input.gmailConnectionId)
       throw new ConnectionError("CONNECTION_DRAFT_SOURCE_CHANGED", 409);
@@ -71,7 +77,10 @@ export class GmailDraftFilingService {
   async apply(p: ConnectionPrincipal, key: MutationKey, raw: z.infer<typeof draftFilingApplyInput>) {
     requireConnectionScope(p, "email:organize");
     const input = draftFilingApplyInput.parse(raw);
-    return this.operations.perform(p, "file_gmail_draft_to_profile", key, input, async tx => {
+    return this.operations.perform(p, "file_gmail_draft_to_profile", key, input, tx => this.fileCurrent(tx, input));
+  }
+  async fileCurrent(tx: SqlQuery, raw: z.infer<typeof draftFilingApplyInput>) {
+      const input = draftFilingApplyInput.parse(raw);
       // Use the current draft ID, never a cached message ID from before a Gmail edit.
       await profileRow(tx, input.profileId, true);
       const s = await this.source(tx, input);
@@ -108,11 +117,32 @@ export class GmailDraftFilingService {
         profileId: input.profileId, gmailLabelId: label.id, gmailLabelName: label.name,
         state: "draft_filed", sent: false, archived: false,
         instruction: "Verified label receipt at filing time; read the current draft again after any Gmail edit. This does not mark its content ready or update customer-reply state." });
-    });
+  }
+  async verifyCurrent(raw: z.infer<typeof draftFilingApplyInput>) {
+    const input = draftFilingApplyInput.parse(raw);
+    const s = await this.source(this.db, input);
+    if (s.revision !== input.expectedRevision) throw new ConnectionError("CONNECTION_STALE_REVISION", 409);
+    const mapping = (await this.db.query(
+      "SELECT gmail_label_id,gmail_label_name FROM google_workspace_profile_labels WHERE connection_id=$1 AND organization_id=$2 AND state='active'",
+      [s.access.connectionId, input.profileId])).rows[0];
+    const associations = await this.conflicts(s.access.connectionId, s.draft.threadId!);
+    const actualLabels = await s.access.labels();
+    if (!mapping || !isCurrentProfileLabelPath(mapping.gmail_label_name) ||
+        !s.metadata.labelIds!.includes(mapping.gmail_label_id) ||
+        !actualLabels.some(l => l.id === mapping.gmail_label_id && isCurrentProfileLabelPath(l.name)) ||
+        !associations.some(m => m.messageId === s.draft.messageId && m.profileId === input.profileId) ||
+        associations.some(m => m.profileId !== input.profileId))
+      throw new ConnectionError("CONNECTION_DRAFT_FILING_READBACK_FAILED", 409);
+    return { draftId: input.draftId, messageId: s.draft.messageId, profileId: input.profileId,
+      gmailLabelId: mapping.gmail_label_id, state: "draft_filed", sent: false, archived: false };
   }
 }
 function productionAccess(db: ConnectionDatabase): Access {
   return async () => {
+    const [{ PostgresGoogleConnectionRepository }, { PostgresGoogleProfileLabelRepository }] = await Promise.all([
+      import("../google-workspace/google-connection-repository"),
+      import("../google-workspace/google-profile-label-repository"),
+    ]);
     const connections = new PostgresGoogleConnectionRepository({ pool: db });
     const before = await connections.getCurrent();
     const reader = await connections.createReadClient();

@@ -1,3 +1,5 @@
+import { GmailDraftFilingService } from "../chatgpt-connection/gmail-draft-filing-service";
+import { createGmailDraftFilingTools, gmailDraftFilingAdapter } from "./gmail-draft-filing-tools";
 import { loadProfileBrief } from "./profile-brief";
 import { submitScopedMessage } from "./scoped-submit";
 import type { RunInput } from "./run-store";
@@ -79,6 +81,7 @@ export function createWorkspaceRuntime() {
     conversations,
     google,
   });
+  const draftFilingDeps = { ownerId, db: pool, google, service: new GmailDraftFilingService(pool) };
   const executor = new ActionExecutor(
     ownerId,
     actions,
@@ -88,6 +91,7 @@ export function createWorkspaceRuntime() {
       ...productionRecordAdapters(db, pool),
       ...commercialAdapters(db, pool),
       ...externalAdapters(pool, google),
+      file_gmail_draft_to_profile: gmailDraftFilingAdapter(draftFilingDeps),
       save_gmail_draft: gmailDraftAdapter(drafts, google),
       send_draft: send.adapter,
     },
@@ -155,6 +159,7 @@ export function createWorkspaceRuntime() {
     researchCache,
   });
   const tools = createToolRegistry([
+    createGmailDraftFilingTools({ ...draftFilingDeps, runs, executor }),
     createProfileTaskTools(
       pool,
       profileTasks,
