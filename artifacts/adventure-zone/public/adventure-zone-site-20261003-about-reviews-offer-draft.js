@@ -306,20 +306,8 @@
     .about-team-photo { margin: 0 0 24px; }
     .about-team-photo img { display: block; width: 100%; max-height: 300px; object-fit: cover; border: 4px solid var(--az-navy); }
     .about-team-photo figcaption { padding: 8px 0; font-weight: 800; font-size: 13px; }
-    .quick-packages { position: relative; z-index: 36; padding: 28px 24px 34px; color: var(--az-navy); background: var(--az-cream); }
-    .quick-title { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 0 8px; font-size: 26px; font-weight: 900; text-align: center; }
-    .quick-title .az-icon { width: 28px; height: 28px; color: var(--az-pink); }
-    .quick-intro { margin: 0 0 22px; font-size: 15px; text-align: center; }
-    .quick-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
-    .quick-tile { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 0; color: var(--az-navy); background: transparent; border: 0; text-align: center; font: inherit; font-weight: 900; font-size: 16px; text-decoration: none; cursor: pointer; }
-    .quick-photo { position: relative; display: block; width: min(148px, 100%); aspect-ratio: 1; padding: 7px; border: 3px solid var(--az-navy); border-radius: 50%; background: repeating-conic-gradient(var(--az-yellow) 0deg 15deg, #fff1a8 15deg 30deg); box-shadow: 4px 4px 0 var(--az-pink); }
-    .quick-photo img { position: absolute; top: 7px; left: 7px; display: block; width: calc(100% - 14px); height: calc(100% - 14px); object-fit: cover; border-radius: 50%; }
-    .quick-tile small { display: block; margin-top: 3px; font-size: 12px; font-weight: 700; }
-    .quick-tile:hover .quick-photo { box-shadow: 5px 5px 0 var(--az-navy); }
-    .quick-tile:focus-visible { outline: 3px solid var(--az-pink); outline-offset: 6px; border-radius: 12px; }
     .about-team-photo img { border-radius: 16px; }
     .gallery-frame { border-radius: 18px; }
-    @media(max-width: 767px) { .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 16px; } .quick-title { font-size: 22px; } .quick-photo { width: 116px; } .quick-tile { font-size: 14px; } }
     .section.reviews { padding-top: 24px; padding-bottom: 30px; position: relative; z-index: 36; background: var(--az-cream); color: var(--az-navy); }
     .review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
     .review-card { padding: 18px; border: 3px solid var(--az-navy); background: linear-gradient(135deg, #fff8d6, var(--az-white) 65%); box-shadow: 6px 6px 0 var(--az-pink); }
@@ -1052,17 +1040,6 @@
       </div></section>
 
 
-      <section class="quick-packages" aria-label="Explore our carnival packages"><div class="container">
-        <h2 class="quick-title">Find Your Kind of Fun ${icon("star")}</h2>
-        <p class="quick-intro">Fully staffed carnival packages, with setup and teardown included.</p>
-        <div class="quick-grid">
-          <a class="quick-tile" href="${packagePath("adventure-zone")}" data-package-open="adventure-zone" aria-haspopup="dialog"><span class="quick-photo"><img src="${IMAGE.adventure}" alt="" loading="lazy"></span><span>Adventure Zone</span></a>
-          <a class="quick-tile" href="${packagePath("pirates-rebellion")}" data-package-open="pirates-rebellion" aria-haspopup="dialog"><span class="quick-photo"><img src="${IMAGE.pirate}" alt="" loading="lazy"></span><span>Pirate's Rebellion</span></a>
-          <a class="quick-tile" href="${packagePath("weekend-warriors")}" data-package-open="weekend-warriors" aria-haspopup="dialog"><span class="quick-photo"><img src="${IMAGE.warrior}" alt="" loading="lazy"></span><span>Warrior's Playground</span></a>
-          <button class="quick-tile" type="button" data-foam-shortcut><span class="quick-photo"><img src="https://static.wixstatic.com/media/0e6e2c_7b68df3c306e4076b5aba9643b5d51f2~mv2.jpg" alt="" loading="lazy"></span><span>Foam Party<small>Package add-on</small></span></button>
-        </div>
-      </div></section>
-
       <section class="section packages" id="packages"><div class="container">
         <div class="section-heading packages-heading"><div class="fleet-label">The Fleet</div><div class="packages-title-row"><h2 class="display">Epic Packages</h2><button class="foam-banner" type="button" aria-label="Foam Party add-on — $3,500. View photos and details."><img src="https://static.wixstatic.com/media/0e6e2c_d80fd54ee5584c57b1a3c1079a2cd1f6~mv2.png" alt="New add-on: Foam Party, only $3,500, available exclusively with a package" width="1050" height="349"></button></div><p class="packages-intro">Choose the footprint that fits your event.</p></div>
         <div class="package-grid">
@@ -1194,9 +1171,9 @@
     bindInteractions() {
       const signal = this.abortController.signal;
       const root = this.shadowRoot;
-      root.querySelectorAll('.foam-banner, [data-foam-shortcut]').forEach(button => button.addEventListener('click', () => {
+      root.querySelector('.foam-banner')?.addEventListener('click', () => {
         this.dispatchEvent(new CustomEvent('foam-party-open', { detail: {}, bubbles: true, composed: true }));
-      }, { signal }));
+      }, { signal });
       root.querySelectorAll("[data-package-open]").forEach(link => {
         link.addEventListener("click", event => {
           if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
