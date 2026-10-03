@@ -852,7 +852,7 @@
 
     .bounce-entrance { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; padding: 0; margin: 0; border: 0; color: var(--az-white); background: #0f1729; overflow: hidden; z-index: 100; }
     .bounce-entrance:not([open]) { display: none; }
-    .bounce-entrance::backdrop { background: #0f1729; }
+    .bounce-entrance::backdrop { background: transparent; }
     .wix-preview-frame .bounce-entrance { position: absolute; inset: 0 auto auto 0; width: 100%; height: 640px; }
     .intro-active .site-header, .intro-active .team-float, .intro-active .tube-man-position { visibility: hidden; }
     .entry-exterior, .entry-slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -867,16 +867,21 @@
     .entry-enter:hover { transform: translateY(-3px); }
     .entrance-skip { position: absolute; top: 20px; right: 20px; min-height: 44px; padding: 10px 16px; border: 1px solid rgba(255,255,255,.6); border-radius: 24px; color: white; background: rgba(15,23,41,.75); font: 700 13px/1.2 Arial,sans-serif; cursor: pointer; z-index: 6; }
     .entry-ride-label { position: absolute; left: 0; right: 0; bottom: 8%; text-align: center; font: 900 clamp(25px,4vw,48px)/1 Arial,sans-serif; text-shadow: 0 3px 8px #0f1729; opacity: 0; }
-    .riding .entry-exterior { animation: doorway-dive 1.3s cubic-bezier(.45,0,.75,.6) forwards; }
-    .riding .entry-slide { animation: inflatable-slide-ride 1.95s 1s cubic-bezier(.25,.55,.55,1) both; }
-    .riding .entry-welcome, .riding .entry-brand { transition: opacity .25s; opacity: 0; pointer-events: none; }
-    .riding .entry-shade { opacity: 0; transition: opacity .35s; }
-    .riding .entry-ride-label { animation: ride-label 1.9s 1s both; }
-    .riding { animation: entrance-reveal .45s 2.8s forwards; }
-    @keyframes doorway-dive { 0% { transform: scale(1); opacity: 1; } 72% { opacity: 1; } 100% { transform: scale(5.5); opacity: 0; } }
-    @keyframes inflatable-slide-ride { 0% { opacity: 0; transform: scale(1.05) translateY(3%) rotate(-3deg); } 15% { opacity: 1; } 55% { opacity: 1; transform: scale(1.55) translateY(-8%) rotate(2deg); } 90% { opacity: 1; } 100% { opacity: 0; transform: scale(2.7) translateY(-19%) rotate(-1deg); } }
-    @keyframes ride-label { 0%,100% { opacity: 0; transform: translateY(12px); } 20%,70% { opacity: 1; transform: translateY(0); } }
-    @keyframes entrance-reveal { to { opacity: 0; } }
+    .bounce-entrance[open] .entry-exterior, .bounce-entrance[open] .entry-slide { will-change: transform, opacity; backface-visibility: hidden; }
+    .riding .entry-exterior { animation: doorway-dive 1.9s cubic-bezier(.3,.05,.45,1) forwards; }
+    .riding .entry-slide { animation: inflatable-slide-ride 3.15s 1s cubic-bezier(.3,.1,.35,1) both; }
+    .riding .entry-welcome, .riding .entry-brand { transition: opacity .4s; opacity: 0; pointer-events: none; }
+    .riding .entry-shade { opacity: 0; transition: opacity .5s; }
+    .riding .entry-ride-label { animation: ride-label 2.7s 1.1s both; }
+    .riding { animation: entrance-reveal 1.15s 3s cubic-bezier(.25,.1,.25,1) forwards; }
+    .intro-landing .site-header { visibility: visible; animation: homepage-header-reveal 1.15s ease-out both; }
+    .intro-landing #hero { animation: homepage-glide 1.15s cubic-bezier(.2,.65,.3,1) both; }
+    @keyframes doorway-dive { 0% { transform: translate3d(0,0,0) scale(1); opacity: 1; } 58% { opacity: 1; } 100% { transform: translate3d(0,0,0) scale(3.8); opacity: 0; } }
+    @keyframes inflatable-slide-ride { 0% { opacity: 0; transform: translate3d(0,3%,0) scale(1.16); } 25% { opacity: 1; } 100% { opacity: 1; transform: translate3d(0,-5%,0) scale(2.25); } }
+    @keyframes ride-label { 0%,100% { opacity: 0; } 25%,65% { opacity: 1; } }
+    @keyframes entrance-reveal { from { opacity: 1; } to { opacity: 0; } }
+    @keyframes homepage-glide { from { transform: translate3d(0,48px,0); opacity: .35; } to { transform: translate3d(0,0,0); opacity: 1; } }
+    @keyframes homepage-header-reveal { from { opacity: 0; } to { opacity: 1; } }
     @media(max-width: 767px) { .wix-preview-frame .bounce-entrance { height: 568px; } .entry-exterior { object-position: 45% 60%; } .entry-brand { width: 110px; top: 20px; } .entrance-skip { top: 14px; right: 12px; padding: 9px 12px; } .entry-welcome { bottom: 8%; } .entry-welcome h2 { font-size: 38px; } .entry-welcome p { font-size: 14px; } }
     .entrance-replay { display: inline-flex; align-items: center; gap: 6px; margin-top: 18px; padding: 7px 12px; border: 2px solid var(--az-yellow); border-radius: 24px; color: var(--az-yellow); background: rgba(15,23,41,.7); font: 800 13px/1.2 Arial,sans-serif; cursor: pointer; }
     .entrance-replay .az-icon { width: 16px; height: 16px; }
@@ -1244,6 +1249,7 @@
       window.clearTimeout(this.teamLayoutTimer);
       window.clearTimeout(this.earlyScrollTimer);
       window.clearTimeout(this.entranceTimer);
+    window.clearTimeout(this.entranceLandingTimer);
       window.clearTimeout(this.entranceScrollTimer);
       window.clearTimeout(this.entranceAnnounceTimer);
       if (this.entrancePreviousOverflow !== undefined) document.body.style.overflow = this.entrancePreviousOverflow;
@@ -1260,6 +1266,7 @@
         try { if (sessionStorage.getItem('az-bounce-house-ride-seen')) return; } catch { /* Storage is optional. */ }
       }
       entrance.classList.remove('riding');
+    this.shadowRoot.querySelector('.az-site').classList.remove('intro-landing');
       entrance.style.opacity = '';
       this.shadowRoot.querySelector('.az-site').classList.add('intro-active');
       entrance.showModal();
@@ -1279,11 +1286,13 @@
     finishBounceEntrance() {
       const entrance = this.shadowRoot.querySelector('.bounce-entrance');
       window.clearTimeout(this.entranceTimer);
+    window.clearTimeout(this.entranceLandingTimer);
       window.clearTimeout(this.entranceScrollTimer);
       window.clearTimeout(this.entranceAnnounceTimer);
       try { sessionStorage.setItem('az-bounce-house-ride-seen', 'yes'); } catch { /* Storage is optional. */ }
       if (entrance.open) entrance.close();
       entrance.classList.remove('riding');
+    this.shadowRoot.querySelector('.az-site').classList.remove('intro-landing');
       this.shadowRoot.querySelector('.az-site').classList.remove('intro-active');
       if (!this.isWixPreviewFrame && this.entrancePreviousOverflow !== undefined) document.body.style.overflow = this.entrancePreviousOverflow;
       this.shadowRoot.querySelector('#hero h1').focus({ preventScroll: true });
@@ -1296,7 +1305,10 @@
       if (!entrance.open || entrance.classList.contains('riding')) return;
       if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) { this.finishBounceEntrance(); return; }
       entrance.classList.add('riding');
-      this.entranceTimer = window.setTimeout(() => this.finishBounceEntrance(), 3250);
+      this.entranceLandingTimer = window.setTimeout(() => {
+      this.shadowRoot.querySelector('.az-site').classList.add('intro-landing');
+    }, 3000);
+    this.entranceTimer = window.setTimeout(() => this.finishBounceEntrance(), 4250);
     }
 
     celebrateInquiry(form) {
