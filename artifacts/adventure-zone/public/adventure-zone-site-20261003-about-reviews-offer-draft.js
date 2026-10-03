@@ -306,6 +306,20 @@
     .about-team-photo { margin: 0 0 24px; }
     .about-team-photo img { display: block; width: 100%; max-height: 300px; object-fit: cover; border: 4px solid var(--az-navy); }
     .about-team-photo figcaption { padding: 8px 0; font-weight: 800; font-size: 13px; }
+    .quick-packages { position: relative; z-index: 36; padding: 28px 24px 34px; color: var(--az-navy); background: var(--az-cream); }
+    .quick-title { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 0 8px; font-size: 26px; font-weight: 900; text-align: center; }
+    .quick-title .az-icon { width: 28px; height: 28px; color: var(--az-pink); }
+    .quick-intro { margin: 0 0 22px; font-size: 15px; text-align: center; }
+    .quick-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+    .quick-tile { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 0; color: var(--az-navy); background: transparent; border: 0; text-align: center; font: inherit; font-weight: 900; font-size: 16px; text-decoration: none; cursor: pointer; }
+    .quick-photo { display: block; width: min(148px, 100%); aspect-ratio: 1; padding: 7px; border: 3px solid var(--az-navy); border-radius: 50%; background: repeating-conic-gradient(var(--az-yellow) 0deg 15deg, #fff1a8 15deg 30deg); box-shadow: 4px 4px 0 var(--az-pink); }
+    .quick-photo img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+    .quick-tile small { display: block; margin-top: 3px; font-size: 12px; font-weight: 700; }
+    .quick-tile:hover .quick-photo { box-shadow: 5px 5px 0 var(--az-navy); }
+    .quick-tile:focus-visible { outline: 3px solid var(--az-pink); outline-offset: 6px; border-radius: 12px; }
+    .about-team-photo img { border-radius: 16px; }
+    .gallery-frame { border-radius: 18px; }
+    @media(max-width: 767px) { .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 16px; } .quick-title { font-size: 22px; } .quick-photo { width: 116px; } .quick-tile { font-size: 14px; } }
     .section.reviews { padding-top: 24px; padding-bottom: 30px; position: relative; z-index: 36; background: var(--az-cream); color: var(--az-navy); }
     .review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
     .review-card { padding: 18px; border: 3px solid var(--az-navy); background: linear-gradient(135deg, #fff8d6, var(--az-white) 65%); box-shadow: 6px 6px 0 var(--az-pink); }
@@ -1005,7 +1019,7 @@
           <nav class="desktop-nav" aria-label="Primary navigation">
             <a href="#about">About</a><a href="#packages">Packages</a><a href="#experience">The Experience</a><a href="#safety">Safety</a><a href="#partnerships">Booking Structures</a><a href="#faq">FAQ</a>
           </nav>
-          <div class="desktop-book"><a class="button" href="#contact">Contact ${icon("arrow")}</a></div>
+          <div class="desktop-book"><a class="button" href="#contact">Plan Your Event ${icon("arrow")}</a></div>
           <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="az-mobile-nav" aria-label="Open menu">${icon("menu")}</button>
         </div>
         <nav class="mobile-nav" id="az-mobile-nav" aria-label="Mobile navigation">
@@ -1022,7 +1036,7 @@
           <div class="eyebrow">${icon("star")}<span>America's Best Bounce House Carnival!</span>${icon("star")}</div>
           <h1 class="display">We Bring <br><span class="yellow">The Action</span></h1>
           <p class="hero-copy">A fully staffed inflatable bounce house carnival for fairs, festivals, rodeos, and community events.</p>
-          <div class="hero-actions"><a class="button" href="#packages">See Packages</a><a class="button outline" href="#contact">Contact</a></div>
+          <div class="hero-actions"><a class="button" href="#packages">See Packages</a><a class="button outline" href="#contact">Plan Your Event</a></div>
         </div>
       </section>
 
@@ -1038,22 +1052,15 @@
       </div></section>
 
 
-      <section class="section about" id="about"><div class="container">
-        <div class="about-layout">
-          <div><div class="tag">${icon("star")}About The Adventure Zone</div><h2 class="display">Built For The<br><span class="pink">Big Day.</span></h2><div class="body-large"><p>We’re The Adventure Zone, a family-owned, fully staffed traveling bounce house carnival. We love helping fair, festival, rodeo, and community-event organizers bring people together for a day of fun.</p><p>You already have plenty to plan. Our team handles setup, attraction operation, and teardown, so you can focus on your guests and the rest of your event. From your first inquiry to the final pack-up, you’ll work with people who care about your big day.</p><p>With 25+ years of fun and experience at 500+ events, we bring personal service and an experienced crew to your grounds. Tell us what you’re planning—we’d love to help you find the right fit.</p></div></div>
-          <div><figure class="about-team-photo"><img src="${IMAGE.dave}" alt="Owners Dave and Tonya" loading="lazy"><figcaption>Owners Dave and Tonya</figcaption></figure><div class="stats">
-            <div class="stat-card yellow shadow"><div class="stat-number display">25+</div><div class="stat-label">Years Of Fun</div></div>
-            <div class="stat-card navy shadow-white"><div class="stat-number display">500+</div><div class="stat-label">Events Attended</div></div>
-            <div class="stat-card shadow">${icon("shield")}<div class="stat-label">NAARSO-Certified Inspector On Staff</div></div>
-            <div class="stat-card shadow">${icon("pin")}<div class="stat-label">Regional Inspection Experience</div></div>
-          </div>
+      <section class="quick-packages" aria-label="Explore our carnival packages"><div class="container">
+        <h2 class="quick-title">Find Your Kind of Fun ${icon("star")}</h2>
+        <p class="quick-intro">Fully staffed carnival packages, with setup and teardown included.</p>
+        <div class="quick-grid">
+          <a class="quick-tile" href="${packagePath("adventure-zone")}" data-package-open="adventure-zone" aria-haspopup="dialog"><span class="quick-photo"><img src="${IMAGE.adventure}" alt="" loading="lazy"></span><span>Adventure Zone</span></a>
+          <a class="quick-tile" href="${packagePath("pirates-rebellion")}" data-package-open="pirates-rebellion" aria-haspopup="dialog"><span class="quick-photo"><img src="${IMAGE.pirate}" alt="" loading="lazy"></span><span>Pirate's Rebellion</span></a>
+          <a class="quick-tile" href="${packagePath("weekend-warriors")}" data-package-open="weekend-warriors" aria-haspopup="dialog"><span class="quick-photo"><img src="${IMAGE.warrior}" alt="" loading="lazy"></span><span>Warrior's Playground</span></a>
+          <button class="quick-tile" type="button" data-foam-shortcut><span class="quick-photo"><img src="https://static.wixstatic.com/media/0e6e2c_7b68df3c306e4076b5aba9643b5d51f2~mv2.jpg" alt="" loading="lazy"></span><span>Foam Party<small>Package add-on</small></span></button>
         </div>
-        </div><div class="about-bottom"><p>The team works with commercial inflatable operating standards, ASTM practices, and inspection programs in Colorado, New Mexico, and Arizona.</p><div class="member-badge" aria-label="Proud members of RMAF and WAF"><div class="member-logos"><img class="member-logo rmaf" src="${IMAGE.rmaf}" alt="Rocky Mountain Association of Fairs logo"><img class="member-logo waf" src="${IMAGE.waf}" alt="Western Fairs Association logo"></div><div class="member-label">Proud Members</div></div></div>
-      </div></section>
-
-      <section class="section experience" id="experience"><div class="container experience-layout">
-        <div class="scale-wrap"><div class="scale-card">${icon("star")}<h2 class="display">Scale<br>Matters.</h2><p>We are an event company, not a backyard rental drop-off.</p></div></div>
-        <div class="experience-copy"><h3 class="display">Commercial-Grade Attractions. Professional Execution.</h3><p>When you book The Adventure Zone, you're securing a massive, high-throughput footprint designed to process lines safely and deliver an unforgettable spectacle. We bring the crew, the gear, and the experience so you can focus on the rest of your event.</p><div class="feature-grid">${feature("shield", "Inspection Ready", "Rigorous safety protocols and commercial-grade units built for crowds.", "pink")}${feature("zap", "Turnkey Operation", "We handle the heavy lifting. You don't have to provide volunteers to watch the slides.", "yellow")}</div></div>
       </div></section>
 
       <section class="section packages" id="packages"><div class="container">
@@ -1072,6 +1079,24 @@
         <article class="review-card"><blockquote>“We appreciate that you were able to be here and provide a great family friendly entertainment to our fairgoers!”</blockquote><p class="review-attribution">— Fair coordinator</p></article>
         <article class="review-card"><blockquote>“We came back at the end of our time to play more games there, just because of Jim.”</blockquote><p class="review-attribution">— Guest</p></article>
       </div></div></section>
+      <section class="section about" id="about"><div class="container">
+        <div class="about-layout">
+          <div><div class="tag">${icon("star")}About The Adventure Zone</div><h2 class="display">Built For The<br><span class="pink">Big Day.</span></h2><div class="body-large"><p>We’re The Adventure Zone, a family-owned, fully staffed traveling bounce house carnival. We love helping fair, festival, rodeo, and community-event organizers bring people together for a day of fun.</p><p>You already have plenty to plan. Our team handles setup, attraction operation, and teardown, so you can focus on your guests and the rest of your event. From your first inquiry to the final pack-up, you’ll work with people who care about your big day.</p><p>With 25+ years of fun and experience at 500+ events, we bring personal service and an experienced crew to your grounds. Tell us what you’re planning—we’d love to help you find the right fit.</p></div></div>
+          <div><figure class="about-team-photo"><img src="${IMAGE.dave}" alt="Owners Dave and Tonya" loading="lazy"><figcaption>Owners Dave and Tonya</figcaption></figure><div class="stats">
+            <div class="stat-card yellow shadow"><div class="stat-number display">25+</div><div class="stat-label">Years Of Fun</div></div>
+            <div class="stat-card navy shadow-white"><div class="stat-number display">500+</div><div class="stat-label">Events Attended</div></div>
+            <div class="stat-card shadow">${icon("shield")}<div class="stat-label">NAARSO-Certified Inspector On Staff</div></div>
+            <div class="stat-card shadow">${icon("pin")}<div class="stat-label">Regional Inspection Experience</div></div>
+          </div>
+        </div>
+        </div><div class="about-bottom"><p>The team works with commercial inflatable operating standards, ASTM practices, and inspection programs in Colorado, New Mexico, and Arizona.</p><div class="member-badge" aria-label="Proud members of RMAF and WAF"><div class="member-logos"><img class="member-logo rmaf" src="${IMAGE.rmaf}" alt="Rocky Mountain Association of Fairs logo"><img class="member-logo waf" src="${IMAGE.waf}" alt="Western Fairs Association logo"></div><div class="member-label">Proud Members</div></div></div>
+      </div></section>
+
+      <section class="section experience" id="experience"><div class="container experience-layout">
+        <div class="scale-wrap"><div class="scale-card">${icon("star")}<h2 class="display">Scale<br>Matters.</h2><p>We are an event company, not a backyard rental drop-off.</p></div></div>
+        <div class="experience-copy"><h3 class="display">Commercial-Grade Attractions. Professional Execution.</h3><p>When you book The Adventure Zone, you're securing a massive, high-throughput footprint designed to process lines safely and deliver an unforgettable spectacle. We bring the crew, the gear, and the experience so you can focus on the rest of your event.</p><div class="feature-grid">${feature("shield", "Inspection Ready", "Rigorous safety protocols and commercial-grade units built for crowds.", "pink")}${feature("zap", "Turnkey Operation", "We handle the heavy lifting. You don't have to provide volunteers to watch the slides.", "yellow")}</div></div>
+      </div></section>
+
       <section class="section how"><div class="container how-layout">
         <div class="how-copy"><h2 class="display">How It Works</h2><p>You provide the space and the crowd. We handle the rest.</p><a class="button" href="#contact">Check Dates</a></div>
         <div class="step-grid">${stepCard("01", "pin", "Setup", "Our professional crew arrives early, handles all rigging, power routing, and safety checks before the gates open.")}${stepCard("02", "hardhat", "Staffing", "Every attraction is manned by our trained team. We don't rely on your volunteers to keep things safe.")}${stepCard("03", "zap", "Operation", "We manage the lines, enforce the rules, and ensure high throughput so more kids have more fun.")}${stepCard("04", "clock", "Teardown", "When the event ends, we pack it all up efficiently, leaving your grounds exactly as we found them.")}</div>
@@ -1169,9 +1194,9 @@
     bindInteractions() {
       const signal = this.abortController.signal;
       const root = this.shadowRoot;
-      root.querySelector('.foam-banner')?.addEventListener('click', () => {
+      root.querySelectorAll('.foam-banner, [data-foam-shortcut]').forEach(button => button.addEventListener('click', () => {
         this.dispatchEvent(new CustomEvent('foam-party-open', { detail: {}, bubbles: true, composed: true }));
-      }, { signal });
+      }, { signal }));
       root.querySelectorAll("[data-package-open]").forEach(link => {
         link.addEventListener("click", event => {
           if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
