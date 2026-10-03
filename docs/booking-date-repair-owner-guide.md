@@ -53,7 +53,7 @@ The additive migration is `lib/db/migrations/20261002_booking_date_provenance.sq
 
 The focused GitHub Actions workflow uses Node 22, frozen pnpm dependencies, PGlite query/rollback regressions and a disposable PostgreSQL 16 database for actual allocation-lock races. Package typecheck diagnostics, ACT failures and calendar/capacity failures are compared with pinned base `37e71787153018ee366acf642537de97858fdc81`; new failures block delivery.
 
-Verification results are recorded in the approved plan's progress ledger and draft PR. Authenticated browser checks at 360px, 768px and desktop are **unverified** because this execution environment exposes no supported authenticated browser runtime. Component tests do not substitute for those visual checks.
+Verification results are recorded in the approved plan's progress ledger and draft PR. Authenticated browser checks at 360px, 768px and desktop remain **unverified**. The current draft has no runnable authenticated preview available here. Component tests do not substitute for those visual checks.
 
 No live corrections, merge or deployment were performed. Public dates for the 18 historical sentinel records still require source review before individual corrections. Equipment/crew onboarding and historical duplicate reconciliation remain separate work.
 
@@ -63,4 +63,12 @@ GitHub Actions run `36975066885` verifies the Native implementation. Package che
 
 The broad suites retain two baseline ACT failures (phone fixture missing organization_locations; quote-sensitive migration-contract assertion) and three baseline outreach failures (missing boss_accounts.session_version fixture; two active-pursuit rerank cases). These are disclosed rather than hidden. Authenticated responsive browser checks remain unverified as described above.
 
-Final review found four Important workflow/source/parity issues; one RED→GREEN fix pass addresses them. Run36975066885 attempt2 passes all listed suites. Attempt1 hit an intermittent immediate assistant-context assertion; the unchanged retry passed. The ACT broad gate's missing collection/runtime/multiplicity/cause checks are a deferred Minor; the capacity gate includes those checks. Main separately merged Today/call-list PR #994 with no overlapping files; combined integration with that newer main is unverified. See the final review record and chronological progress Rulings for details.
+Final review found four Important workflow/source/parity issues; one RED→GREEN fix pass addresses them. Run36975066885 attempt2 passes all listed suites. Attempt1 hit an intermittent immediate assistant-context assertion; the unchanged retry passed. The ACT broad gate's missing collection/runtime/multiplicity/cause checks are a deferred Minor; the capacity gate includes those checks. This was the earlier pinned-base checkpoint; the current-main verification below supersedes its integration limit. See the final review record and chronological progress Rulings for details.
+
+### October 3 current-main verification
+
+Current main through #994 (Today call list), #995 (season-planning connector reads), and #996 (automatic-reply next-step review) is integrated into the same draft. Tested code `0482d01cb2fd25bc7f6567d41a990dfe75fb9c88`: [Booking Date Repairs run 37134301922](https://github.com/epivene/adventure-zone-command-center/actions/runs/37134301922) and [Connected Leg Operations run 37134302033](https://github.com/epivene/adventure-zone-command-center/actions/runs/37134302033) pass.
+
+Repair/backend 94/94, repair UI 22/22, call list 36/36, automatic-reply review 54/54, shared contracts 6/6, planning 123/123, planning UI 32/32, operations reads 85/85 and connected views 73/73 pass. Both production builds and zero-new diagnostic comparisons pass (104 API, 127 frontend inherited errors). The two/three known ACT and calendar/capacity baseline failures remain unchanged. The database-backed privacy regression uses 30 seconds after two workflows reproduced its 5-second timeout; all assertions are unchanged. Initial failures remain in the progress ledger.
+
+The current-main integration gap is closed. Other repository workflows remain non-green; authenticated responsive visual checks remain outstanding. This is still a draft, with no deployment or live corrections.

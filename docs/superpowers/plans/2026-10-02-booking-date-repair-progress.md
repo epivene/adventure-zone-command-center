@@ -112,3 +112,23 @@ Final fix run36975066885/attempt1: all 94 backend,22 frontend,6 shared,123 plann
 Ruling: Retry the failed operations job once at the unchanged reviewed-fix SHA — an immediate assistant-context assertion failed despite earlier passing and no changes to its component in this fix pass — cost if wrong: intermittent context/test timing remains unresolved; disclose the first attempt and retain exact logs.
 
 Task6 final GREEN: run36975066885/attempt2 at code683c7c5376e06067de3e7e198ce23a6dc4091e7f, operationsjob110738749778 and packagejob110738750888 SUCCESS. Backend94/94 (including three actual PostgreSQL cases), frontend22/22, shared6/6, planning123/123, planningUI32/32, operations79/79, connectedviews73/73 pass. Both builds/shared-library typecheck pass; API104/104 and UI127/127 diagnostics introduce zero errors. ACT/calendar-capacity gates retain exactly two/three baseline failures. The unchanged retry passes the assistant-context case; attempt1 timing failure remains disclosed. Four Important findings addressed in the single fix pass; Minor ACT gate deferred; all three declined-to-judge items ruled with costs. No re-review. Authenticated responsive browser checks remain unverified; live dates unjudged. Final docs-only commit and approved draft fast-forward follow; no merge/deploy/live correction.
+
+
+## October 3, 2026 continuation: current-main integration
+
+Integrated current main `b7e273a4197c7e5f89bb299673017254689f6497` (PRs #994, #995, #996) into the existing draft branch. Two files overlap: operational-reads.ts and its PGlite test. A three-way merge retained effective-date/provenance policy and all six saved season/crew/package-set read sections; all other current-main changes were preserved by exact blob identity. No production records changed.
+
+Integration code `e8b000fd6fde2907a0c84e8f288638d7000e151c` passed the 94 repair, 22 repair UI, 36 call-list and 54 next-step tests, both builds, zero-new type diagnostics and the ACT baseline comparison. Its operations job and Connected Leg Operations both hit the existing provider privacy test's 5-second timeout. One same-code retry was initiated; no success is inferred from that retry. The original failures remain recorded in runs 37133849789 and 37133849802.
+
+Ruling: Give the existing database-backed provider privacy regression 30 seconds, consistent with the plan's PGlite allowance. Two separate workflows reproduced the 5-second timeout; the test constructs a real PGlite schema and executes provider reads. Change only its timeout, preserve every conflict/privacy assertion. Cost if wrong: slower detection of a genuine stall. No product-code behavior changed by this adjustment.
+
+Final tested code: `0482d01cb2fd25bc7f6567d41a990dfe75fb9c88`.
+
+- [Booking Date Repairs run 37134301922](https://github.com/epivene/adventure-zone-command-center/actions/runs/37134301922): operations job 111235558381 and package job 111235558497 SUCCESS. Logs read.
+- Repair/backend/owner routes 94/94; repair visibility/UI 22/22; Today call-list integration 36/36; email next-step integration 54/54; shared contract 6/6; planning 123/123; planning UI 32/32; operations API/connector reads 85/85; connected views 73/73.
+- ACT and calendar/capacity comparisons pass with the same two/three pinned-baseline failures. Shared typecheck and both builds pass. Full diagnostics: API104/104 and UI127/127, zero new diagnostics.
+- [Connected Leg Operations run 37134302033](https://github.com/epivene/adventure-zone-command-center/actions/runs/37134302033) also SUCCESS at the same code, including the previously timed-out privacy assertion, 85 operations reads and both builds.
+
+Main was re-read after verification and remains `b7e273a4`. Combined integration is now verified against that exact main. Other repository workflows remain non-green and are not claimed baseline-equivalent by this continuation. Authenticated visual checks at 360px, 768px and desktop remain unverified: this draft has no runnable authenticated preview available here; direct repository checkout failed for missing credentials. Current browser tooling alone does not establish a runnable preview. The prior statement about unavailable browser runtime is historical, not today's explanation.
+
+This continuation updates the existing draft PR and review documentation only. No merge, deployment, live date repair, customer communication, staffing/equipment assignment or availability approval. The 18 historical sentinel records still require source review before individual correction. Deferred ACT gate and prior review limitations remain disclosed.
