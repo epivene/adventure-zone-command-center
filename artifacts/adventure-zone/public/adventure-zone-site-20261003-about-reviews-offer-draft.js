@@ -1163,6 +1163,10 @@
         dialog.style.top = `${root.querySelector(".contact").offsetTop + 180}px`;
         dialog.style.bottom = "auto";
         dialog.scrollIntoView({ behavior: "instant", block: "center" });
+        window.clearTimeout(this.earlyScrollTimer);
+        this.earlyScrollTimer = window.setTimeout(() => {
+          if (dialog.open) dialog.scrollIntoView({ behavior: "instant", block: "center" });
+        }, 900);
       }
       root.querySelector("[data-early-close]").focus({ preventScroll: true });
     }
@@ -1216,6 +1220,7 @@
       this.inquiryAbortController?.abort();
       this.resizeObserver?.disconnect();
       window.clearTimeout(this.teamLayoutTimer);
+      window.clearTimeout(this.earlyScrollTimer);
       window.clearTimeout(this.entranceTimer);
       window.clearTimeout(this.confettiTimer);
       if (this.conventionOpen) document.body.style.overflow = this.previousBodyOverflow;
