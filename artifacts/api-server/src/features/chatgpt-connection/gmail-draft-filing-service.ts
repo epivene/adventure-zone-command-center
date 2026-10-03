@@ -89,7 +89,10 @@ export class GmailDraftFilingService {
       await tx.query("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",
         [s.access.connectionId, s.draft.threadId]);
       const mappings = await this.conflicts(s.access.connectionId, s.draft.threadId!, tx);
-      if (mappings.some(m => m.profileId !== input.profileId))
+      const messageMappings = (await tx.query(
+        "SELECT organization_id::text AS \"profileId\" FROM google_workspace_validation_mappings WHERE connection_id=$1 AND message_id=$2",
+        [s.access.connectionId, s.draft.messageId])).rows;
+      if ([...mappings, ...messageMappings].some(m => m.profileId !== input.profileId))
         throw new ConnectionError("EMAIL_ATTENTION_PROFILE_CONFLICT", 409);
       const label = await s.access.resolve(tx, input.profileId);
       if (!isCurrentProfileLabelPath(label.name))
@@ -106,12 +109,14 @@ export class GmailDraftFilingService {
       if (verified.revision !== input.expectedRevision || !verified.metadata.labelIds!.includes(label.id) ||
           removeLabelIds.some(id => verified.metadata.labelIds!.includes(id)))
         throw new ConnectionError("CONNECTION_DRAFT_FILING_READBACK_FAILED", 409);
-      await tx.query(
+      const association = await tx.query(
         `INSERT INTO google_workspace_validation_mappings(connection_id,message_id,thread_id,organization_id,contact_id,evidence_codes,created_at,updated_at)
          VALUES($1,$2,$3,$4,NULL,'["owner_authorized_draft_filing"]'::jsonb,now(),now())
          ON CONFLICT(connection_id,message_id) DO UPDATE SET organization_id=EXCLUDED.organization_id,
-         thread_id=EXCLUDED.thread_id,evidence_codes=EXCLUDED.evidence_codes,updated_at=now()`,
+         thread_id=EXCLUDED.thread_id,evidence_codes=EXCLUDED.evidence_codes,updated_at=now()
+         WHERE google_workspace_validation_mappings.organization_id=EXCLUDED.organization_id RETURNING message_id`,
         [verified.access.connectionId, verified.draft.messageId, verified.draft.threadId, input.profileId]);
+      if (!association.rows.length) throw new ConnectionError("EMAIL_ATTENTION_PROFILE_CONFLICT", 409);
       return receipt(tx, input.profileId, `/profiles/${input.profileId}`, verified.revision, {
         draftId: input.draftId, messageId: verified.draft.messageId, threadId: verified.draft.threadId,
         profileId: input.profileId, gmailLabelId: label.id, gmailLabelName: label.name,

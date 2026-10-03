@@ -143,3 +143,12 @@ it("reconciles only when both the app mapping and current Gmail label still prov
   await expect(service.verifyCurrent(a)).rejects.toMatchObject({ code: "CONNECTION_DRAFT_FILING_READBACK_FAILED" });
   expect(modify).toHaveBeenCalledTimes(count);
 });
+
+it("rejects an existing current-message mapping even when its stored thread ID is wrong", async () => {
+  const other = randomUUID();
+  await f.db.query("INSERT INTO organizations(id,name) VALUES($1,'Other Fair')", [other]);
+  await f.db.query("INSERT INTO google_workspace_validation_mappings(connection_id,message_id,thread_id,organization_id) VALUES($1,$2,'wrong-thread',$3)", [account, message, other]);
+  await expect(service.apply(f.principal, { requestKey: "wrong-thread" }, await ready()))
+    .rejects.toMatchObject({ code: "EMAIL_ATTENTION_PROFILE_CONFLICT" });
+  expect(modify).not.toHaveBeenCalled();
+});
