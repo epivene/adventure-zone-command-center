@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
 import { apiFetch, apiGet, apiPut } from "@/lib/auth-token";
+import { BookingLegOperationsCard } from "@/components/bookings/leg-operations-panel";
+import { ownerOperationsClient } from "@/features/bookings/booking-leg-operations-client";
 import { EventMap } from "@/components/routes/event-map";
 import { RouteConflictWarning } from "@/components/routes/route-conflict-warning";
 import type { FocusedTripMapData } from "@/components/routes/manager-route-map-layers";
@@ -17,7 +19,7 @@ import { findSameLegDateConflicts } from "@/features/routes/route-conflicts";
 import { isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 import { eventMatchesOperationsSeason } from '@/features/bookings/operations-navigation';
 
-export type RouteScheduleFilters = { season?: string; legId?: string; status?: string; embedded?: boolean; managementOnly?: boolean; onSeasonYearChange?: (year: number) => void };
+export type RouteScheduleFilters = { bookingId?: string; season?: string; legId?: string; status?: string; embedded?: boolean; managementOnly?: boolean; onLegFocusChange?: (id: string | null) => void; onSeasonYearChange?: (year: number) => void };
 
 type TripFocusDetail = {
   trip: { id: string; name: string; startLabel: string; startLatitude: number | null; startLongitude: number | null; endLabel: string; endLatitude: number | null; endLongitude: number | null };
@@ -35,7 +37,7 @@ function focusedTripMapData(detail: TripFocusDetail): FocusedTripMapData {
   return { id: detail.trip.id, name: detail.trip.name, points };
 }
 
-export function RoutesContent({ season, legId, status, embedded = false, managementOnly = false, onSeasonYearChange }: RouteScheduleFilters) {
+export function RoutesContent({ bookingId: requestedBookingId, season, legId, status, embedded = false, managementOnly = false, onSeasonYearChange, onLegFocusChange }: RouteScheduleFilters) {
   const [planningSeason,setPlanningSeason] = useState(Number(season) || new Date().getFullYear());
   const [data, setData] = useState<any>(null);
   const [handoffs, setHandoffs] = useState<EquipmentHandoffView[]>([]);
@@ -84,7 +86,7 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
   const focusedTripCoordinates = focusedTrip?.points.map((point) => [point.longitude, point.latitude] as [number, number]) ?? null;
   const activeLegs = data?.travelLegs?.filter((leg: any) => !leg.archivedAt) ?? [];
   const filteredEvents = useMemo(() => (data?.events ?? []).filter((event: any) => {
-    if (legId && event.travelLegId !== legId) return false;
+    if (!onLegFocusChange && legId && event.travelLegId && event.travelLegId !== legId) return false;
     if (status && status !== "all") {
       const matchesStatus = status.toLowerCase() === "confirmed"
         ? isBookedForSchedule(event)
@@ -93,7 +95,7 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
     }
     if (season && !eventMatchesOperationsSeason(event, Number(season))) return false;
     return true;
-  }), [data?.events, legId, status, season]);
+  }), [data?.events, legId, status, season, onLegFocusChange]);
   const routeConflicts = useMemo(() => findSameLegDateConflicts(filteredEvents), [filteredEvents]);
 
   if (loading) return <p className="text-slate-500">Loading routes…</p>;
@@ -109,7 +111,7 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
       <RouteConflictWarning conflicts={routeConflicts} />
       {mapView === "manager-preview" ? (
         <div className="grid gap-3"><label className="grid max-w-sm gap-1 text-sm font-semibold">Preview manager<select aria-label="Preview manager" value={previewLegId} onChange={(event) => setPreviewLegId(event.target.value)}>{activeLegs.map((leg: any) => <option key={leg.id} value={leg.id}>{leg.name}</option>)}</select></label><ManagerPreviewMap legId={previewLegId} /></div>
-      ) : <EventMap events={filteredEvents} travelLegs={data.travelLegs} handoffs={handoffs} focusedTrip={focusedTrip} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTrip(null)} controlledSeasonYear={embedded && season ? Number(season) : undefined} requestedSeasonYear={season ? Number(season) : undefined} onSeasonYearChange={onSeasonYearChange} />}
+      ) : <EventMap requestedEventId={requestedBookingId} renderSelectedDetails={id => <BookingLegOperationsCard bookingId={id} role="owner" client={ownerOperationsClient} />} showTimeline controlledLegId={onLegFocusChange ? legId || null : undefined} onLegFocusChange={onLegFocusChange} events={filteredEvents} travelLegs={data.travelLegs} handoffs={handoffs} focusedTrip={focusedTrip} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTrip(null)} controlledSeasonYear={embedded && season ? Number(season) : undefined} requestedSeasonYear={season ? Number(season) : undefined} onSeasonYearChange={onSeasonYearChange} />}
     </section>
   );
 
