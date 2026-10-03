@@ -312,8 +312,8 @@
     .quick-intro { margin: 0 0 22px; font-size: 15px; text-align: center; }
     .quick-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
     .quick-tile { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 0; color: var(--az-navy); background: transparent; border: 0; text-align: center; font: inherit; font-weight: 900; font-size: 16px; text-decoration: none; cursor: pointer; }
-    .quick-photo { display: block; width: min(148px, 100%); aspect-ratio: 1; padding: 7px; border: 3px solid var(--az-navy); border-radius: 50%; background: repeating-conic-gradient(var(--az-yellow) 0deg 15deg, #fff1a8 15deg 30deg); box-shadow: 4px 4px 0 var(--az-pink); }
-    .quick-photo img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+    .quick-photo { position: relative; display: block; width: min(148px, 100%); aspect-ratio: 1; padding: 7px; border: 3px solid var(--az-navy); border-radius: 50%; background: repeating-conic-gradient(var(--az-yellow) 0deg 15deg, #fff1a8 15deg 30deg); box-shadow: 4px 4px 0 var(--az-pink); }
+    .quick-photo img { position: absolute; top: 7px; left: 7px; display: block; width: calc(100% - 14px); height: calc(100% - 14px); object-fit: cover; border-radius: 50%; }
     .quick-tile small { display: block; margin-top: 3px; font-size: 12px; font-weight: 700; }
     .quick-tile:hover .quick-photo { box-shadow: 5px 5px 0 var(--az-navy); }
     .quick-tile:focus-visible { outline: 3px solid var(--az-pink); outline-offset: 6px; border-radius: 12px; }
