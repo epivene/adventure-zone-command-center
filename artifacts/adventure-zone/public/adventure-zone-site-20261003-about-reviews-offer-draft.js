@@ -947,7 +947,8 @@
       <div class="form-grid">
         <div class="field"><label for="az-name">Your Name *</label><input id="az-name" name="name" required maxlength="120" placeholder="Jane Smith"></div>
         <div class="field"><label for="az-email">Email Address *</label><input id="az-email" name="email" type="email" required maxlength="254" placeholder="jane@example.com"></div>
-        <div class="field"><label for="az-event">Event or Organization *</label><input id="az-event" name="eventName" required maxlength="160" placeholder="Fall Festival"></div>
+        <div class="field"><label for="az-phone">Phone Number (optional)</label><input id="az-phone" name="phone" type="tel" autocomplete="tel" maxlength="40" placeholder="Your best contact number"></div>
+      <div class="field"><label for="az-event">Event or Organization *</label><input id="az-event" name="eventName" required maxlength="160" placeholder="Fall Festival"></div>
         <div class="field"><label for="az-date">Event Date</label><input id="az-date" name="eventDate" type="date"></div>
         <div class="field"><label for="az-location">Event Location</label><input id="az-location" name="eventLocation" maxlength="200" placeholder="City, State"></div>
         <div class="field"><label for="az-package">Package Interest</label><select id="az-package" name="packageInterest"><option value="">Choose a package</option><option>Adventure Zone</option><option>Pirate's Rebellion</option><option>Warrior's Playground</option></select></div>
@@ -1556,6 +1557,8 @@
 
     collectFormValues(form) {
       const data = new FormData(form);
+      const phone = String(data.get("phone") || "").trim();
+      const message = String(data.get("message") || "").trim();
       return {
         name: String(data.get("name") || "").trim(),
         email: String(data.get("email") || "").trim(),
@@ -1563,7 +1566,7 @@
         eventDate: String(data.get("eventDate") || "").trim(),
         eventLocation: String(data.get("eventLocation") || "").trim(),
         packageInterest: `${String(data.get("packageInterest") || "").trim()}${data.get("foamPartyAddOn") === "Yes" ? " + Foam Party Add-On" : ""}`.trim(),
-        message: String(data.get("message") || "").trim(),
+        message: phone ? `${message}\n\nPhone: ${phone}` : message,
       };
     }
 
