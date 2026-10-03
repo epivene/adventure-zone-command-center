@@ -852,7 +852,7 @@
 
     .bounce-entrance { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; padding: 0; margin: 0; border: 0; color: var(--az-white); background: #0f1729; overflow: hidden; z-index: 100; }
     .bounce-entrance:not([open]) { display: none; }
-    .bounce-entrance::backdrop { background: transparent; }
+    .bounce-entrance::backdrop { background: #0f1729; }
     .wix-preview-frame .bounce-entrance { position: absolute; inset: 0 auto auto 0; width: 100%; height: 640px; }
     .intro-active .site-header, .intro-active .team-float, .intro-active .tube-man-position { visibility: hidden; }
     .entry-exterior, .entry-slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -874,6 +874,7 @@
     .riding .entry-shade { opacity: 0; transition: opacity .5s; }
     .riding .entry-ride-label { animation: ride-label 2.7s 1.1s both; }
     .riding { animation: entrance-reveal 1.15s 3s cubic-bezier(.25,.1,.25,1) forwards; }
+    .riding::backdrop { animation: entrance-reveal 1.15s 3s cubic-bezier(.25,.1,.25,1) forwards; }
     .intro-landing .site-header { visibility: visible; animation: homepage-header-reveal 1.15s ease-out both; }
     .intro-landing #hero { animation: homepage-glide 1.15s cubic-bezier(.2,.65,.3,1) both; }
     @keyframes doorway-dive { 0% { transform: translate3d(0,0,0) scale(1); opacity: 1; } 58% { opacity: 1; } 100% { transform: translate3d(0,0,0) scale(3.8); opacity: 0; } }
@@ -1304,9 +1305,11 @@
       const entrance = this.shadowRoot.querySelector('.bounce-entrance');
       if (!entrance.open || entrance.classList.contains('riding')) return;
       if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) { this.finishBounceEntrance(); return; }
-      entrance.classList.add('riding');
-      this.entranceLandingTimer = window.setTimeout(() => {
+    entrance.classList.add('riding');
+    this.dispatchEvent(new CustomEvent('bounce-house-ride', { bubbles: true, composed: true }));
+    this.entranceLandingTimer = window.setTimeout(() => {
       this.shadowRoot.querySelector('.az-site').classList.add('intro-landing');
+      this.dispatchEvent(new CustomEvent('bounce-house-landing', { bubbles: true, composed: true }));
     }, 3000);
     this.entranceTimer = window.setTimeout(() => this.finishBounceEntrance(), 4250);
     }
