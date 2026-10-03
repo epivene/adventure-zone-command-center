@@ -5,6 +5,8 @@ on:
       - "artifacts/api-server/src/features/operational-review-policy.ts"
       - "artifacts/api-server/src/features/chatgpt-connection/**"
       - "artifacts/api-server/src/features/assistant-workspace/orchestrator.ts"
+      - "artifacts/api-server/src/features/assistant-workspace/gmail-draft-filing-tools*"
+      - "artifacts/api-server/src/features/assistant-workspace/runtime.ts"
       - ".github/workflows/com-route-review-ci.yml"
 permissions:
   contents: read
@@ -26,8 +28,17 @@ jobs:
         run: >-
           pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000
           src/features/chatgpt-connection/mcp-server.test.ts
+          src/features/chatgpt-connection/gmail-draft-filing-service.pglite.test.ts
+          src/features/chatgpt-connection/draft-followup-service.pglite.test.ts
           src/features/chatgpt-connection/operational-reads.pglite.test.ts
           src/features/chatgpt-connection/today-read-service.test.ts
           src/features/assistant-workspace/orchestrator.test.ts
+          src/features/assistant-workspace/gmail-draft-filing-tools.test.ts
       - name: Build API
         run: pnpm --filter @workspace/api-server build
+      - name: Typecheck API
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          pnpm run typecheck:libs
+          pnpm --filter @workspace/api-server typecheck
