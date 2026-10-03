@@ -1155,6 +1155,7 @@
       const root = this.shadowRoot;
       const dialog = root.querySelector(".early-dialog");
       if (!dialog || dialog.open) return;
+      this.lastOfferRequest = this.getAttribute("offer-request");
       this.earlyOpener = root.activeElement;
       dialog.showModal();
       if (this.isWixPreviewFrame) {
@@ -1191,6 +1192,7 @@
       this.abortController = new AbortController();
       this.bindInteractions();
       this.startBounceEntrance();
+      if (this.getAttribute("offer-request") && this.getAttribute("offer-request") !== this.lastOfferRequest) this.openEarlyOffer();
       if (this.isConventionVisit()) {
         this.openConventionWelcome();
       }
