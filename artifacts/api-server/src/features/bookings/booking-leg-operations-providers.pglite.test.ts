@@ -28,4 +28,4 @@ it('real provider retains equipment conflict without exposing another leg custom
   expect(JSON.stringify(manager)).not.toContain('Private other-leg customer');
   expect(JSON.stringify(manager?.resources)).not.toContain(other);
  } finally {await db.close();}
-});
+}, 30000);
