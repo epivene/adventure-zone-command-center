@@ -1193,11 +1193,19 @@
           if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) earlyDialog.close();
         }
       }, { signal });
-      earlyDialog.addEventListener("close", () => this.earlyOpener?.focus({ preventScroll: true }), { signal });
+      earlyDialog.addEventListener("close", () => {
+        if (this.earlyInquiryRequested) {
+          this.earlyInquiryRequested = false;
+          const nameField = root.querySelector("#az-name");
+          nameField.focus({ preventScroll: true });
+          nameField.scrollIntoView({ behavior: "instant", block: "center" });
+        } else {
+          this.earlyOpener?.focus({ preventScroll: true });
+        }
+      }, { signal });
       root.querySelector("[data-early-inquire]").addEventListener("click", () => {
+        this.earlyInquiryRequested = true;
         earlyDialog.close();
-        this.scrollToId("contact");
-        root.querySelector("#az-name").focus({ preventScroll: true });
       }, { signal });
       const menuButton = root.querySelector(".menu-toggle");
       menuButton.addEventListener("click", () => this.toggleMenu(), { signal });
