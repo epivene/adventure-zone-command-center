@@ -271,14 +271,13 @@
       padding: 80px 16px 48px; overflow: hidden; color: var(--az-cream);
       background: var(--az-navy); border-bottom: 8px solid var(--az-navy);
     }
-    .hero-backdrop, .hero-overlay, .hero-grid { position: absolute; inset: 0; }
+    .hero-backdrop, .hero-overlay { position: absolute; inset: 0; }
     .hero-backdrop { z-index: 0; }
     .hero-video, .hero-slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
     .hero-video { opacity: .6; mix-blend-mode: luminosity; }
     .hero-slide { opacity: 0; mix-blend-mode: luminosity; transform: scale(1.05); transition: opacity 1.4s ease-in-out; }
     .hero-slide.active { opacity: .6; }
     .hero-overlay { z-index: 1; background: linear-gradient(to top, var(--az-navy), rgba(15,23,41,.5), transparent); }
-    .hero-grid { z-index: 1; opacity: .3; background-size: 40px 40px; background-image: linear-gradient(to right, rgba(255,255,255,.08) 2px, transparent 2px), linear-gradient(to bottom, rgba(255,255,255,.08) 2px, transparent 2px); }
     .hero-content { position: relative; z-index: 2; width: min(1400px, 100%); margin: 0 auto; display: flex; flex-direction: column; align-items: center; }
     .eyebrow {
       display: inline-flex; align-items: center; gap: 8px; margin-bottom: 24px; padding: 6px 12px;
@@ -316,6 +315,11 @@
     .review-card .review-attribution { display: inline-block; margin: 14px 0 0; padding: 5px 9px; background: var(--az-yellow); font-weight: 800; font-size: 13px; border: 2px solid var(--az-navy); }
     .early-invitation { display: flex; align-items: center; justify-content: center; gap: 18px; padding-top: 24px; padding-bottom: 24px; }
     .early-invitation .button { white-space: normal; text-align: center; }
+    .early-invitation .offer-ticket { display: inline-flex; align-items: center; justify-content: center; gap: 12px; padding: 18px 26px; color: var(--az-white); background: var(--az-pink); border: 3px dashed var(--az-navy); border-radius: 14px; box-shadow: 5px 5px 0 var(--az-navy); transform: rotate(-3deg); font-size: 24px; text-transform: none; letter-spacing: 0; }
+    .offer-ticket > .az-icon { width: 36px; height: 36px; flex-shrink: 0; }
+    .offer-ticket small { display: block; margin-top: 4px; font-size: 12px; font-weight: 800; }
+    .early-invitation .offer-ticket:hover { transform: rotate(0deg) translateY(-2px); }
+    @media(prefers-reduced-motion: reduce) { .early-invitation .offer-ticket { transform: none; transition: none; } }
     .early-mascot { flex: 0 0 64px; width: 64px; }
     #az-name { scroll-margin-top: 120px; }
     .early-dialog { position: fixed; inset: 0; margin: auto; width: min(560px, calc(100vw - 32px)); max-height: min(640px, calc(100dvh - 32px)); overflow: auto; padding: 56px 32px 32px; border: 4px solid var(--az-navy); color: var(--az-navy); background: var(--az-cream); box-shadow: 8px 8px 0 var(--az-pink); text-align: center; }
@@ -1019,7 +1023,7 @@
 
       <section class="hero" id="hero">
         <div class="hero-backdrop"><video class="hero-video" src="${IMAGE.heroVideo}" poster="${IMAGE.hero}" autoplay loop muted playsinline preload="metadata" aria-hidden="true"></video></div>
-        <div class="hero-overlay"></div><div class="hero-grid"></div>
+        <div class="hero-overlay"></div>
         <div class="hero-content">
           <div class="eyebrow">${icon("star")}<span>America's Best Bounce House Carnival!</span>${icon("star")}</div>
           <h1 class="display">We Bring <br><span class="yellow">The Action</span></h1>
@@ -1107,7 +1111,7 @@
         ${formMarkup()}
       </div></div></section>
 
-      <aside class="early-invitation container" aria-label="Early-booking invitation"><button class="button" type="button" data-early-offer>Planning an event? Ask about 10% off!</button><div class="early-mascot" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div></aside>
+      <aside class="early-invitation container" aria-label="Early-booking invitation"><button class="button offer-ticket" type="button" data-early-offer aria-label="Planning an event? Ask about 10% off!">${icon("ticket")}<span>10% off?<small>Ask about early booking</small></span></button><div class="early-mascot" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div></aside>
       <footer class="footer"><div class="container footer-inner"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></div></footer>
       <div class="tube-man-position" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div>
       ${conventionWelcomeMarkup()}
