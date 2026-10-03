@@ -149,3 +149,9 @@ it("keeps parent leg selection and timeline aligned when URL filters change", ()
  expect(screen.getByRole("button",{name:/Hulk route/})).toHaveAttribute("aria-pressed","true");
  expect(screen.queryByRole("button",{name:"Inspect Confirmed Stop"})).not.toBeInTheDocument();
 });
+
+it("opens a linked booking directly in its route context", () => {
+ render(<EventMap events={[confirmedMapped,potentialMapped,secondConfirmedMapped]} travelLegs={[leg]} requestedSeasonYear={2026} requestedEventId="potential-mapped" showTimeline />);
+ expect(screen.getByRole("region",{name:"Selected stop"})).toHaveTextContent("Potential Stop");
+ expect(screen.getByRole("region",{name:"Selected stop"})).toHaveTextContent("Before: Confirmed Stop");
+});

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearch } from "wouter";
 import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
 import { apiFetch, apiGet, apiPut } from "@/lib/auth-token";
 import { BookingLegOperationsCard } from "@/components/bookings/leg-operations-panel";
@@ -38,6 +39,7 @@ function focusedTripMapData(detail: TripFocusDetail): FocusedTripMapData {
 }
 
 export function RoutesContent({ season, legId, status, embedded = false, managementOnly = false, onSeasonYearChange, onLegFocusChange }: RouteScheduleFilters) {
+  const requestedBookingId = new URLSearchParams(useSearch()).get("bookingId");
   const [planningSeason,setPlanningSeason] = useState(Number(season) || new Date().getFullYear());
   const [data, setData] = useState<any>(null);
   const [handoffs, setHandoffs] = useState<EquipmentHandoffView[]>([]);
@@ -111,7 +113,7 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
       <RouteConflictWarning conflicts={routeConflicts} />
       {mapView === "manager-preview" ? (
         <div className="grid gap-3"><label className="grid max-w-sm gap-1 text-sm font-semibold">Preview manager<select aria-label="Preview manager" value={previewLegId} onChange={(event) => setPreviewLegId(event.target.value)}>{activeLegs.map((leg: any) => <option key={leg.id} value={leg.id}>{leg.name}</option>)}</select></label><ManagerPreviewMap legId={previewLegId} /></div>
-      ) : <EventMap renderSelectedDetails={id => <BookingLegOperationsCard bookingId={id} role="owner" client={ownerOperationsClient} />} showTimeline controlledLegId={onLegFocusChange ? legId || null : undefined} onLegFocusChange={onLegFocusChange} events={filteredEvents} travelLegs={data.travelLegs} handoffs={handoffs} focusedTrip={focusedTrip} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTrip(null)} controlledSeasonYear={embedded && season ? Number(season) : undefined} requestedSeasonYear={season ? Number(season) : undefined} onSeasonYearChange={onSeasonYearChange} />}
+      ) : <EventMap requestedEventId={requestedBookingId} renderSelectedDetails={id => <BookingLegOperationsCard bookingId={id} role="owner" client={ownerOperationsClient} />} showTimeline controlledLegId={onLegFocusChange ? legId || null : undefined} onLegFocusChange={onLegFocusChange} events={filteredEvents} travelLegs={data.travelLegs} handoffs={handoffs} focusedTrip={focusedTrip} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTrip(null)} controlledSeasonYear={embedded && season ? Number(season) : undefined} requestedSeasonYear={season ? Number(season) : undefined} onSeasonYearChange={onSeasonYearChange} />}
     </section>
   );
 

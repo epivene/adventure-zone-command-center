@@ -35,5 +35,5 @@ export function stopContext(events:MapEvent[],selected:MapEvent,legId:string|nul
  daysBefore:before&&window?window.start-before.window!.end-1:null,
  daysAfter:after&&window?after.window!.start-window.end-1:null,
  overlaps:window?others.filter(x=>x.window!.start<=window.end&&x.window!.end>=window.start).map(x=>x.event):[],
- unknown:events.filter(e=>e.id!==selected.id&&e.travelLegId===legId&&!timelineWindow(e))};
+ unknown:events.filter(e=>legId!==null&&e.id!==selected.id&&e.travelLegId===legId&&!timelineWindow(e))};
 }

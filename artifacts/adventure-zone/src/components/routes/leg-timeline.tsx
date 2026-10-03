@@ -25,18 +25,19 @@ export function LegTimeline({events,legs,season,focusedLegId,selectedId,previewL
     const placement=timelinePlacement(window!,season,month);if(!placement)return [];
     let lane=laneEnds.findIndex(end=>end<window!.start);if(lane<0)lane=laneEnds.length;
     laneEnds[lane]=Math.max(window!.end,window!.start+(month===null?15:2));
-    return [{event,window:window!,placement,lane}];
+    const overlaps=stopContext(contextEvents,event,leg.id).overlaps;
+    return [{event,window:window!,placement,lane,overlaps}];
    });
    return {leg,bars,height:Math.max(64,laneEnds.length*58+8)};
   });
- },[events,legs,season,focusedLegId,month]);
+ },[events,contextEvents,legs,season,focusedLegId,month]);
  const unassigned=events.filter(e=>!e.travelLegId||e.travelLegAssignmentKind==="suggested");
  const invalid=events.filter(e=>!timelineWindow(e));
  function inspect(event:MapEvent){onSelect(event.id);setExpandedDetails(null);}
  const eventButton=(event:MapEvent)=><button key={event.id} type="button" aria-label={"Inspect "+event.name} aria-pressed={selectedId===event.id} className="min-h-11 rounded-lg border px-3 py-2 text-left text-sm hover:bg-orange-50" onClick={()=>inspect(event)}><strong>{event.name}</strong><span className="block text-xs">{[event.city,event.region].filter(Boolean).join(", ")} · {label(event)}{event.travelLegAssignmentKind==="suggested"?" · Suggested leg only":""}</span></button>;
  return <section aria-label="Leg timeline" className="grid min-w-0 gap-4 rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
   <header><h2 className="text-xl font-bold">Leg timeline</h2><p className="text-sm text-slate-600">{season} · Tap a stop to see its position on the map and the events around it. Scroll sideways through the season.</p>
-   <p className="mt-2 text-xs text-slate-600">Solid: confirmed · Dashed: proposed · Bars include recorded reserved days. Blank space is not verified availability.</p>
+   <p className="mt-2 text-xs text-slate-600">Solid: confirmed · Dashed: proposed · ⚠ Red outline: overlapping recorded windows. Bars include recorded reserved days. Blank space is not verified availability.</p>
   </header>
   <label className="flex flex-wrap items-center gap-2 text-sm font-semibold">Timeline zoom<select value={month??""} onChange={e=>setMonth(e.target.value===""?null:Number(e.target.value))}><option value="">Whole season</option>{Array.from({length:12},(_,i)=><option key={i} value={i}>{new Date(Date.UTC(season,i,1)).toLocaleString("en-US",{month:"long",timeZone:"UTC"})}</option>)}</select></label>
   <div className="max-w-full overflow-x-auto rounded-lg border" tabIndex={0} aria-label="Season timeline, scroll horizontally">
@@ -45,11 +46,11 @@ export function LegTimeline({events,legs,season,focusedLegId,selectedId,previewL
     {rows.map(({leg,bars,height})=><div key={leg.id} className="flex border-b last:border-0" style={{minHeight:height}}>
      <div className="sticky left-0 z-10 w-32 shrink-0 border-r bg-white p-2 text-sm font-bold" style={{borderLeft:"5px solid "+leg.color}}>{leg.name}{!bars.length?<p className="mt-1 text-xs font-normal">No dated stops in view</p>:null}</div>
      <div className="relative flex-1 bg-slate-50/50" style={{height}}>
-      {bars.map(({event,window,placement,lane})=><button key={event.id} type="button" aria-label={"Inspect "+event.name} aria-pressed={selectedId===event.id}
+      {bars.map(({event,window,placement,lane,overlaps})=><button key={event.id} type="button" aria-label={"Inspect "+event.name} aria-pressed={selectedId===event.id}
        title={event.name+" · "+window.startLabel+" – "+window.endLabel+" · "+label(event)}
        className={"absolute min-h-11 min-w-11 overflow-hidden rounded-md border-2 px-1 text-left text-xs "+(bucket(event)==="confirmed"?"bg-slate-100":"border-dashed bg-amber-50")+(selectedId===event.id?" ring-2 ring-orange-600":"")}
-       style={{left:placement.left+"%",width:placement.width+"%",top:lane*58+6,borderColor:leg.color}}
-       onClick={()=>inspect(event)}><span className="block truncate font-bold">{event.name}</span><span className="block truncate">{window.startLabel.slice(5)}–{window.endLabel.slice(5)}</span></button>)}
+       style={{left:placement.left+"%",width:placement.width+"%",top:lane*58+6,borderColor:overlaps.length?"#be123c":leg.color}}
+       onClick={()=>inspect(event)}><span className="block truncate font-bold">{overlaps.length?"⚠ ":""}{event.name}</span><span className="block truncate">{window.startLabel.slice(5)}–{window.endLabel.slice(5)}</span></button>)}
      </div>
     </div>)}
    </div>

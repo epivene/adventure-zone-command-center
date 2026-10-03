@@ -321,12 +321,14 @@ export function EventMap({
   profileBasePath = "/profiles",
   showTimeline = false,
   renderSelectedDetails,
+  requestedEventId,
   controlledLegId,
   onLegFocusChange,
 }: {
   events: MapEvent[];
   travelLegs: TravelLeg[];
   showTimeline?: boolean;
+  requestedEventId?: string | null;
   renderSelectedDetails?: (id: string) => ReactNode;
   controlledLegId?: string | null;
   onLegFocusChange?: (id: string | null) => void;
@@ -353,7 +355,8 @@ export function EventMap({
   const focusedLegId = controlledLegId === undefined ? localLegId : controlledLegId;
   function setFocusedLegId(id: string | null) { setLocalLegId(id); onLegFocusChange?.(id); }
   const [previewLegId, setPreviewLegId] = useState<string | null>(null);
-  const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
+  const [focusedEventId, setFocusedEventId] = useState<string | null>(requestedEventId ?? null);
+  useEffect(() => { setFocusedEventId(requestedEventId ?? null); }, [requestedEventId, seasonYear]);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [eventOverrides, setEventOverrides] = useState<Record<string, Pick<MapEvent, "latitude" | "longitude" | "mappingState" | "locationQuality" | "locationLabel">>>({});
   const [retryError, setRetryError] = useState<string | null>(null);
@@ -714,6 +717,7 @@ export function EventMap({
             <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-slate-500 opacity-70 ring-1 ring-slate-300" />Potential / history</span>
             <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded-full border-2 border-white bg-orange-500 ring-1 ring-orange-300" />Suggested handoff</span>
             <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded-full border-2 border-slate-900 bg-sky-500" />Approved handoff</span>
+            {showTimeline ? <span className="inline-flex items-center gap-1.5"><span className="w-6 border-t-2 border-dashed border-orange-700" />Comparison links · not road directions</span> : null}
             <span className="inline-flex items-center gap-1.5 opacity-40"><span className="size-3 rounded-full bg-slate-500" />Other legs dimmed</span>
           </div>
         </details>
