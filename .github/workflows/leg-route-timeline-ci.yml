@@ -24,7 +24,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Route and schedule regressions
-        run: pnpm --filter @workspace/adventure-zone test --maxWorkers=2 src/components/routes src/features/routes src/pages/SchedulePage.test.tsx src/pages/SchedulePage.filters.test.tsx src/pages/RoutesPage.workflow-split.test.ts
+        run: pnpm --filter @workspace/adventure-zone test --maxWorkers=2 src/components/routes src/features/routes src/pages/SchedulePage.test.tsx src/pages/SchedulePage.filters.test.tsx src/pages/RoutesPage.workflow-split.test.ts src/pages/ConnectedLegOperations.integration.test.tsx
       - name: Build frontend
         run: pnpm --filter @workspace/adventure-zone build
   frontend-suite:

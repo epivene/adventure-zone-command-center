@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearch } from "wouter";
 import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
 import { apiFetch, apiGet, apiPut } from "@/lib/auth-token";
 import { BookingLegOperationsCard } from "@/components/bookings/leg-operations-panel";
@@ -20,7 +19,7 @@ import { findSameLegDateConflicts } from "@/features/routes/route-conflicts";
 import { isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 import { eventMatchesOperationsSeason } from '@/features/bookings/operations-navigation';
 
-export type RouteScheduleFilters = { season?: string; legId?: string; status?: string; embedded?: boolean; managementOnly?: boolean; onLegFocusChange?: (id: string | null) => void; onSeasonYearChange?: (year: number) => void };
+export type RouteScheduleFilters = { bookingId?: string; season?: string; legId?: string; status?: string; embedded?: boolean; managementOnly?: boolean; onLegFocusChange?: (id: string | null) => void; onSeasonYearChange?: (year: number) => void };
 
 type TripFocusDetail = {
   trip: { id: string; name: string; startLabel: string; startLatitude: number | null; startLongitude: number | null; endLabel: string; endLatitude: number | null; endLongitude: number | null };
@@ -38,8 +37,7 @@ function focusedTripMapData(detail: TripFocusDetail): FocusedTripMapData {
   return { id: detail.trip.id, name: detail.trip.name, points };
 }
 
-export function RoutesContent({ season, legId, status, embedded = false, managementOnly = false, onSeasonYearChange, onLegFocusChange }: RouteScheduleFilters) {
-  const requestedBookingId = new URLSearchParams(useSearch()).get("bookingId");
+export function RoutesContent({ bookingId: requestedBookingId, season, legId, status, embedded = false, managementOnly = false, onSeasonYearChange, onLegFocusChange }: RouteScheduleFilters) {
   const [planningSeason,setPlanningSeason] = useState(Number(season) || new Date().getFullYear());
   const [data, setData] = useState<any>(null);
   const [handoffs, setHandoffs] = useState<EquipmentHandoffView[]>([]);
