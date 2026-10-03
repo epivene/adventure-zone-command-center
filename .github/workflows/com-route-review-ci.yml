@@ -37,6 +37,8 @@ jobs:
       - name: Typecheck API
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-        run: pnpm --filter @workspace/api-server typecheck
+        run: |
+          pnpm run typecheck:libs
+          pnpm --filter @workspace/api-server typecheck
       - name: Build API
         run: pnpm --filter @workspace/api-server build
