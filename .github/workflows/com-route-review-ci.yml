@@ -1,0 +1,33 @@
+name: Com Route Review
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/operational-review-policy.ts"
+      - "artifacts/api-server/src/features/chatgpt-connection/**"
+      - "artifacts/api-server/src/features/assistant-workspace/orchestrator.ts"
+      - ".github/workflows/com-route-review-ci.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check connector, operational reads and assistant integration
+        run: >-
+          pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000
+          src/features/chatgpt-connection/mcp-server.test.ts
+          src/features/chatgpt-connection/operational-reads.pglite.test.ts
+          src/features/chatgpt-connection/today-read-service.test.ts
+          src/features/assistant-workspace/orchestrator.test.ts
+      - name: Build API
+        run: pnpm --filter @workspace/api-server build

@@ -1,3 +1,4 @@
+import { operationalReadReviewReminder } from "../operational-review-policy";
 import { z } from "zod";
 import {
   activeConnection,
@@ -258,6 +259,8 @@ const queries: Record<Input["section"], Query> = {
   },
 };
 const limitations = [
+  operationalReadReviewReminder,
+  "availability=available means this storage read succeeded; complete=true applies only to this section. Neither establishes route, crew or equipment availability.",
   "Season plans, roster membership, availability and operating-plan drafts are separate facts. Membership is not confirmed availability; an unverified set or draft is not a commitment. Operating-plan date filters use its committed season, falling back to draft season, not actual event or crew windows.",
   "Saved records only; not a complete availability or conflict verdict. Follow every nextCursor and inspect adjacent dates before assigning resources.",
   "Booking status, leg assignment, package selection and resource allocation are separate facts. Missing deposit evidence does not release signed commitments.",
