@@ -1,6 +1,8 @@
 "use client";
 
 import { Link } from "wouter";
+import { LegTimeline } from "./leg-timeline";
+import { timelineWindow, stopContext } from "@/features/routes/leg-timeline";
 import { useEffect, useMemo, useState } from "react";
 import { eventMatchesOperationsSeason, operationsDateKey, operationsProfileHref,operationsScheduleHref } from '@/features/bookings/operations-navigation';
 import { currentOperationsSeason } from '@/features/bookings/select-profile-operations-booking';
@@ -317,9 +319,15 @@ export function EventMap({
   controlledSeasonYear,
   onSeasonYearChange,
   profileBasePath = "/profiles",
+  showTimeline = false,
+  controlledLegId,
+  onLegFocusChange,
 }: {
   events: MapEvent[];
   travelLegs: TravelLeg[];
+  showTimeline?: boolean;
+  controlledLegId?: string | null;
+  onLegFocusChange?: (id: string | null) => void;
   handoffs?: EquipmentHandoffView[];
   focusedTrip?: FocusedTripMapData | null;
   focusedTripCoordinates?: [number, number][] | null;
@@ -339,7 +347,10 @@ export function EventMap({
     if (controlledSeasonYear === undefined) setLocalSeasonYear(year);
     onSeasonYearChange?.(year);
   }
-  const [focusedLegId, setFocusedLegId] = useState<string | null>(null);
+  const [localLegId, setLocalLegId] = useState<string | null>(null);
+  const focusedLegId = controlledLegId === undefined ? localLegId : controlledLegId;
+  function setFocusedLegId(id: string | null) { setLocalLegId(id); onLegFocusChange?.(id); }
+  const [previewLegId, setPreviewLegId] = useState<string | null>(null);
   const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [eventOverrides, setEventOverrides] = useState<Record<string, Pick<MapEvent, "latitude" | "longitude" | "mappingState" | "locationQuality" | "locationLabel">>>({});
@@ -432,9 +443,11 @@ export function EventMap({
     [focusedLegId, mode, planningEvents],
   );
 
+  useEffect(() => { setPreviewLegId(null); }, [focusedEventId, seasonYear]);
+
   const currentViewport = useMemo(
-    () => viewportTarget({ primaryEvents, explicitEventId: focusedEventId, tripCoordinates: focusedTripCoordinates }),
-    [focusedEventId, focusedTripCoordinates, primaryEvents],
+    () => viewportTarget({ primaryEvents: focusedEventId ? planningEvents : primaryEvents, explicitEventId: focusedEventId, tripCoordinates: focusedTripCoordinates }),
+    [focusedEventId, focusedTripCoordinates, primaryEvents, planningEvents],
   );
 
   const focusedLegName = focusedLegId
@@ -505,7 +518,7 @@ export function EventMap({
   const routeLines = useMemo<RouteLineCollection>(() => {
     const groups = new Map<string, PlanningEvent[]>();
     for (const event of mappedEvents) {
-      if (!event.travelLegId || event.routeBucket !== "confirmed") continue;
+      if (!event.travelLegId || event.routeBucket !== "confirmed" || (showTimeline && !timelineWindow(event))) continue;
       groups.set(event.travelLegId, [...(groups.get(event.travelLegId) ?? []), event]);
     }
     const features: RouteLineCollection["features"] = [];
@@ -530,7 +543,7 @@ export function EventMap({
       }
     }
     return { type: "FeatureCollection", features };
-  }, [focusedLegId, mappedEvents]);
+  }, [focusedLegId, mappedEvents, showTimeline]);
 
   const handoffFeatures = useMemo<HandoffFeatureCollection>(() => ({
     type: "FeatureCollection",
@@ -561,6 +574,15 @@ export function EventMap({
     })),
     [routeLines.features],
   );
+
+  const selectedStop = planningEvents.find(event => event.id === focusedEventId);
+  const comparisonLegId = previewLegId ?? selectedStop?.travelLegId ?? focusedLegId;
+  const previewContext = selectedStop && comparisonLegId ? stopContext(planningEvents, selectedStop, comparisonLegId) : null;
+  const previewLines = showTimeline && selectedStop && timelineWindow(selectedStop) && previewContext
+    ? [previewContext.before, previewContext.after].flatMap(neighbor => {
+      if (!neighbor || !mappedIds.has(neighbor.id) || !mappedIds.has(selectedStop.id)) return [];
+      return [{ coordinates: [[neighbor.longitude!, neighbor.latitude!], [selectedStop.longitude!, selectedStop.latitude!]] as [number, number][], color: "#c2410c", emphasis: "primary" as const, dashed: true }];
+    }) : [];
 
   return (
     <div className="grid gap-5">
@@ -695,7 +717,7 @@ export function EventMap({
           <ManagerRouteMapLayers
             events={planningEvents}
             handoffs={handoffs.filter((handoff) => new Date(handoff.windowStartsAt).getFullYear() === seasonYear)}
-            routeLines={planningRouteLines}
+            routeLines={[...planningRouteLines, ...previewLines]}
             focusedEventId={focusedEventId}
             managerMode="on-road"
             focusedTrip={focusedTrip}
@@ -706,6 +728,7 @@ export function EventMap({
         </ManagerRouteMapShell>
       </div>
 
+      {showTimeline ? <LegTimeline events={planningEvents} legs={travelLegs} season={seasonYear} focusedLegId={focusedLegId} selectedId={focusedEventId} previewLegId={previewLegId} onSelect={setFocusedEventId} onPreviewLeg={setPreviewLegId} profileBasePath={profileBasePath} /> : null}
       <ManagerTripNavigationActions trip={focusedTrip} mode="on-road" />
 
       <div className="grid gap-5 xl:grid-cols-2">

@@ -16,6 +16,7 @@ export type FocusedTripMapData = {
 };
 
 export type PlanningRouteLine = {
+  dashed?: boolean;
   coordinates: [number, number][];
   color: string;
   emphasis: "primary" | "dimmed";
@@ -162,6 +163,7 @@ export function ManagerRouteMapLayers({
         routeLine.coordinates.map(([longitude, latitude]) => [latitude, longitude] as [number, number]),
         {
           color: routeLine.color,
+          dashArray: routeLine.dashed ? "8 6" : undefined,
           weight: routeLine.emphasis === "dimmed" ? 2 : 4,
           opacity: routeLine.emphasis === "dimmed" ? 0.2 : 0.7,
         },
