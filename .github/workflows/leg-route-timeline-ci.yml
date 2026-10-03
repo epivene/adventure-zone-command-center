@@ -1,0 +1,29 @@
+name: Leg Route Timeline
+on:
+  pull_request:
+    paths:
+      - "artifacts/adventure-zone/src/components/routes/**"
+      - "artifacts/adventure-zone/src/features/routes/**"
+      - "artifacts/adventure-zone/src/pages/RoutesPage.tsx"
+      - "artifacts/adventure-zone/src/pages/SchedulePage.tsx"
+      - ".github/workflows/leg-route-timeline-ci.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Route and schedule regressions
+        run: pnpm --filter @workspace/adventure-zone test --maxWorkers=2 src/components/routes src/features/routes src/pages/SchedulePage.test.tsx src/pages/RoutesPage.test.tsx
+      - name: Build frontend
+        run: pnpm --filter @workspace/adventure-zone build
