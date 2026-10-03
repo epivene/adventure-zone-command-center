@@ -1,3 +1,4 @@
+import { installReviewedDateFixtures } from "../booking-date-repair/date-fixtures";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { readFile } from "node:fs/promises";
@@ -30,9 +31,10 @@ INSERT INTO package_templates(id,name,code,normal_capacity) VALUES('${ids.packag
 INSERT INTO booking_package_selections VALUES('${ids.booking}','${ids.package}');
 INSERT INTO boss_accounts(id,enabled) VALUES('${ids.boss}',true);
 `;
-export async function planningDatabase() {
+export async function planningDatabase(options: {reviewDates?:boolean} = {}) {
   const pg = new PGlite();
   await pg.exec(planningFixtureSql);
+  if(options.reviewDates !== false) await installReviewedDateFixtures(pg);
   // PGlite has one connection; this test-only no-op is NOT concurrency evidence.
   await pg.exec(`CREATE FUNCTION pg_advisory_xact_lock(bigint) RETURNS void LANGUAGE plpgsql AS $$ BEGIN RETURN; END $$;
     CREATE TABLE outreach_candidates(checked_at timestamptz,source_snapshot jsonb);`);

@@ -1,3 +1,4 @@
+import type { ResolvedDates } from "../booking-date-repair/date-evidence";
 import { commitmentTransaction, reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 
@@ -52,6 +53,7 @@ export type MapEventRecord = {
   legAssignmentExplanation: string | null;
   startsAt: Date | null;
   endsAt: Date | null;
+  dateProvenance?: ResolvedDates;
   dateOnly?: boolean;
   reservedDateOnly?: boolean;
   reservedEndExclusive?: boolean;
@@ -89,7 +91,7 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
   async listMapEvents(): Promise<MapEventRecord[]> {
     const [records, assignmentRows, allLegs] = await Promise.all([
       this.database
-        .select({ booking: bookings, travelLeg: travelLegs, reservedWindow: bookingOperationalWindows, importedDates: sql<boolean>`EXISTS(SELECT 1 FROM google_operational_calendar_links c WHERE c.booking_id=${bookings.id} AND c.last_app_snapshot->>'imported'='true')` })
+        .select({ booking: bookings, travelLeg: travelLegs, reservedWindow: bookingOperationalWindows, dateProvenance: sql<ResolvedDates>`booking_resolved_dates(${bookings.id},${bookings.startsAt},${bookings.endsAt},${bookingOperationalWindows.startsAt},${bookingOperationalWindows.endsAt})`, importedDates: sql<boolean>`EXISTS(SELECT 1 FROM google_operational_calendar_links c WHERE c.booking_id=${bookings.id} AND c.last_app_snapshot->>'imported'='true')` })
         .from(bookings)
         .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
         .leftJoin(bookingOperationalWindows, eq(bookings.id, bookingOperationalWindows.bookingId))
@@ -100,7 +102,7 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
     const assignmentByBooking = new Map(assignmentRows.map((row) => [row.bookingId, row]));
     const legById = new Map(allLegs.map((leg) => [leg.id, leg]));
 
-    return records.map(({ booking, travelLeg, reservedWindow, importedDates }) => {
+    return records.map(({ booking, travelLeg, reservedWindow, importedDates, dateProvenance }) => {
       const assignment = assignmentByBooking.get(booking.id) ?? null;
       const routeBucket = classifyRouteBucket(booking.status, booking.probability);
       const canProjectSuggestion = routeBucket === "potential";
@@ -146,17 +148,18 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
         travelLegAssignmentKind,
         legAssignmentWarning: assignment?.warning as MapEventRecord["legAssignmentWarning"] ?? null,
         legAssignmentExplanation: assignment?.explanation ?? null,
-        startsAt: booking.startsAt,
-        endsAt: booking.endsAt,
-        dateOnly: isImportedCalendarDate(booking.startsAt, importedDates),
-        reservedDateOnly: reservedWindow?.source === 'google_calendar',
-        reservedEndExclusive: reservedWindow?.source === 'google_calendar',
-        reservedStartsAt: reservedWindow?.startsAt ?? null,
-        reservedEndsAt: reservedWindow?.endsAt ?? null,
+        startsAt: dateProvenance.publicWindow ? new Date(dateProvenance.publicWindow.start) : null,
+        endsAt: dateProvenance.publicWindow ? new Date(new Date(dateProvenance.publicWindow.end).getTime() - (dateProvenance.publicEndExclusive ? 1 : 0)) : null,
+        dateProvenance,
+        dateOnly: false,
+        reservedDateOnly: false,
+        reservedEndExclusive: dateProvenance.reservationEndExclusive,
+        reservedStartsAt: dateProvenance.reservationWindow ? new Date(dateProvenance.reservationWindow.start) : null,
+        reservedEndsAt: dateProvenance.reservationWindow ? new Date(dateProvenance.reservationWindow.end) : null,
         routeBucket,
         locationQuality,
         locationLabel,
-        seasonYear: operationsSeason(booking.startsAt, isImportedCalendarDate(booking.startsAt, importedDates)),
+        seasonYear: operationsSeason(dateProvenance.verifiedPublicStart ?? dateProvenance.publicWindow?.start ?? null, false),
       };
     });
   }

@@ -1,3 +1,4 @@
+import type { BookingDateProvenance } from "@workspace/api-zod";
 import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import {
@@ -65,6 +66,7 @@ export type UpdateBookingStatusInput = {
 };
 
 export type BookingListRecord = {
+  dateProvenance?: BookingDateProvenance;
   id: string;
   name: string;
   organization: { id: string; name: string } | null;
@@ -79,6 +81,7 @@ export type BookingListRecord = {
 };
 
 export type BookingDetail = {
+  dateProvenance?: BookingDateProvenance;
   booking: typeof bookings.$inferSelect;
   organization: typeof organizations.$inferSelect | null;
   contact: typeof contacts.$inferSelect | null;

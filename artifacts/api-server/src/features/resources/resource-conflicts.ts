@@ -22,6 +22,7 @@ type OccupiedReservation = {
 const warningOrder: Record<ResourceWarningCode, number> = {
   ATTRACTION_TOTAL_MISMATCH: 0,
   RESOURCE_UNAVAILABLE: 1,
+  RESOURCE_DATE_EVIDENCE_UNRESOLVED: 1,
   RESOURCE_OVERLAP: 2,
   RESOURCE_LOCATION_UNKNOWN: 3,
   TRANSFER_TRIP_MISSING: 4,
@@ -31,6 +32,8 @@ const warningOrder: Record<ResourceWarningCode, number> = {
 function occupiedWindow(
   reservation: ResourceReservation,
 ): OccupiedReservation | null {
+  if (reservation.dateProvenance?.evidenceState === 'needs_review') return null;
+  if (reservation.dateProvenance && (!reservation.startsAt || !reservation.endsAt)) return null;
   if (!reservation.startsAt) return null;
   const startDay = businessDayBounds(reservation.startsAt);
   const endReference =
@@ -258,6 +261,13 @@ export async function detectResourceConflicts(input: {
       );
     }
 
+    const unresolved = orderedGroup.filter(r=>r.dateProvenance?.evidenceState === "needs_review");
+    if(unresolved.length) warnings.push(warning({
+      code:"RESOURCE_DATE_EVIDENCE_UNRESOLVED",resourceId,
+      assignmentIds:orderedGroup.map(r=>r.assignmentId),
+      fingerprint:unresolved.map(r=>`${r.bookingId}:${JSON.stringify(r.dateProvenance)}`),
+      message:`${orderedGroup[0].resourceName} has a booking with unresolved date evidence. Review its public and reservation sources before claiming availability.`,
+    }));
     const occupied = orderedGroup
       .map(occupiedWindow)
       .filter((item): item is OccupiedReservation => item !== null)

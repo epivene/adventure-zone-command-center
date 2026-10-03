@@ -1,6 +1,7 @@
+import type { ResolvedDates } from "../booking-date-repair/date-evidence";
 import { allocationEnabled } from "@/features/outreach-planner/outreach-allocation";
 import { commitmentTransaction, reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
-import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { err, ok, type Result } from "@/lib/result";
 import type { db as database } from "@/db/client";
 import {
@@ -11,6 +12,7 @@ import {
   bookingResourcePackageAttributions,
   bookingSpecialRequests,
   bookings,
+  bookingOperationalWindows,
   contacts,
   callSessions,
   followUps,
@@ -81,6 +83,7 @@ export type UpdateBookingStatusInput = {
 };
 
 export type BookingListRecord = {
+  dateProvenance?: ResolvedDates;
   id: string;
   name: string;
   organization: { id: string; name: string } | null;
@@ -95,6 +98,7 @@ export type BookingListRecord = {
 };
 
 export type BookingDetail = {
+  dateProvenance?: ResolvedDates;
   booking: typeof bookings.$inferSelect;
   organization: typeof organizations.$inferSelect | null;
   contact: typeof contacts.$inferSelect | null;
@@ -366,10 +370,11 @@ export class DrizzleBookingRepository implements BookingRepository {
   async listBookings(): Promise<BookingListRecord[]> {
     const [records, openFollowUps] = await Promise.all([
       this.database
-        .select({ booking: bookings, organization: organizations, travelLeg: travelLegs })
+        .select({ booking: bookings, organization: organizations, travelLeg: travelLegs, dateProvenance: sql<ResolvedDates>`booking_resolved_dates(${bookings.id},${bookings.startsAt},${bookings.endsAt},${bookingOperationalWindows.startsAt},${bookingOperationalWindows.endsAt})` })
         .from(bookings)
         .leftJoin(organizations, eq(bookings.organizationId, organizations.id))
         .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
+        .leftJoin(bookingOperationalWindows,eq(bookings.id,bookingOperationalWindows.bookingId))
         .orderBy(desc(bookings.updatedAt)),
       this.database
         .select()
@@ -393,7 +398,8 @@ export class DrizzleBookingRepository implements BookingRepository {
       }
     }
 
-    return records.map(({ booking, organization, travelLeg }) => ({
+    return records.map(({ booking, organization, travelLeg, dateProvenance }) => ({
+      dateProvenance,
       id: booking.id,
       name: booking.name,
       organization: organization
@@ -419,11 +425,13 @@ export class DrizzleBookingRepository implements BookingRepository {
         organization: organizations,
         contact: contacts,
         travelLeg: travelLegs,
+        dateProvenance:sql<ResolvedDates>`booking_resolved_dates(${bookings.id},${bookings.startsAt},${bookings.endsAt},${bookingOperationalWindows.startsAt},${bookingOperationalWindows.endsAt})`,
       })
       .from(bookings)
       .leftJoin(organizations, eq(bookings.organizationId, organizations.id))
       .leftJoin(contacts, eq(bookings.primaryContactId, contacts.id))
       .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
+        .leftJoin(bookingOperationalWindows,eq(bookings.id,bookingOperationalWindows.bookingId))
       .where(eq(bookings.id, bookingId))
       .limit(1);
 

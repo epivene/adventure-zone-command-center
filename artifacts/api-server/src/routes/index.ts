@@ -1,3 +1,4 @@
+import { createBookingDateRepairsRouter } from "./booking-date-repairs";
 import { createEmailThreadAttentionRouter } from "./email-thread-attention";
 import { createEmailAttentionService } from "../features/google-workspace/email-thread-attention-runtime";
 import assistantWorkspaceRouter from "./assistant-workspace";
@@ -345,6 +346,7 @@ router.use(earlyBirdPromoRouter);
 router.use(eventProfileDescriptionRouter);
 router.use(eventProfileVenueSummaryRouter);
 router.use(profileResearchRouter);
+router.use(createBookingDateRepairsRouter());
 router.use(eventDateCoverageRouter);
 router.use(profileResearchIntakeRouter);
 router.use(profileResearchSourcesRouter);

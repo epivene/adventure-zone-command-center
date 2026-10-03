@@ -63,6 +63,7 @@ export function withResourceConflictOverrides(
     overrides.map((override) => [override.conflictKey, override]),
   );
   return warnings.map((warning) => {
+    if(warning.code === 'RESOURCE_DATE_EVIDENCE_UNRESOLVED') return {...warning,overridden:false,override:null};
     const override = overrideByKey.get(warning.conflictKey);
     return override
       ? {

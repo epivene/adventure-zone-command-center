@@ -8,6 +8,12 @@ vi.hoisted(() => {
 import { runRequiredSchemaStartup } from "./required-schema-startup";
 
 describe("runRequiredSchemaStartup", () => {
+  it("cannot become ready when booking date evidence is unavailable",async()=>{
+    await expect(runRequiredSchemaStartup({
+      run: async(name,step)=>name==="required booking date evidence schema"?step():true,
+      ensureBookingDates: async()=>{throw new Error("BOOKING_DATE_SCHEMA_REQUIRED");},
+    })).rejects.toThrow("BOOKING_DATE_SCHEMA_REQUIRED");
+  });
   it("does not become ready when required leg planning verification fails", async () => {
     await expect(runRequiredSchemaStartup({
       run: async (name, step) => name === 'required leg planning schema' ? step() : true,
@@ -46,6 +52,7 @@ describe("runRequiredSchemaStartup", () => {
         return true;
       },
       ensureLegAssignment: async () => false,
+      ensureBookingDates: async () => true,
       ensureYearEndInspections: async () => false,
       ensureEventReviewDismissals: async () => false,
       ensureFollowUpDismissals: async () => true,
@@ -67,7 +74,7 @@ describe("runRequiredSchemaStartup", () => {
     expect(timeouts.get("required paper notes schema")).toBe(120_000);
     expect(timeoutHooks.get("required paper notes schema")).toBeUndefined();
     expect(calls).toEqual([
-      "required booking work schema",
+      "required booking date evidence schema",      "required booking work schema",
       "required email thread attention schema",
       "required paper notes schema",
       "required inbound calling schema",
@@ -108,6 +115,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureGoogleWorkspace: unchanged,
       ensureLeadIntake: unchanged,
       ensureLegAssignment: unchanged,
+      ensureBookingDates: unchanged,
       ensureYearEndInspections: unchanged,
       ensureEventReviewDismissals: unchanged,
       ensureFollowUpDismissals: unchanged,
@@ -150,6 +158,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureGoogleWorkspace: unchanged,
       ensureLeadIntake: unchanged,
       ensureLegAssignment: unchanged,
+      ensureBookingDates: unchanged,
       ensureYearEndInspections: unchanged,
       ensureEventReviewDismissals: unchanged,
       ensureFollowUpDismissals: unchanged,

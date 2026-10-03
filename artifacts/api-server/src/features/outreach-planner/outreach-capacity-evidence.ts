@@ -1,3 +1,5 @@
+import { operationsDateKey } from "../bookings/booking-leg-operations-history";
+import type { ResolvedDates } from "../booking-date-repair/date-evidence";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { isBookedForSchedule } from "../calendar/schedule-booking-state";
@@ -58,6 +60,7 @@ export function canonicalPackageQuantities(values: Record<string, number>) {
   return result;
 }
 export type BookingFact = {
+  date_provenance?: ResolvedDates;
   id: string;
   name: string;
   starts_at: string | null;
@@ -255,11 +258,11 @@ export function semanticAllocationFacts(f: AllocationFacts): AllocationFacts {
 export async function loadAllocationFacts(
   db: QueryDatabase,
 ): Promise<AllocationFacts> {
-  return semanticAllocationFacts(
+  const facts = semanticAllocationFacts(
     rowsOf<{ facts: AllocationFacts }>(
       await db.execute(sql`select jsonb_build_object(
     'generation',(select generation from outreach_allocation_mutex where id=1),
-    'bookings',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]') from (select id,name,starts_at,ends_at,status,probability,travel_leg_id,latitude,longitude from bookings) t),
+    'bookings',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]') from (select b.id,b.name,b.starts_at,b.ends_at,b.status,b.probability,b.travel_leg_id,b.latitude,b.longitude,booking_resolved_dates(b.id,b.starts_at,b.ends_at,w.starts_at,w.ends_at) as date_provenance from bookings b left join booking_operational_windows w on w.booking_id=b.id) t),
     'windows',(select coalesce(jsonb_agg(to_jsonb(t) order by t.booking_id),'[]') from booking_operational_windows t),
     'selections',(select coalesce(jsonb_agg(to_jsonb(t) order by t.booking_id,t.package_template_id),'[]') from booking_package_selections t),
     'assignments',(select coalesce(jsonb_agg(to_jsonb(t) order by t.booking_id,t.resource_id),'[]') from booking_resource_assignments t),
@@ -276,6 +279,14 @@ export async function loadAllocationFacts(
   ) as facts`),
     )[0].facts,
   );
+  facts.bookings = facts.bookings.map(b => ({
+    ...b, starts_at: b.date_provenance?.publicWindow?.start ?? null, ends_at: b.date_provenance?.publicWindow ? new Date(new Date(b.date_provenance.publicWindow.end).getTime()-(b.date_provenance.publicEndExclusive?1:0)).toISOString() : null,
+  }));
+  facts.windows = facts.windows.flatMap(w => {
+    const dates = facts.bookings.find(b => b.id === w.booking_id)?.date_provenance;
+    return dates?.reservationWindow ? [{...w,starts_at:dates.reservationWindow.start,ends_at:new Date(new Date(dates.reservationWindow.end).getTime()-(dates.reservationEndExclusive?1:0)).toISOString(),source:"reviewed_timestamp"}] : [];
+  });
+  return facts;
 }
 export function bookingDemandFacts(
   f: AllocationFacts,
@@ -288,6 +299,7 @@ export function bookingDemandFacts(
     id,
     starts_at,
     ends_at,
+    date_provenance:b.date_provenance,
     travel_leg_id,
     latitude,
     longitude,
@@ -323,6 +335,8 @@ export function targetForBooking(
   const b = f.bookings.find((x) => x.id === bookingId),
     d = f.demands.find((x) => x.booking_id === bookingId);
   const reasons: string[] = [];
+  if (!b?.date_provenance?.publicWindow || ((b.date_provenance.rawReservation.start || b.date_provenance.rawReservation.end) && !b.date_provenance.reservationWindow))
+    return { target: null, reasons: ["Booking date evidence is unresolved."] };
   if (
     !b?.starts_at ||
     !b.ends_at ||
@@ -379,7 +393,7 @@ export function targetForBooking(
       );
   }
   if (reasons.length) return { target: null, reasons };
-  // Treat prospects with the same default -2/+1 operational occupancy as definite bookings.
+  // Project only the independently verified public/reservation windows.
   const [projected] = applyOperationalWindowsToCalendarBookings(
     [
       {
@@ -387,6 +401,7 @@ export function targetForBooking(
         startsAt: new Date(b.starts_at),
         endsAt: new Date(b.ends_at),
         status: "confirmed",
+        dateProvenance: b.date_provenance,
       },
     ],
     f.windows
@@ -400,10 +415,10 @@ export function targetForBooking(
   );
   const target = {
     bookingId,
-    eventStartsOn: day(b.starts_at),
-    eventEndsOn: day(b.ends_at),
-    startsOn: day(projected.startsAt!),
-    endsOn: day(projected.endsAt!),
+    eventStartsOn: operationsDateKey(b.starts_at),
+    eventEndsOn: operationsDateKey(b.ends_at),
+    startsOn: operationsDateKey(projected.startsAt!),
+    endsOn: operationsDateKey(projected.endsAt!),
     legId: b.travel_leg_id!,
     quantities: d!.quantities,
     resourceIds: [...d!.resource_ids].sort(),
@@ -498,6 +513,10 @@ export function projectReservations(
   for (const b of f.bookings.filter(isBookedForSchedule)) {
     if (b.id === target.bookingId) continue;
     const result = targetForBooking(f, b.id);
+    if (result.reasons.includes("Booking date evidence is unresolved.")) {
+      projection.reasons.push("Booking " + b.id + ": Booking date evidence is unresolved.");
+      continue;
+    }
     if (!result.target) {
       // Missing demand on an unrelated dated history row must not block current work.
       const [p] = applyOperationalWindowsToCalendarBookings(
@@ -508,6 +527,7 @@ export function projectReservations(
             endsAt: b.ends_at ? new Date(b.ends_at) : null,
             status: b.status,
             probability: b.probability,
+            dateProvenance: b.date_provenance,
           },
         ],
         f.windows
@@ -522,7 +542,7 @@ export function projectReservations(
       if (
         !p.startsAt ||
         !p.endsAt ||
-        overlaps(target, { startsOn: day(p.startsAt), endsOn: day(p.endsAt) })
+        overlaps(target, { startsOn: operationsDateKey(p.startsAt), endsOn: operationsDateKey(p.endsAt) })
       )
         projection.reasons.push(`Booking ${b.id}: ${result.reasons.join(" ")}`);
       // Adjacent stops still matter even if package demand is missing.
@@ -538,10 +558,10 @@ export function projectReservations(
       ) {
         projection.stops.push({
           bookingId: b.id,
-          eventStartsOn: b.starts_at ? day(b.starts_at) : day(p.startsAt),
-          eventEndsOn: b.ends_at ? day(b.ends_at) : day(p.endsAt),
-          startsOn: day(p.startsAt),
-          endsOn: day(p.endsAt),
+          eventStartsOn: b.starts_at ? operationsDateKey(b.starts_at) : operationsDateKey(p.startsAt),
+          eventEndsOn: b.ends_at ? operationsDateKey(b.ends_at) : operationsDateKey(p.endsAt),
+          startsOn: operationsDateKey(p.startsAt),
+          endsOn: operationsDateKey(p.endsAt),
           legId: b.travel_leg_id ?? "",
           quantities: {},
           resourceIds: f.assignments

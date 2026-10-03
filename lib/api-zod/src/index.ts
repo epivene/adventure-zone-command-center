@@ -6,3 +6,5 @@ export * from "./manager-schedule";
 export * from "./design-studio-email";
 export * from "./booking-leg-operations";
 export * from "./leg-planning";
+
+export * from "./booking-date-provenance";

@@ -1,3 +1,4 @@
+import { ensureBookingDateSchemaBeforeListen } from "./booking-date-required-startup";
 import { ensureEmailThreadAttentionSchemaBeforeListen } from "./email-thread-attention-schema";
 import { ensureLegPlanningSchemaBeforeListen, legPlanningEnabled } from './leg-planning-required-startup';
 import { ensureBookingWorkSchemaBeforeListen } from "./booking-work-required-startup";
@@ -67,6 +68,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureGoogleWorkspace?: RequiredStep;
   ensureLeadIntake?: RequiredStep;
   ensureLegAssignment?: RequiredStep;
+  ensureBookingDates?: RequiredStep;
   ensureYearEndInspections?: RequiredStep;
   ensureEventReviewDismissals?: RequiredStep;
   ensureFollowUpDismissals?: RequiredStep;
@@ -87,9 +89,6 @@ export async function runRequiredSchemaStartup(dependencies?: {
   sleep?: (delayMs: number) => Promise<void>;
 }): Promise<void> {
   const run = dependencies?.run ?? runStartupStep;
-  if (legPlanningEnabled() || dependencies?.ensureLegPlanning) {
-    await run('required leg planning schema', dependencies?.ensureLegPlanning ?? ensureLegPlanningSchemaBeforeListen, REQUIRED_SCHEMA_TIMEOUT_MS);
-  }
   const sleep = dependencies?.sleep ?? systemSleep;
   const runRequired = async (
     name: string,
@@ -108,6 +107,10 @@ export async function runRequiredSchemaStartup(dependencies?: {
       }
     }
   };
+  await runRequired("required booking date evidence schema", dependencies?.ensureBookingDates ?? ensureBookingDateSchemaBeforeListen);
+  if (legPlanningEnabled() || dependencies?.ensureLegPlanning) {
+    await runRequired('required leg planning schema', dependencies?.ensureLegPlanning ?? ensureLegPlanningSchemaBeforeListen);
+  }
   await runRequired("required booking work schema", dependencies?.ensureBookingWork ?? ensureBookingWorkSchemaBeforeListen);
   await runRequired("required email thread attention schema", dependencies?.ensureEmailThreadAttention ?? ensureEmailThreadAttentionSchemaBeforeListen);
   if (process.env.CHATGPT_CONNECTION_ENABLED === "true" || dependencies?.ensureChatGPTConnection) {

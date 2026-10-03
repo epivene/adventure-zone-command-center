@@ -1,3 +1,4 @@
+import { BookingDateRepairs } from "@/features/event-date-coverage/BookingDateRepairs";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
@@ -32,6 +33,7 @@ export default function EventDateCoveragePage() {
   const summary = coverage.data?.summary;
   return <div className="mx-auto max-w-7xl space-y-6 pb-12">
     <header><p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">Admin Tools</p><h1 className="mt-1 text-3xl font-bold">Event Date Coverage</h1><p className="mt-2 text-muted-foreground">Find the next responsible date for every event profile without turning research into a booking.</p></header>
+    <BookingDateRepairs/>
     <section aria-label="Coverage totals" className="grid grid-cols-2 gap-3 md:grid-cols-6">{filters.slice(1).map(([key, label]) => <button className="rounded-xl border bg-card p-3 text-left" key={key} onClick={() => setFilter("status", key)} type="button"><span className="text-xs font-bold text-muted-foreground">{label}</span><strong className="block text-2xl">{key === "all" ? 0 : summary?.[key] ?? 0}</strong></button>)}</section>
     <section className="rounded-xl border bg-card p-4"><div className="flex flex-wrap gap-3"><input aria-label="Search profiles" className="min-w-56 flex-1" defaultValue={search} onChange={(event) => setFilter("search", event.target.value)} placeholder="Search profiles"/><select aria-label="Date status" onChange={(event) => setFilter("status", event.target.value === "all" ? "" : event.target.value)} value={status}>{filters.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button className="button-primary" disabled={start.isPending} onClick={() => start.mutate(selected.size ? { organizationIds: [...selected], batchSize: Math.max(25, selected.size) } : { batchSize: 25 })} type="button">{selected.size ? `Research selected (${selected.size})` : "Research next 25"}</button></div>
       {run.data ? <p className="mt-3 text-sm" role="status">Run {run.data.status}: {run.data.items?.filter((item) => !["queued", "researching"].includes(item.status)).length ?? 0}/{run.data.items?.length ?? 0} complete</p> : null}

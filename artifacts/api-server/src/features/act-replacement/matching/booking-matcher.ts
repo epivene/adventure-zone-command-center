@@ -46,7 +46,13 @@ export function matchBooking(
   if (organizationMatch.kind !== "exact") return { kind: "none", reason: "organization_match_not_exact" };
   const sourceName = normalizeMatchingText(source.name);
   const sourceDay = day(source.startsAt);
-  if (!sourceName || !sourceDay) return { kind: "none", reason: "booking_name_or_date_missing" };
+  if (!sourceName) return { kind: "none", reason: "booking_name_or_date_missing" };
+  if (!sourceDay) {
+    const possible = uniqueSorted(locals.filter(candidate => candidate.organizationId === organizationMatch.localId && normalizeMatchingText(candidate.name) === sourceName).map(candidate => candidate.id));
+    return possible.length
+      ? { kind: "ambiguous", candidateIds: possible, reason: "booking_event_date_unverified" }
+      : { kind: "none", reason: "booking_name_or_date_missing" };
+  }
   const evidenceByCandidate = locals
     .filter((candidate) => candidate.organizationId === organizationMatch.localId)
     .map((candidate) => {

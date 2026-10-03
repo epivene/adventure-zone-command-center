@@ -249,20 +249,20 @@ describe("DrizzleApplyRepository", () => {
       const rendered = dialect.sqlToQuery(query).sql;
       statements.push(rendered);
       if (rendered.startsWith("update act_replacement_apply_batches")) return { rows: [{ id: attempt.batchId }] };
-      if (rendered.startsWith("update bookings")) return { rows: [{ value: new Date("2026-08-07T12:00:00.000Z") }] };
+      if (rendered.startsWith("update activities")) return { rows: [{ value: new Date("2026-08-07T12:00:00.000Z") }] };
       throw new Error(`Unexpected SQL: ${rendered}`);
     };
     const database = { execute, transaction: async (callback: (tx: { execute: typeof execute }) => Promise<unknown>) => callback({ execute }) } as never;
 
     await new DrizzleApplyRepository(database).fillMissingTarget(
-      { id: "booking-1", entityType: "booking", values: { startsAt: null } },
-      "startsAt",
+      { id: "booking-1", entityType: "activity", values: { sourceOccurredAt: null } },
+      "sourceOccurredAt",
       "2026-08-07T12:00:00.000Z",
       attempt,
     );
 
-    expect(statements[1]).toContain("starts_at is null");
-    expect(statements[1]).not.toContain("starts_at is null or");
+    expect(statements[1]).toContain("occurred_at is null");
+    expect(statements[1]).not.toContain("occurred_at is null or");
   });
 
   it.each([
@@ -275,8 +275,8 @@ describe("DrizzleApplyRepository", () => {
       const rendered = dialect.sqlToQuery(query).sql;
       statements.push(rendered);
       if (rendered.startsWith("update act_replacement_apply_batches")) return { rows: [{ id: attempt.batchId }] };
-      if (rendered.startsWith("update bookings")) return { rows: [] };
-      if (rendered.startsWith("select starts_at as value")) {
+      if (rendered.startsWith("update activities")) return { rows: [] };
+      if (rendered.startsWith("select occurred_at as value")) {
         return { rows: [{ value: new Date("2026-08-07T12:00:00.000Z"), ...(rendered.includes("is not distinct from") ? { sameValue } : {}) }] };
       }
       throw new Error(`Unexpected SQL: ${rendered}`);
@@ -284,12 +284,12 @@ describe("DrizzleApplyRepository", () => {
     const database = { execute, transaction: async (callback: (tx: { execute: typeof execute }) => Promise<unknown>) => callback({ execute }) } as never;
 
     await expect(new DrizzleApplyRepository(database).fillMissingTarget(
-      { id: "booking-1", entityType: "booking", values: { startsAt: null } },
-      "startsAt",
+      { id: "booking-1", entityType: "activity", values: { sourceOccurredAt: null } },
+      "sourceOccurredAt",
       payload,
       attempt,
     )).resolves.toBe(expected);
-    expect(statements[2]).toContain("starts_at is not distinct from");
+    expect(statements[2]).toContain("occurred_at is not distinct from");
   });
 
   it("durably records an idempotent external source link", async () => {

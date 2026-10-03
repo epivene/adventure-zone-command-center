@@ -25,6 +25,7 @@ export type Opportunity = {
   postalCode: string | null;
   startsAt: string | null;
   endsAt: string | null;
+  salesMilestones?: { estimatedCloseDate: string | null; actualCloseDate: string | null };
   actStatus: string | null;
   localStatus: string | null;
   probabilityPercent: number | null;
@@ -107,8 +108,12 @@ export const normalizeOpportunity = (
     ...a,
     city,
     region,
-    startsAt: text(r, ["estimatedCloseDate", "EstimatedCloseDate"]),
-    endsAt: text(r, ["actualCloseDate", "ActualCloseDate"]),
+    startsAt: null as string | null,
+    endsAt: null as string | null,
+    salesMilestones: {
+      estimatedCloseDate: text(r, ["estimatedCloseDate", "EstimatedCloseDate"]),
+      actualCloseDate: text(r, ["actualCloseDate", "ActualCloseDate"]),
+    },
     actStatus: status,
     localStatus: ls,
     probabilityPercent: lp ? null : pv,
@@ -119,12 +124,12 @@ export const normalizeOpportunity = (
         : text(r, ["total", "Total"]),
     notes: text(r, ["notes", "Notes"]),
   };
-  if (v.startsAt && !validDate(v.startsAt)) {
+  if (v.salesMilestones.estimatedCloseDate && !validDate(v.salesMilestones.estimatedCloseDate)) {
     z.w.add("malformed_opportunity_date");
     z.p.add("estimatedCloseDate");
     v.startsAt = null;
   }
-  if (v.endsAt && !validDate(v.endsAt)) {
+  if (v.salesMilestones.actualCloseDate && !validDate(v.salesMilestones.actualCloseDate)) {
     z.w.add("malformed_opportunity_date");
     z.p.add("actualCloseDate");
     v.endsAt = null;

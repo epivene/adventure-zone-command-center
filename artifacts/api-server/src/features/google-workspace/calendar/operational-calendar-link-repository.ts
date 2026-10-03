@@ -1,6 +1,6 @@
 import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { createHash } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -83,7 +83,7 @@ function dateOnly(value: unknown, label: string): Date {
     throw new Error(`GOOGLE_OPERATIONAL_CALENDAR_${label}_INVALID`);
   }
   const result = new Date(`${value}T00:00:00.000Z`);
-  if (!Number.isFinite(result.getTime())) {
+  if (!Number.isFinite(result.getTime()) || result.toISOString().slice(0, 10) !== value) {
     throw new Error(`GOOGLE_OPERATIONAL_CALENDAR_${label}_INVALID`);
   }
   return result;
@@ -329,7 +329,7 @@ export class OperationalCalendarLinkRepository {
       const packageKey = packageKeyValue as OperationalCalendarPackageKey;
       const reservedStart = dateOnly(google.startDate, "RESERVED_START");
       const reservedEnd = dateOnly(google.endDateExclusive, "RESERVED_END");
-      if (reservedEnd < reservedStart) throw new Error("GOOGLE_OPERATIONAL_CALENDAR_WINDOW_INVALID");
+      if (reservedEnd <= reservedStart) throw new Error("GOOGLE_OPERATIONAL_CALENDAR_WINDOW_INVALID");
       const actualDates = parsed.actualEventDateText
         ? parseOperationalEventDateText(parsed.actualEventDateText, reservedStart.getUTCFullYear())
         : null;
@@ -473,6 +473,28 @@ export class OperationalCalendarLinkRepository {
         reviewedAt: new Date(),
         updatedAt: new Date(),
       }).where(eq(googleOperationalCalendarReviews.id, review.id));
+      // This existing human review is the authority; reserved dates never prove public dates.
+      const proofRevision = checksum(review.proposedChanges);
+      const proof = [
+        { field: "public_start", kind: actualDates ? "verified_event" : "unknown_import",
+          value: actualDates ? actualDates.startsAt.toISOString().slice(0, 10) : publicDates.startsAt.toISOString(),
+          semantics: actualDates ? "inclusive_date" : "instant" },
+        { field: "public_end", kind: actualDates ? "verified_event" : "unknown_import",
+          value: actualDates ? actualDates.endsAt.toISOString().slice(0, 10) : publicDates.endsAt.toISOString(),
+          semantics: actualDates ? "inclusive_date" : "instant" },
+        { field: "reservation_start", kind: "verified_reservation", value: google.startDate!, semantics: "inclusive_date" },
+        { field: "reservation_end", kind: "verified_reservation", value: google.endDateExclusive!, semantics: "exclusive_date" },
+      ];
+      for (const endpoint of proof) {
+        await tx.execute(sql`
+          INSERT INTO booking_date_evidence
+            (booking_id, field, kind, value, semantics, revision, source_type, source_id, source_revision, actor)
+          SELECT ${bookingId}::uuid, ${endpoint.field}, ${endpoint.kind}, ${endpoint.value},
+            ${endpoint.semantics}, COALESCE(max(revision),0)+1,
+            'google_calendar_review', ${review.id}, ${proofRevision}, ${input.reviewedBy}
+          FROM booking_date_evidence WHERE booking_id=${bookingId}::uuid AND field=${endpoint.field}
+        `);
+      }
       return { state: "accepted", bookingId, created };
     });
   }

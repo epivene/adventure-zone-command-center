@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
+import { effectiveResourceDates, type ResolvedDates } from "../booking-date-repair/date-evidence";
+import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -6,6 +7,7 @@ import {
   bookingResourceAssignments,
   bookingSpecialRequests,
   bookings,
+  bookingOperationalWindows,
   packageTemplates,
   resourceConflictOverrides,
   resources,
@@ -31,6 +33,7 @@ import type { TransferTimeLookup } from "@/features/resources/resource-conflicts
 import { createTripTransferTimeLookup } from "@/features/trips/transfer-time-lookup";
 
 export type BookingOperationsSummary = {
+  dateProvenance?: ResolvedDates;
   packageNames: string[];
   sharedAttractionTotal: number | null;
   pendingRequestCount: number;
@@ -83,6 +86,7 @@ const emptySummary: BookingOperationsSummary = {
 
 function warningKind(warning: ResourceWarning) {
   return warning.code === "TRANSFER_TRIP_MISSING" ||
+    warning.code === "RESOURCE_DATE_EVIDENCE_UNRESOLVED" ||
     warning.code === "PAINTBALL_TRANSFER_TIME" ||
     warning.code === "RESOURCE_LOCATION_UNKNOWN"
     ? "route" as const
@@ -91,7 +95,8 @@ function warningKind(warning: ResourceWarning) {
 
 function warningSeverity(warning: ResourceWarning) {
   if (warning.overridden) return "warning" as const;
-  return warning.code === "RESOURCE_OVERLAP" ||
+  return warning.code === "RESOURCE_DATE_EVIDENCE_UNRESOLVED" ||
+    warning.code === "RESOURCE_OVERLAP" ||
     warning.code === "RESOURCE_UNAVAILABLE" ||
     warning.code === "PAINTBALL_TRANSFER_TIME"
     ? "blocking" as const
@@ -192,6 +197,7 @@ implements BatchBookingOperationsSummaryProvider {
           });
         }
         this.cache.set(record.booking.id, {
+          ...(record.booking.dateProvenance ? {dateProvenance:record.booking.dateProvenance} : {}),
           packageNames: [...record.packageNames].sort((first, second) =>
             first.localeCompare(second)
           ),
@@ -227,9 +233,10 @@ implements BookingOperationsSummaryRepository {
     const [bookingRows, packageRows, requestRows, assignmentRows, overrides] =
       await Promise.all([
         this.database
-          .select({ booking: bookings, leg: travelLegs })
+          .select({ booking: bookings, leg: travelLegs, dateProvenance:sql<ResolvedDates>`booking_resolved_dates(${bookings.id},${bookings.startsAt},${bookings.endsAt},${bookingOperationalWindows.startsAt},${bookingOperationalWindows.endsAt})` })
           .from(bookings)
           .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
+          .leftJoin(bookingOperationalWindows,eq(bookings.id,bookingOperationalWindows.bookingId))
           .where(inArray(bookings.id, ids)),
         this.database
           .select({
@@ -274,6 +281,7 @@ implements BookingOperationsSummaryRepository {
           .select({
             assignment: bookingResourceAssignments,
             booking: bookings,
+            dateProvenance:sql<ResolvedDates>`booking_resolved_dates(${bookings.id},${bookings.startsAt},${bookings.endsAt},${bookingOperationalWindows.startsAt},${bookingOperationalWindows.endsAt})`,
             resource: resources,
           })
           .from(bookingResourceAssignments)
@@ -281,6 +289,7 @@ implements BookingOperationsSummaryRepository {
             bookings,
             eq(bookingResourceAssignments.bookingId, bookings.id),
           )
+          .leftJoin(bookingOperationalWindows,eq(bookings.id,bookingOperationalWindows.bookingId))
           .innerJoin(
             resources,
             eq(bookingResourceAssignments.resourceId, resources.id),
@@ -329,7 +338,7 @@ implements BookingOperationsSummaryRepository {
       }),
     );
     const reservations: ResourceReservation[] = reservationRows.map(
-      ({ assignment, booking, resource }) => ({
+      ({ assignment, booking, resource, dateProvenance }) => ({
         assignmentId: assignment.id,
         bookingId: booking.id,
         bookingName: booking.name,
@@ -342,8 +351,8 @@ implements BookingOperationsSummaryRepository {
         setupMinutes: resource.setupMinutes,
         teardownMinutes: resource.teardownMinutes,
         minimumTransferMinutes: resource.minimumTransferMinutes,
-        startsAt: booking.startsAt,
-        endsAt: booking.endsAt,
+        ...effectiveResourceDates(dateProvenance),
+        dateProvenance,
         location:
           booking.latitude === null || booking.longitude === null
             ? null
@@ -351,7 +360,7 @@ implements BookingOperationsSummaryRepository {
       }),
     );
 
-    return bookingRows.map(({ booking, leg }) => {
+    return bookingRows.map(({ booking, leg, dateProvenance }) => {
       const bookingAssignments = assignmentRows.filter(
         ({ assignment }) => assignment.bookingId === booking.id,
       );
@@ -359,8 +368,8 @@ implements BookingOperationsSummaryRepository {
         booking: {
           id: booking.id,
           name: booking.name,
-          startsAt: booking.startsAt,
-          endsAt: booking.endsAt,
+          ...effectiveResourceDates(dateProvenance),
+          dateProvenance,
           latitude: booking.latitude,
           longitude: booking.longitude,
           physicalAttractionTotal: booking.physicalAttractionTotal,

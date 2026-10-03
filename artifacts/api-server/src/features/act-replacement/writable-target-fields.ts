@@ -22,7 +22,7 @@ export const writableTargetFieldColumns: Readonly<Record<string, Readonly<Record
 const normalizedMetadataFields: Readonly<Record<string, ReadonlySet<string>>> = {
   organization: new Set(["kind"]),
   contact: new Set(["kind", "emailIdentityMatchSafe"]),
-  booking: new Set(["kind", "organizationSourceId"]),
+  booking: new Set(["kind", "organizationSourceId", "salesMilestones"]),
   calling_list: new Set(["kind", "staticMemberSourceIds", "unsupportedFilter"]),
   activity: new Set(["kind", "calendarCapable"]),
 };

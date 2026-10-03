@@ -1,3 +1,4 @@
+import { installReviewedDateFixtures } from "../booking-date-repair/date-fixtures";
 import * as productionAllocation from "./production-outreach-allocation";
 import { DrizzleBookingRepository } from "../bookings/booking-repository";
 import { sql } from "drizzle-orm";
@@ -115,6 +116,7 @@ insert into booking_package_selections values ('${booking}','${pkg}');
     create table convention_editions(id uuid primary key,year integer);
     create table convention_members(id uuid primary key,edition_id uuid,organization_id uuid);
   `);
+  await installReviewedDateFixtures(client);
   for (const name of [
     "20260909_outreach_planner.sql",
     "20260909_outreach_allocation.sql",
@@ -337,8 +339,8 @@ describe("shared allocation evidence and holds", () => {
     expect(check.target).toMatchObject({
       eventStartsOn: "2026-10-10",
       eventEndsOn: "2026-10-11",
-      startsOn: "2026-10-08",
-      endsOn: "2026-10-12",
+      startsOn: "2026-10-10",
+      endsOn: "2026-10-11",
     });
     const hold = await allocation.createHold(
       candidate.id,
@@ -842,9 +844,9 @@ describe("production commitment enforcement", () => {
           : 0),
     ).toBe(1);
   });
-  it("serializes committed edits versus a hold and canonicalizes generated IDs and timezone strings", async () => {
+  it("serializes a source-preserving demand review versus a hold and canonicalizes generated IDs and timezone inputs", async () => {
     const s = await setup(),
-      other = await secondContender(s, "2026-10-22", "2026-10-23");
+      other = await secondContender(s, "2026-10-10", "2026-10-11");
     await s.client.query("update bookings set status='confirmed' where id=$1", [
       other,
     ]);
@@ -890,7 +892,7 @@ describe("production commitment enforcement", () => {
     expect(
       (await loadAllocationFacts(s.db)).bookings.find((b) => b.id === other)
         ?.starts_at,
-    ).toBe("2026-10-10T00:00:00.000Z");
+    ).toBe("2026-10-10T06:00:00.000Z");
   });
   it("preserves conflicting imported promises as durable reviewed facts and blocks further allocation", async () => {
     const s = await setup(),
@@ -2778,4 +2780,12 @@ describe("final review base migration and late reply lifecycle", () => {
     expect(c.liveHoldId).toBeNull();
     expect(f.read).toHaveBeenCalled();
   });
+});
+
+it("rejects legacy date changes that have no saved endpoint source and leaves the signed booking untouched",async()=>{
+ const s=await setup(),other=await secondContender(s,"2026-10-22","2026-10-23");
+ await s.client.query("update bookings set status='confirmed' where id=$1",[other]);
+ const before=(await s.client.query("select starts_at,ends_at from bookings where id=$1",[other])).rows;
+ await expect(changeCommitment(s.allocation,other,{startsAt:"2026-10-10T00:00:00Z",endsAt:"2026-10-11T00:00:00Z",travelLegId:leg2,latitude:40,longitude:-80,demand:demandReview},"owner")).rejects.toThrow("Use booking date repairs with saved source evidence");
+ expect((await s.client.query("select starts_at,ends_at from bookings where id=$1",[other])).rows).toEqual(before);
 });

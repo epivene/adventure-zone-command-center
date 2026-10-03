@@ -3262,7 +3262,7 @@ describe("durable review adapter projections", () => {
     expect(result.manifest.operations.some((operation) => operation.sourceRecordId === "company-overflow")).toBe(false);
   });
 
-  it("matches booking candidates only through an exact resolved local organization", async () => {
+  it("keeps undated sales imports in review for exact-organization booking candidates", async () => {
     const fetchedAt = new Date("2026-08-07T12:00:00.000Z");
     const sources = manifestSourcesFromArchiveRows({
       rows: [
@@ -3293,7 +3293,7 @@ describe("durable review adapter projections", () => {
       match: {
         kind: "ambiguous",
         candidateIds: ["booking-a", "booking-b"],
-        reason: "multiple_compatible_booking_candidates",
+        reason: "booking_event_date_unverified",
       },
     });
     const manifest = await new ProductionActOrganizer({

@@ -1,7 +1,9 @@
-import { asc, eq, isNull } from "drizzle-orm";
+import type { ResolvedDates } from "../booking-date-repair/date-evidence";
+import { operationsDateKey } from "../bookings/booking-leg-operations-history";
+import { asc, eq, isNull, sql } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 
-import { bookings, eventDateFacts, organizations } from "@/db/schema";
+import { bookingOperationalWindows, bookings, eventDateFacts, organizations } from "@/db/schema";
 import { resolveEffectiveEventDate } from "./effective-event-date";
 
 export type CoverageStatus =
@@ -27,6 +29,8 @@ export type CoverageBooking = {
   startsOn: string | null;
   endsOn: string | null;
   status: string | null;
+  probability?: string | null;
+  dateProvenance?: ResolvedDates;
 };
 
 export type CoverageFact = {
@@ -109,13 +113,17 @@ export class DrizzleCoverageDataSource implements CoverageDataSource {
       startsAt: bookings.startsAt,
       endsAt: bookings.endsAt,
       status: bookings.status,
-    }).from(bookings);
+      probability: bookings.probability,
+      dateProvenance: sql<ResolvedDates>`booking_resolved_dates(${bookings.id},${bookings.startsAt},${bookings.endsAt},${bookingOperationalWindows.startsAt},${bookingOperationalWindows.endsAt})`,
+    }).from(bookings).leftJoin(bookingOperationalWindows,eq(bookings.id,bookingOperationalWindows.bookingId));
     return rows.flatMap((row) => row.organizationId ? [{
       id: row.id,
       organizationId: row.organizationId,
-      startsOn: dateOnly(row.startsAt),
-      endsOn: dateOnly(row.endsAt),
+      startsOn: row.dateProvenance.publicWindow ? operationsDateKey(row.dateProvenance.publicWindow.start) : null,
+      endsOn: row.dateProvenance.publicWindow ? operationsDateKey(new Date(new Date(row.dateProvenance.publicWindow.end).getTime() - (row.dateProvenance.publicEndExclusive ? 1 : 0))) : null,
       status: row.status,
+      probability:row.probability,
+      dateProvenance:row.dateProvenance,
     }] : []);
   }
 
@@ -162,7 +170,7 @@ export class CoverageRepository {
         bookings: organizationBookings,
         facts: organizationFacts,
       });
-      const hasReview = organizationFacts.some((fact) => fact.status === "needs_review");
+      const hasReview = organizationFacts.some((fact) => fact.status === "needs_review") || organizationBookings.some(b=>b.dateProvenance?.evidenceState==="needs_review");
       const lastKnownEventDate = latestDate([
         ...organizationBookings.map((booking) => booking.startsOn),
         ...organizationFacts.map((fact) => fact.startsOn),

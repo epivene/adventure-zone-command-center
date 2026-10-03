@@ -683,6 +683,14 @@ const migrationFiles = [
       AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='leg_planning_write_guard' AND tgrelid=to_regclass(current_schema()||'.leg_plan_crew_commitments'))
       AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='leg_planning_receipt_validation' AND tgrelid=to_regclass(current_schema()||'.outreach_write_receipts')) AS ready`,
   },
+  {
+    name: "20261002_booking_date_provenance.sql",
+    markerSql: `SELECT to_regclass(current_schema()||'.booking_date_evidence') IS NOT NULL
+      AND to_regclass(current_schema()||'.booking_date_repair_previews') IS NOT NULL
+      AND to_regclass(current_schema()||'.booking_date_repair_receipts') IS NOT NULL
+      AND to_regprocedure('booking_resolved_dates(uuid,timestamptz,timestamptz,timestamptz,timestamptz)') IS NOT NULL
+      AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='booking_date_receipt_immutable' AND tgrelid=to_regclass(current_schema()||'.booking_date_repair_receipts')) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
