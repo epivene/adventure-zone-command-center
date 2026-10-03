@@ -313,6 +313,7 @@
     .early-invitation { display: flex; align-items: center; justify-content: center; gap: 18px; padding-top: 24px; padding-bottom: 24px; }
     .early-invitation .button { white-space: normal; text-align: center; }
     .early-mascot { flex: 0 0 64px; width: 64px; }
+    #az-name { scroll-margin-top: 120px; }
     .early-dialog { position: fixed; inset: 0; margin: auto; width: min(560px, calc(100vw - 32px)); max-height: min(640px, calc(100dvh - 32px)); overflow: auto; padding: 56px 32px 32px; border: 4px solid var(--az-navy); color: var(--az-navy); background: var(--az-cream); box-shadow: 8px 8px 0 var(--az-pink); text-align: center; }
     .early-dialog::backdrop { background: rgba(15,23,41,.82); }
     .early-dialog h2 { margin: 0 0 20px; font-size: clamp(28px, 6vw, 44px); line-height: 1; }
