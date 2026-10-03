@@ -1256,7 +1256,7 @@
       const entrance = this.shadowRoot.querySelector('.bounce-entrance');
       if (!entrance || entrance.open) return;
       if (!replay) {
-        if (this.isConventionVisit() || this.getAttribute('offer-request') || window.location.hash || new URLSearchParams(window.location.search).has('section')) return;
+        if (this.isConventionVisit() || this.getAttribute('entrance-completed') === 'yes' || this.getAttribute('offer-request') || window.location.hash || new URLSearchParams(window.location.search).has('section')) return;
         try { if (sessionStorage.getItem('az-bounce-house-ride-seen')) return; } catch { /* Storage is optional. */ }
       }
       entrance.classList.remove('riding');
