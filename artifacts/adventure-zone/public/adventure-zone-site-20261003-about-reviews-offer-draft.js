@@ -884,6 +884,16 @@
     @keyframes homepage-glide { from { transform: translate3d(0,48px,0); opacity: .35; } to { transform: translate3d(0,0,0); opacity: 1; } }
     @keyframes homepage-header-reveal { from { opacity: 0; } to { opacity: 1; } }
     @media(max-width: 767px) { .wix-preview-frame .bounce-entrance { height: 568px; } .entry-exterior { object-position: 45% 60%; } .entry-brand { width: 110px; top: 20px; } .entrance-skip { top: 14px; right: 12px; padding: 9px 12px; } .entry-welcome { bottom: 8%; } .entry-welcome h2 { font-size: 38px; } .entry-welcome p { font-size: 14px; } }
+    .entry-3d { position: absolute; inset: 0; z-index: 1; opacity: 0; }
+    .entry-3d canvas { width: 100%; height: 100%; display: block; }
+    .has-3d .entry-3d { opacity: 1; }
+    .has-3d .entry-exterior, .has-3d .entry-slide { display: none; }
+    .entry-shade { z-index: 2; pointer-events: none; }
+    .entry-brand, .entry-welcome, .entry-ride-label { z-index: 3; }
+    .has-3d.riding, .has-3d.riding::backdrop { animation: none; }
+    .has-3d.riding.ride-reveal, .has-3d.riding.ride-reveal::backdrop { animation: entrance-reveal 1.15s ease-in-out forwards; }
+    .has-3d .entry-ride-label { display: none; }
+    .entry-enter:disabled { opacity: .75; cursor: wait; }
     .entrance-replay { display: inline-flex; align-items: center; gap: 6px; margin-top: 18px; padding: 7px 12px; border: 2px solid var(--az-yellow); border-radius: 24px; color: var(--az-yellow); background: rgba(15,23,41,.7); font: 800 13px/1.2 Arial,sans-serif; cursor: pointer; }
     .entrance-replay .az-icon { width: 16px; height: 16px; }
     .entrance-replay:focus-visible { outline: 3px solid var(--az-pink); outline-offset: 4px; }
@@ -1068,6 +1078,7 @@
       <aside class="team-float" aria-label="Meet the Adventure Zone team">${teamMarkup()}</aside>
 
       <dialog class="bounce-entrance" aria-labelledby="bounce-entry-title">
+        <div class="entry-3d" aria-hidden="true"></div>
         <img class="entry-exterior" src="https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-entry-20261003.webp" alt="" fetchpriority="high" decoding="async">
         <img class="entry-slide" src="https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-slide-20261003.webp" alt="" decoding="async">
         <div class="entry-shade" aria-hidden="true"></div>
@@ -1244,6 +1255,8 @@
     disconnectedCallback() {
       this.timers.forEach((timer) => window.clearInterval(timer));
       this.timers = [];
+      this.bounceRide3D?.dispose();
+      this.bounceRide3D = null;
       this.abortController?.abort();
       this.inquiryAbortController?.abort();
       this.resizeObserver?.disconnect();
@@ -1266,11 +1279,12 @@
         if (this.isConventionVisit() || this.getAttribute('entrance-completed') === 'yes' || this.getAttribute('offer-request') || window.location.hash || new URLSearchParams(window.location.search).has('section')) return;
         try { if (sessionStorage.getItem('az-bounce-house-ride-seen')) return; } catch { /* Storage is optional. */ }
       }
-      entrance.classList.remove('riding');
+      entrance.classList.remove('riding', 'ride-reveal');
     this.shadowRoot.querySelector('.az-site').classList.remove('intro-landing');
       entrance.style.opacity = '';
       this.shadowRoot.querySelector('.az-site').classList.add('intro-active');
       entrance.showModal();
+      this.prepareBounceRide3D();
       if (this.isWixPreviewFrame) {
         entrance.scrollIntoView({ behavior: 'instant', block: 'start' });
         this.entranceScrollTimer = window.setTimeout(() => { if (entrance.open) entrance.scrollIntoView({ behavior: 'instant', block: 'start' }); }, 900);
@@ -1291,8 +1305,9 @@
       window.clearTimeout(this.entranceScrollTimer);
       window.clearTimeout(this.entranceAnnounceTimer);
       try { sessionStorage.setItem('az-bounce-house-ride-seen', 'yes'); } catch { /* Storage is optional. */ }
+      this.bounceRide3D?.reset();
       if (entrance.open) entrance.close();
-      entrance.classList.remove('riding');
+      entrance.classList.remove('riding', 'ride-reveal');
     this.shadowRoot.querySelector('.az-site').classList.remove('intro-landing');
       this.shadowRoot.querySelector('.az-site').classList.remove('intro-active');
       if (!this.isWixPreviewFrame && this.entrancePreviousOverflow !== undefined) document.body.style.overflow = this.entrancePreviousOverflow;
@@ -1301,17 +1316,46 @@
       this.dispatchEvent(new CustomEvent('bounce-house-close', { bubbles: true, composed: true }));
     }
 
-    rideBounceEntrance() {
+    async prepareBounceRide3D() {
+      if (this.bounceRide3D) { this.bounceRide3D.reset(); return this.bounceRide3D; }
+      if (this.bounceRide3DLoading) return this.bounceRide3DLoading;
+      const entrance = this.shadowRoot.querySelector('.bounce-entrance');
+      const button = entrance.querySelector('.entry-enter');
+      button.disabled = true;
+      this.bounceRide3DLoading = (async () => {
+        if (!window.AzBounceRide3D) {
+          if (!window.azBounceRide3DScript) window.azBounceRide3DScript = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = this.getAttribute('ride-script-src') || 'https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-ride-3d-20261003.js';
+            script.onload = resolve; script.onerror = reject; document.head.append(script);
+          });
+          await window.azBounceRide3DScript;
+        }
+        if (!this.isConnected) return null;
+        this.bounceRide3D = window.AzBounceRide3D.createBounceRide3D(entrance.querySelector('.entry-3d'));
+        entrance.classList.add('has-3d');
+        return this.bounceRide3D;
+      })().catch(() => null).finally(() => {
+        button.disabled = false; this.bounceRide3DLoading = null;
+        if (entrance.open && !entrance.classList.contains('riding')) button.focus({ preventScroll: true });
+      });
+      return this.bounceRide3DLoading;
+    }
+
+    async rideBounceEntrance() {
       const entrance = this.shadowRoot.querySelector('.bounce-entrance');
       if (!entrance.open || entrance.classList.contains('riding')) return;
       if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) { this.finishBounceEntrance(); return; }
-    entrance.classList.add('riding');
-    this.dispatchEvent(new CustomEvent('bounce-house-ride', { bubbles: true, composed: true }));
-    this.entranceLandingTimer = window.setTimeout(() => {
-      this.shadowRoot.querySelector('.az-site').classList.add('intro-landing');
-      this.dispatchEvent(new CustomEvent('bounce-house-landing', { bubbles: true, composed: true }));
-    }, 3000);
-    this.entranceTimer = window.setTimeout(() => this.finishBounceEntrance(), 4250);
+      const ride = await this.prepareBounceRide3D();
+      if (!entrance.open) return;
+      if (!ride) { this.finishBounceEntrance(); return; }
+      entrance.classList.add('riding');
+      this.dispatchEvent(new CustomEvent('bounce-house-ride', { bubbles: true, composed: true }));
+      ride.start(() => {
+        entrance.classList.add('ride-reveal');
+        this.shadowRoot.querySelector('.az-site').classList.add('intro-landing');
+        this.dispatchEvent(new CustomEvent('bounce-house-landing', { bubbles: true, composed: true }));
+      }, () => this.finishBounceEntrance());
     }
 
     celebrateInquiry(form) {
