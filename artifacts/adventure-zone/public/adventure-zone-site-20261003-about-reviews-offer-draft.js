@@ -1349,6 +1349,8 @@
       const ride = await this.prepareBounceRide3D();
       if (!entrance.open) return;
       if (!ride) { this.finishBounceEntrance(); return; }
+      window.clearTimeout(this.entranceScrollTimer);
+      window.clearTimeout(this.entranceAnnounceTimer);
       entrance.classList.add('riding');
       this.dispatchEvent(new CustomEvent('bounce-house-ride', { bubbles: true, composed: true }));
       ride.start(() => {
