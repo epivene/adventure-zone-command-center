@@ -306,7 +306,7 @@
     .about-team-photo { margin: 0 0 24px; }
     .about-team-photo img { display: block; width: 100%; max-height: 300px; object-fit: cover; border: 4px solid var(--az-navy); }
     .about-team-photo figcaption { padding: 8px 0; font-weight: 800; font-size: 13px; }
-    .reviews { background: var(--az-cream); color: var(--az-navy); }
+    .reviews { position: relative; z-index: 36; background: var(--az-cream); color: var(--az-navy); }
     .reviews h2 { max-width: 900px; font-size: clamp(28px, 5vw, 54px); }
     .review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 28px; }
     .review-card { padding: 24px; border: 3px solid var(--az-navy); background: var(--az-white); box-shadow: 6px 6px 0 var(--az-pink); }
