@@ -3,7 +3,7 @@
 import { Link } from "wouter";
 import { LegTimeline } from "./leg-timeline";
 import { timelineWindow, stopContext } from "@/features/routes/leg-timeline";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { eventMatchesOperationsSeason, operationsDateKey, operationsProfileHref,operationsScheduleHref } from '@/features/bookings/operations-navigation';
 import { currentOperationsSeason } from '@/features/bookings/select-profile-operations-booking';
 
@@ -320,12 +320,14 @@ export function EventMap({
   onSeasonYearChange,
   profileBasePath = "/profiles",
   showTimeline = false,
+  renderSelectedDetails,
   controlledLegId,
   onLegFocusChange,
 }: {
   events: MapEvent[];
   travelLegs: TravelLeg[];
   showTimeline?: boolean;
+  renderSelectedDetails?: (id: string) => ReactNode;
   controlledLegId?: string | null;
   onLegFocusChange?: (id: string | null) => void;
   handoffs?: EquipmentHandoffView[];
@@ -575,9 +577,10 @@ export function EventMap({
     [routeLines.features],
   );
 
+  const contextEvents = effectiveEvents.filter(event => eventMatchesOperationsSeason(event, seasonYear) && ((mode === "history") === ((event.routeBucket ?? classifyRouteBucket(event.status,event.probability)) === "history")));
   const selectedStop = planningEvents.find(event => event.id === focusedEventId);
   const comparisonLegId = previewLegId ?? selectedStop?.travelLegId ?? focusedLegId;
-  const previewContext = selectedStop && comparisonLegId ? stopContext(planningEvents, selectedStop, comparisonLegId) : null;
+  const previewContext = selectedStop && comparisonLegId ? stopContext(contextEvents, selectedStop, comparisonLegId) : null;
   const previewLines = showTimeline && selectedStop && timelineWindow(selectedStop) && previewContext
     ? [previewContext.before, previewContext.after].flatMap(neighbor => {
       if (!neighbor || !mappedIds.has(neighbor.id) || !mappedIds.has(selectedStop.id)) return [];
@@ -671,7 +674,8 @@ export function EventMap({
         </div>
       </details>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className={showTimeline ? "grid min-w-0 items-start gap-4 2xl:grid-cols-2" : ""}>
+      <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-3 py-3 sm:px-4">
           <p className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Focus a route</p>
           <div aria-label="Route legs" className="flex gap-2 overflow-x-auto pb-1" role="group">
@@ -728,7 +732,8 @@ export function EventMap({
         </ManagerRouteMapShell>
       </div>
 
-      {showTimeline ? <LegTimeline events={planningEvents} legs={travelLegs} season={seasonYear} focusedLegId={focusedLegId} selectedId={focusedEventId} previewLegId={previewLegId} onSelect={setFocusedEventId} onPreviewLeg={setPreviewLegId} profileBasePath={profileBasePath} /> : null}
+      {showTimeline ? <LegTimeline key={seasonYear} renderSelectedDetails={renderSelectedDetails} contextEvents={contextEvents} events={planningEvents} legs={travelLegs} season={seasonYear} focusedLegId={focusedLegId} selectedId={focusedEventId} previewLegId={previewLegId} onSelect={setFocusedEventId} onPreviewLeg={setPreviewLegId} profileBasePath={profileBasePath} /> : null}
+      </div>
       <ManagerTripNavigationActions trip={focusedTrip} mode="on-road" />
 
       <div className="grid gap-5 xl:grid-cols-2">

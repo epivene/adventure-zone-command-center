@@ -19,8 +19,8 @@ export function timelineWindow(event:MapEvent):TimelineWindow|null {
  const startLabel=r1&&r1<a?r1:a,endLabel=r2&&r2>b?r2:b;
  return {start:ordinal(startLabel),end:ordinal(endLabel),startLabel,endLabel,reserved:hasReservation};
 }
-export function timelinePlacement(window:TimelineWindow,year:number){
- const start=ordinal(year+"-01-01"),end=ordinal((year+1)+"-01-01");
+export function timelinePlacement(window:TimelineWindow,year:number,month:number|null=null){
+ const start=Date.UTC(year,month??0,1)/DAY,end=(month===null?Date.UTC(year+1,0,1):Date.UTC(year,month+1,1))/DAY;
  const a=Math.max(start,window.start),b=Math.min(end,window.end+1);
  return b<=a?null:{left:(a-start)/(end-start)*100,width:(b-a)/(end-start)*100};
 }

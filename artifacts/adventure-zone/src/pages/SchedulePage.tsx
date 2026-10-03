@@ -104,7 +104,7 @@ export default function SchedulePage() {
         {extraFilterCount ? <div className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2">{legId ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{legs.find((leg) => leg.id === legId)?.name ?? "Selected leg"}</span> : null}{status !== "all" ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold capitalize text-slate-700">{status}</span> : null}</div> : null}
       </div>
 
-      {view === "calendar" ? <CalendarContent embedded legId={legId || undefined} season={season} status={status} onVisibleMonthChange={handleCalendarMonthChange} /> : <RoutesContent onLegFocusChange={id => { setLegId(id ?? ""); syncUrl({legId: id ?? ""}); }} embedded legId={legId || undefined} season={season} status={status} onSeasonYearChange={year => { setSeason(String(year)); syncUrl({ season: String(year) }); }} />}
+      {view === "calendar" ? <CalendarContent embedded legId={legId || undefined} season={season} status={status} onVisibleMonthChange={handleCalendarMonthChange} /> : <RoutesContent embedded onLegFocusChange={id => { setLegId(id ?? ""); syncUrl({legId: id ?? ""}); }} legId={legId || undefined} season={season} status={status} onSeasonYearChange={year => { setSeason(String(year)); syncUrl({ season: String(year) }); }} />}
     </div>
   );
 }

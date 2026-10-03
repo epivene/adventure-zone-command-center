@@ -131,3 +131,21 @@ it("keeps incomplete and corrupt dates visible for review without drawing them a
   expect(screen.getByRole("region",{name:"Dates need review"})).toHaveTextContent("Confirmed Stop");
   expect(screen.getByRole("region",{name:"Dates need review"})).toHaveTextContent("Undated Confirmed Stop");
 });
+
+it("compares an unassigned candidate with dashed map links without saving it", () => {
+ const candidate={...potentialMapped,id:"candidate",name:"Candidate",travelLegId:null,travelLegName:null,travelLegColor:null};
+ render(<EventMap events={[confirmedMapped,candidate,secondConfirmedMapped]} travelLegs={[leg]} requestedSeasonYear={2026} showTimeline />);
+ fireEvent.click(screen.getByRole("button",{name:"Inspect Candidate"}));
+ fireEvent.change(screen.getByRole("combobox",{name:"Compare with leg (preview only)"}),{target:{value:leg.id}});
+ expect(screen.getByRole("region",{name:"Selected stop"})).toHaveTextContent("Before: Confirmed Stop");
+ expect(mocks.layers.mock.calls.at(-1)?.[0].routeLines.filter((line:any)=>line.dashed)).toHaveLength(2);
+ expect(candidate.travelLegId).toBeNull();expect(mocks.post).not.toHaveBeenCalled();
+});
+it("keeps parent leg selection and timeline aligned when URL filters change", () => {
+ const props={events:[confirmedMapped],travelLegs:[leg,hulkLeg],requestedSeasonYear:2026,showTimeline:true};
+ const {rerender}=render(<EventMap {...props} controlledLegId={leg.id}/>);
+ expect(screen.getByRole("button",{name:/Kristy route/})).toHaveAttribute("aria-pressed","true");
+ rerender(<EventMap {...props} controlledLegId={hulkLeg.id}/>);
+ expect(screen.getByRole("button",{name:/Hulk route/})).toHaveAttribute("aria-pressed","true");
+ expect(screen.queryByRole("button",{name:"Inspect Confirmed Stop"})).not.toBeInTheDocument();
+});

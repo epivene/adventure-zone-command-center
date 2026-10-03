@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
 import { apiFetch, apiGet, apiPut } from "@/lib/auth-token";
+import { BookingLegOperationsCard } from "@/components/bookings/leg-operations-panel";
+import { ownerOperationsClient } from "@/features/bookings/booking-leg-operations-client";
 import { EventMap } from "@/components/routes/event-map";
 import { RouteConflictWarning } from "@/components/routes/route-conflict-warning";
 import type { FocusedTripMapData } from "@/components/routes/manager-route-map-layers";
@@ -109,7 +111,7 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
       <RouteConflictWarning conflicts={routeConflicts} />
       {mapView === "manager-preview" ? (
         <div className="grid gap-3"><label className="grid max-w-sm gap-1 text-sm font-semibold">Preview manager<select aria-label="Preview manager" value={previewLegId} onChange={(event) => setPreviewLegId(event.target.value)}>{activeLegs.map((leg: any) => <option key={leg.id} value={leg.id}>{leg.name}</option>)}</select></label><ManagerPreviewMap legId={previewLegId} /></div>
-      ) : <EventMap showTimeline controlledLegId={onLegFocusChange ? legId || null : undefined} onLegFocusChange={onLegFocusChange} events={filteredEvents} travelLegs={data.travelLegs} handoffs={handoffs} focusedTrip={focusedTrip} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTrip(null)} controlledSeasonYear={embedded && season ? Number(season) : undefined} requestedSeasonYear={season ? Number(season) : undefined} onSeasonYearChange={onSeasonYearChange} />}
+      ) : <EventMap renderSelectedDetails={id => <BookingLegOperationsCard bookingId={id} role="owner" client={ownerOperationsClient} />} showTimeline controlledLegId={onLegFocusChange ? legId || null : undefined} onLegFocusChange={onLegFocusChange} events={filteredEvents} travelLegs={data.travelLegs} handoffs={handoffs} focusedTrip={focusedTrip} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTrip(null)} controlledSeasonYear={embedded && season ? Number(season) : undefined} requestedSeasonYear={season ? Number(season) : undefined} onSeasonYearChange={onSeasonYearChange} />}
     </section>
   );
 
