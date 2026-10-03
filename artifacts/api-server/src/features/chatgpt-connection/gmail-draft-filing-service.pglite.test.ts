@@ -96,7 +96,7 @@ it("exposes exact conflicting profile evidence and blocks filing without overwri
   await expect(service.apply(f.principal, { requestKey: "conflict" }, { ...input(), expectedRevision: preview.expectedRevision }))
     .rejects.toMatchObject({ code: "EMAIL_ATTENTION_PROFILE_CONFLICT" });
   expect(modify).not.toHaveBeenCalled();
-  expect((await f.db.query("SELECT organization_id FROM google_workspace_validation_mappings")).rows[0].organization_id).toBe(other);
+  expect((await f.db.query<{ organization_id: string }>("SELECT organization_id FROM google_workspace_validation_mappings")).rows[0].organization_id).toBe(other);
   await expect(service.inspect(f.principal, { gmailConnectionId: randomUUID(), threadId: "thread" }))
     .rejects.toMatchObject({ code: "CONNECTION_DRAFT_SOURCE_CHANGED" });
 });

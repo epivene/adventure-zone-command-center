@@ -34,11 +34,11 @@ jobs:
           src/features/chatgpt-connection/today-read-service.test.ts
           src/features/assistant-workspace/orchestrator.test.ts
           src/features/assistant-workspace/gmail-draft-filing-tools.test.ts
+      - name: Build API
+        run: pnpm --filter @workspace/api-server build
       - name: Typecheck API
         env:
           NODE_OPTIONS: --max-old-space-size=4096
         run: |
           pnpm run typecheck:libs
           pnpm --filter @workspace/api-server typecheck
-      - name: Build API
-        run: pnpm --filter @workspace/api-server build
