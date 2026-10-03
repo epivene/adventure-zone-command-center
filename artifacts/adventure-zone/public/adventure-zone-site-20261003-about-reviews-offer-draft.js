@@ -449,6 +449,12 @@
     .booking-grid { display: grid; gap: 24px; }
     .booking-card { position: relative; overflow: hidden; padding: 24px; color: var(--az-navy); background: var(--az-cream); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-white); }
     .booking-card.pink { color: var(--az-white); background: var(--az-pink); }
+    .booking-card.event-paid { background: var(--az-yellow); }
+    .booking-card.event-paid > .az-icon { color: var(--az-pink); }
+    .booking-card.event-paid p { color: var(--az-navy); }
+    .booking-card.event-paid .booking-list .az-icon { color: var(--az-navy); }
+    .booking-card.event-paid .fundraising-highlight { color: var(--az-white); background: var(--az-pink); }
+    .booking-card.event-paid::after { top: -28px; right: -28px; width: 112px; height: 112px; background: transparent; border: 14px solid var(--az-pink); filter: none; opacity: .35; }
     .booking-card::after { position: absolute; top: -40px; right: -40px; width: 128px; height: 128px; content: ""; border-radius: 50%; background: rgba(255,204,0,.18); filter: blur(18px); }
     .booking-card .az-icon { position: relative; z-index: 1; width: 48px; height: 48px; margin-bottom: 24px; color: var(--az-yellow); }
     .booking-card.pink .az-icon { color: var(--az-white); }
@@ -1079,7 +1085,7 @@
 
       <section class="section partnerships" id="partnerships"><div class="container">
         <div class="section-heading"><h2 class="display">Booking Structures</h2></div>
-        <div class="booking-grid">${bookingCard("", "ticket", "Event-Paid", "You pay the flat daily rate. The attractions run completely free for your attendees, serving as a massive draw and value-add for your ticketed festival or community day.", ["Package reserved for your event dates", "Attractions included for attendees"])}${bookingCard("pink", "target", "Pay-For-Play", "Subject to approval. We offer percentage-of-sales or guaranteed-payment arrangements. With percentage-of-sales events, attractions come at no upfront cost, guests pay to play, and the event receives a share of ticket sales. Guaranteed arrangements are customized to the event, location, attendance, and package.", ["May be available for qualifying events", "Percentage of ticket box sales paid to the event"], "A Fun Fundraising Opportunity")}</div>
+        <div class="booking-grid">${bookingCard("event-paid", "ticket", "Event-Paid", "You pay the flat daily rate. The attractions run completely free for your attendees, serving as a massive draw and value-add for your ticketed festival or community day.", ["Package reserved for your event dates", "Attractions included for attendees"], "Big Fun. Included for Your Guests.")}${bookingCard("pink", "target", "Pay-For-Play", "Subject to approval. We offer percentage-of-sales or guaranteed-payment arrangements. With percentage-of-sales events, attractions come at no upfront cost, guests pay to play, and the event receives a share of ticket sales. Guaranteed arrangements are customized to the event, location, attendance, and package.", ["May be available for qualifying events", "Percentage of ticket box sales paid to the event"], "A Fun Fundraising Opportunity")}</div>
       </div></section>
 
       <section class="section gallery" id="gallery"><div class="container"><h2 class="display">The Spectacle</h2><div class="gallery-grid">${galleryMarkup()}</div></div></section>
