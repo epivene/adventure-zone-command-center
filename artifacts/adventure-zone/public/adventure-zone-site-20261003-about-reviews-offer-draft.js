@@ -852,13 +852,16 @@
 
     .bounce-entrance { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; overflow: hidden; pointer-events: none; }
     .bounce-entrance[hidden] { display: none; }
-    .entrance-arch { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 10px 0 rgba(15,23,41,.45)); animation: enter-the-carnival 1.1s cubic-bezier(.22,.8,.3,1) forwards; }
-    .entrance-welcome { position: relative; align-self: end; margin-bottom: 30px; text-align: center; color: var(--az-navy); background: var(--az-yellow); border: 3px solid var(--az-navy); border-radius: 22px; padding: 12px 24px; animation: entrance-label 1.1s forwards; }
+    .entrance-arch { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 10px 0 rgba(15,23,41,.45)); animation: enter-the-carnival 2.2s 1.2s cubic-bezier(.22,.8,.3,1) forwards; }
+    .entrance-welcome { position: relative; align-self: center; margin: 0; text-align: center; color: var(--az-navy); background: var(--az-yellow); border: 3px solid var(--az-navy); border-radius: 22px; padding: 12px 24px; animation: entrance-label 2.2s 1.2s forwards; }
     .entrance-welcome strong { display: block; font-size: clamp(24px, 6vw, 42px); }
+    .entrance-replay { display: inline-flex; align-items: center; gap: 6px; margin-top: 18px; padding: 7px 12px; border: 2px solid var(--az-yellow); border-radius: 24px; color: var(--az-yellow); background: rgba(15,23,41,.7); font: 800 13px/1.2 Arial,sans-serif; cursor: pointer; }
+    .entrance-replay .az-icon { width: 16px; height: 16px; }
+    .entrance-replay:focus-visible { outline: 3px solid var(--az-pink); outline-offset: 4px; }
     .entrance-skip { pointer-events: auto; margin-top: 5px; padding: 7px 12px; color: var(--az-navy); background: transparent; border: 0; text-decoration: underline; font: inherit; font-size: 13px; cursor: pointer; }
     @keyframes enter-the-carnival { 0% { opacity: 1; transform: scale(.94); } 28% { opacity: 1; transform: scale(1.02,.98); } 65% { opacity: 1; transform: scale(1.3); } 100% { opacity: 0; transform: scale(1.9); } }
     @keyframes entrance-label { 0%,35% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(20px); } }
-    .package-card:hover, .package-card:focus-within, .package-card:active { animation: carnival-card-bounce .55s ease-out; }
+    .package-card:hover, .package-card:focus-within, .package-card:active, .foam-banner:hover, .foam-banner:focus-visible, .foam-banner:active { animation: carnival-card-bounce .55s ease-out; }
     @keyframes carnival-card-bounce { 0% { transform: translateY(0) scale(1); } 28% { transform: translateY(2px) scale(1.025,.98); } 60% { transform: translateY(-10px) scale(.995,1.015); } 100% { transform: translateY(-8px) scale(1); } }
     .packages { position: relative; }
     .packages::before, .packages::after, .contact::after { position: absolute; left: 0; right: 0; height: 18px; content: ""; pointer-events: none; }
@@ -868,7 +871,7 @@
     .contact-form { position: relative; }
     .inquiry-confetti i { position: absolute; left: var(--confetti-x); top: 0; width: 8px; height: 12px; border-radius: 2px; background: var(--confetti-color); animation: inquiry-celebration 1.2s ease-out var(--confetti-delay) both; }
     @keyframes inquiry-celebration { 0% { opacity: 0; transform: translateY(-20px) rotate(0); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(360px) rotate(270deg); } }
-    @media(prefers-reduced-motion: reduce) { .bounce-entrance, .inquiry-confetti { display: none; } .package-card:hover, .package-card:focus-within, .package-card:active { animation: none; transform: none; } }
+    @media(prefers-reduced-motion: reduce) { .bounce-entrance, .inquiry-confetti, .entrance-replay { display: none; } .package-card:hover, .package-card:focus-within, .package-card:active, .foam-banner:hover, .foam-banner:focus-visible, .foam-banner:active { animation: none; transform: none; } }
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
@@ -1040,7 +1043,7 @@
 
       <section class="hero" id="hero">
         <div class="bounce-entrance" hidden aria-label="Welcome to The Adventure Zone">
-          <svg class="entrance-arch" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <svg class="entrance-arch" viewBox="0 0 1000 620" preserveAspectRatio="none" aria-hidden="true">
             <defs><linearGradient id="az-pink-tube" x1="0" x2="1"><stop stop-color="#a90067"/><stop offset=".35" stop-color="#ff73bf"/><stop offset=".6" stop-color="#ff008e"/><stop offset="1" stop-color="#bc0068"/></linearGradient><linearGradient id="az-yellow-tube" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff295"/><stop offset=".4" stop-color="#ffcc00"/><stop offset="1" stop-color="#e89e00"/></linearGradient></defs>
             <path d="M110 650V250Q110 85 280 85H720Q890 85 890 250V650" fill="none" stroke="#0f1729" stroke-width="142" stroke-linecap="round"/>
             <path d="M110 650V250Q110 85 280 85H720Q890 85 890 250V650" fill="none" stroke="url(#az-pink-tube)" stroke-width="128" stroke-linecap="round"/>
@@ -1055,7 +1058,7 @@
           <div class="eyebrow">${icon("star")}<span>America's Best Bounce House Carnival!</span>${icon("star")}</div>
           <h1 class="display">We Bring <br><span class="yellow">The Action</span></h1>
           <p class="hero-copy">A fully staffed inflatable bounce house carnival for fairs, festivals, rodeos, and community events.</p>
-          <div class="hero-actions"><a class="button" href="#packages">See Packages</a><a class="button outline" href="#contact">Plan Your Event</a></div>
+          <div class="hero-actions"><a class="button" href="#packages">See Packages</a><a class="button outline" href="#contact">Plan Your Event</a></div><button type="button" class="entrance-replay" data-replay-entrance aria-label="Replay the bounce house entrance">${icon("zap")}Bounce In!</button>
         </div>
       </section>
 
@@ -1227,17 +1230,23 @@
       this.restorePackageDialog();
     }
 
-    startBounceEntrance() {
+    startBounceEntrance(replay = false) {
       const entrance = this.shadowRoot.querySelector('.bounce-entrance');
-      if (!entrance || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || this.isConventionVisit() || window.location.hash || new URLSearchParams(window.location.search).has('section')) return;
-      try {
-        if (sessionStorage.getItem('az-carnival-entrance-seen')) return;
-        sessionStorage.setItem('az-carnival-entrance-seen', 'yes');
-      } catch { /* The entrance still works when storage is unavailable. */ }
+      if (!entrance || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+      if (!replay) {
+        if (this.isConventionVisit() || window.location.hash || new URLSearchParams(window.location.search).has('section')) return;
+        try {
+          if (sessionStorage.getItem('az-carnival-entrance-seen')) return;
+          sessionStorage.setItem('az-carnival-entrance-seen', 'yes');
+        } catch { /* The entrance still works when storage is unavailable. */ }
+      }
+      window.clearTimeout(this.entranceTimer);
+      entrance.hidden = true;
+      void entrance.offsetWidth;
       entrance.hidden = false;
       const dismiss = () => { entrance.hidden = true; window.clearTimeout(this.entranceTimer); };
-      entrance.querySelector('.entrance-skip').addEventListener('click', dismiss, { signal: this.abortController.signal });
-      this.entranceTimer = window.setTimeout(dismiss, 1100);
+      entrance.querySelector('.entrance-skip').onclick = dismiss;
+      this.entranceTimer = window.setTimeout(dismiss, 3400);
     }
 
     celebrateInquiry(form) {
@@ -1294,6 +1303,7 @@
       this.timers.push(window.setInterval(() => {
         if (!this.reviewsPaused && !document.hidden && !reviewSection.matches(":hover, :focus-within")) this.rotateReviews(1);
       }, 10000));
+      root.querySelector("[data-replay-entrance]").addEventListener("click", () => this.startBounceEntrance(true), { signal });
       const earlyDialog = root.querySelector(".early-dialog");
       root.querySelectorAll("[data-early-offer]").forEach(button => button.addEventListener("click", () => this.openEarlyOffer(), { signal }));
       root.querySelector("[data-early-close]").addEventListener("click", () => earlyDialog.close(), { signal });
