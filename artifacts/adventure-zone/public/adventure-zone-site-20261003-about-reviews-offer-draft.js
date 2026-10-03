@@ -942,7 +942,7 @@
 
   function formMarkup() {
     return `<form class="contact-form" novalidate>
-      <p class="carnival-form-note"><strong>Let?s bring the carnival to your event!</strong>We?re a fully staffed traveling bounce house carnival, offering complete event packages. We don?t rent bounce houses individually. Our team handles setup, operation, and teardown, so you can focus on enjoying your event.</p>
+      <p class="carnival-form-note"><strong>Let's bring the carnival to your event!</strong>We're a fully staffed traveling bounce house carnival, offering complete event packages. We don't rent bounce houses individually. Our team handles setup, operation, and teardown, so you can focus on enjoying your event.</p>
       <div class="convention-form-note" hidden><strong>Convention Guest</strong>Your convention visit will automatically be included with your inquiry.</div>
       <div class="form-grid">
         <div class="field"><label for="az-name">Your Name *</label><input id="az-name" name="name" required maxlength="120" placeholder="Jane Smith"></div>
