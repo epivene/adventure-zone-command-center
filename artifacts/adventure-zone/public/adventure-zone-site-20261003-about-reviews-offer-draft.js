@@ -260,6 +260,11 @@
     .team-name { display: block; font-family: "Bricolage Grotesque", Impact, sans-serif; font-size: 7px; font-weight: 900; line-height: 1; text-transform: uppercase; }
     .team-role { display: block; margin-top: 2px; font-size: 5px; font-weight: 900; line-height: 1.1; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
 
+    .mascot-bubble { position: absolute; right: 0; bottom: 210px; width: 126px; min-height: 82px; padding: 12px 8px; border: 3px solid #0f1729; border-radius: 22px; background: #ffdf00; color: #0f1729; box-shadow: -4px 4px 0 #ff238c; font: 800 14px/1.25 Arial, sans-serif; text-align: center; cursor: pointer; pointer-events: auto; z-index: 2; }
+    .mascot-bubble strong { display: block; font-size: 21px; }
+    .mascot-bubble::after { content: ""; position: absolute; right: 24px; bottom: -13px; width: 18px; height: 18px; background: #ffdf00; border-right: 3px solid #0f1729; border-bottom: 3px solid #0f1729; transform: rotate(45deg); }
+    .mascot-bubble:focus-visible { outline: 3px solid #ff238c; outline-offset: 5px; }
+    .tube-man-position .mascot-bubble { bottom: 145px; }
     .tube-man-position { position: fixed; right: 6px; bottom: -12px; left: auto; z-index: 50; width: 82px; pointer-events: none; }
     .tube-man-sway, .tube-man-wobble, .tube-man-image { transform-origin: 50% 100%; will-change: transform; }
     .tube-man-sway { animation: tube-man-wave 2.23s ease-in-out infinite; }
@@ -313,14 +318,6 @@
     .review-card[hidden] { display: none; }
     .review-card blockquote { position: relative; margin: 0; padding-left: 14px; border-left: 4px solid var(--az-pink); font-size: 17px; line-height: 1.55; }
     .review-card .review-attribution { display: inline-block; margin: 14px 0 0; padding: 5px 9px; background: var(--az-yellow); font-weight: 800; font-size: 13px; border: 2px solid var(--az-navy); }
-    .early-invitation { display: flex; align-items: center; justify-content: center; gap: 18px; padding-top: 24px; padding-bottom: 24px; }
-    .early-invitation .button { white-space: normal; text-align: center; }
-    .early-invitation .offer-ticket { display: inline-flex; align-items: center; justify-content: center; gap: 12px; padding: 18px 26px; color: var(--az-white); background: var(--az-pink); border: 3px dashed var(--az-navy); border-radius: 14px; box-shadow: 5px 5px 0 var(--az-navy); transform: rotate(-3deg); font-size: 24px; text-transform: none; letter-spacing: 0; }
-    .offer-ticket > .az-icon { width: 36px; height: 36px; flex-shrink: 0; }
-    .offer-ticket small { display: block; margin-top: 4px; font-size: 12px; font-weight: 800; }
-    .early-invitation .offer-ticket:hover { transform: rotate(0deg) translateY(-2px); }
-    @media(prefers-reduced-motion: reduce) { .early-invitation .offer-ticket { transform: none; transition: none; } }
-    .early-mascot { flex: 0 0 64px; width: 64px; }
     #az-name { scroll-margin-top: 120px; }
     .early-dialog { position: fixed; inset: 0; margin: auto; width: min(560px, calc(100vw - 32px)); max-height: min(640px, calc(100dvh - 32px)); overflow: auto; padding: 56px 32px 32px; border: 4px solid var(--az-navy); color: var(--az-navy); background: var(--az-cream); box-shadow: 8px 8px 0 var(--az-pink); text-align: center; }
     .early-dialog::backdrop { background: rgba(15,23,41,.82); }
@@ -329,7 +326,7 @@
     .early-dialog .early-terms { padding: 16px; background: var(--az-white); border-left: 4px solid var(--az-pink); font-size: 14px; }
     .early-dialog .button { width: 100%; white-space: normal; }
     .early-close { position: absolute; top: 10px; right: 10px; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 3px solid var(--az-navy); background: var(--az-navy); color: white; }
-    @media(max-width: 767px) { .review-grid { grid-template-columns: 1fr; } .about-layout { grid-template-columns: 1fr !important; } .about .body-large { font-size: 15px; } .early-invitation { gap: 12px; } .early-invitation .button { font-size: 13px; padding: 14px; } .early-dialog { padding: 56px 20px 24px; box-shadow: 5px 5px 0 var(--az-pink); } }
+    @media(max-width: 767px) { .review-grid { grid-template-columns: 1fr; } .about-layout { grid-template-columns: 1fr !important; } .about .body-large { font-size: 15px; } .early-dialog { padding: 56px 20px 24px; box-shadow: 5px 5px 0 var(--az-pink); } }
     .about { background: var(--az-cream); }
     .about-layout, .experience-layout { display: grid; gap: 40px; align-items: center; }
     .tag { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 24px; padding: 8px 16px; color: var(--az-white); background: var(--az-pink); font-size: 14px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
@@ -853,6 +850,26 @@
       .packages-heading .fleet-label { margin-bottom:12px; }
     }
 
+    .bounce-entrance { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; overflow: hidden; pointer-events: none; }
+    .bounce-entrance[hidden] { display: none; }
+    .entrance-arch { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 10px 0 rgba(15,23,41,.45)); animation: enter-the-carnival 1.1s cubic-bezier(.22,.8,.3,1) forwards; }
+    .entrance-welcome { position: relative; align-self: end; margin-bottom: 30px; text-align: center; color: var(--az-navy); background: var(--az-yellow); border: 3px solid var(--az-navy); border-radius: 22px; padding: 12px 24px; animation: entrance-label 1.1s forwards; }
+    .entrance-welcome strong { display: block; font-size: clamp(24px, 6vw, 42px); }
+    .entrance-skip { pointer-events: auto; margin-top: 5px; padding: 7px 12px; color: var(--az-navy); background: transparent; border: 0; text-decoration: underline; font: inherit; font-size: 13px; cursor: pointer; }
+    @keyframes enter-the-carnival { 0% { opacity: 1; transform: scale(.94); } 28% { opacity: 1; transform: scale(1.02,.98); } 65% { opacity: 1; transform: scale(1.3); } 100% { opacity: 0; transform: scale(1.9); } }
+    @keyframes entrance-label { 0%,35% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(20px); } }
+    .package-card:hover, .package-card:focus-within, .package-card:active { animation: carnival-card-bounce .55s ease-out; }
+    @keyframes carnival-card-bounce { 0% { transform: translateY(0) scale(1); } 28% { transform: translateY(2px) scale(1.025,.98); } 60% { transform: translateY(-10px) scale(.995,1.015); } 100% { transform: translateY(-8px) scale(1); } }
+    .packages { position: relative; }
+    .packages::before, .packages::after, .contact::after { position: absolute; left: 0; right: 0; height: 18px; content: ""; pointer-events: none; }
+    .packages::before { top: 0; background: radial-gradient(circle at 18px 0, var(--az-pink) 17px, transparent 18px) 0 0 / 36px 18px repeat-x; }
+    .packages::after, .contact::after { bottom: -1px; background: radial-gradient(circle at 18px 18px, var(--az-cream) 17px, transparent 18px) 0 0 / 36px 18px repeat-x; }
+    .inquiry-confetti { position: absolute; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
+    .contact-form { position: relative; }
+    .inquiry-confetti i { position: absolute; left: var(--confetti-x); top: 0; width: 8px; height: 12px; border-radius: 2px; background: var(--confetti-color); animation: inquiry-celebration 1.2s ease-out var(--confetti-delay) both; }
+    @keyframes inquiry-celebration { 0% { opacity: 0; transform: translateY(-20px) rotate(0); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(360px) rotate(270deg); } }
+    @media(prefers-reduced-motion: reduce) { .bounce-entrance, .inquiry-confetti { display: none; } .package-card:hover, .package-card:focus-within, .package-card:active { animation: none; transform: none; } }
+
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
       .marquee-track { animation: none; }
@@ -1022,6 +1039,16 @@
       <aside class="team-float" aria-label="Meet the Adventure Zone team">${teamMarkup()}</aside>
 
       <section class="hero" id="hero">
+        <div class="bounce-entrance" hidden aria-label="Welcome to The Adventure Zone">
+          <svg class="entrance-arch" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <defs><linearGradient id="az-pink-tube" x1="0" x2="1"><stop stop-color="#a90067"/><stop offset=".35" stop-color="#ff73bf"/><stop offset=".6" stop-color="#ff008e"/><stop offset="1" stop-color="#bc0068"/></linearGradient><linearGradient id="az-yellow-tube" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff295"/><stop offset=".4" stop-color="#ffcc00"/><stop offset="1" stop-color="#e89e00"/></linearGradient></defs>
+            <path d="M110 650V250Q110 85 280 85H720Q890 85 890 250V650" fill="none" stroke="#0f1729" stroke-width="142" stroke-linecap="round"/>
+            <path d="M110 650V250Q110 85 280 85H720Q890 85 890 250V650" fill="none" stroke="url(#az-pink-tube)" stroke-width="128" stroke-linecap="round"/>
+            <path d="M280 85H720" fill="none" stroke="url(#az-yellow-tube)" stroke-width="128" stroke-linecap="round"/>
+            <path d="M76 600V280M924 600V280" fill="none" stroke="#ffbee2" stroke-opacity=".5" stroke-width="8" stroke-linecap="round"/>
+          </svg>
+          <div class="entrance-welcome"><strong class="display">Come on in!</strong><button class="entrance-skip" type="button">Skip entrance</button></div>
+        </div>
         <div class="hero-backdrop"><video class="hero-video" src="${IMAGE.heroVideo}" poster="${IMAGE.hero}" autoplay loop muted playsinline preload="metadata" aria-hidden="true"></video></div>
         <div class="hero-overlay"></div>
         <div class="hero-content">
@@ -1111,9 +1138,8 @@
         ${formMarkup()}
       </div></div></section>
 
-      <aside class="early-invitation container" aria-label="Early-booking invitation"><button class="button offer-ticket" type="button" data-early-offer aria-label="Planning an event? Ask about 10% off!">${icon("ticket")}<span>10% off?<small>Ask about early booking</small></span></button><div class="early-mascot" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div></aside>
       <footer class="footer"><div class="container footer-inner"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></div></footer>
-      <div class="tube-man-position" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div>
+      <div class="tube-man-position"><button type="button" class="mascot-bubble" data-early-offer aria-label="Planning an event? Ask about 10% off!">Psst...<br>Ask about <strong>10% off!</strong></button><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div>
       ${conventionWelcomeMarkup()}
       <dialog class="early-dialog" aria-labelledby="early-offer-title"><button class="early-close" type="button" data-early-close aria-label="Close early-booking offer">${icon("close")}</button><div class="tag">Early-booking season</div><h2 class="display" id="early-offer-title">Planning an event?</h2><p>Find out how to get 10% off an eligible prepaid event package during our early-booking season.</p><p class="early-terms">Prepaid packages only. Guaranteed pay-to-play bookings are excluded. Ask us for your offer details and deadline.</p><button class="button" type="button" data-early-inquire>Ask About the Offer</button></dialog>
       <dialog class="package-dialog" aria-labelledby="package-detail-title"><button type="button" class="package-dialog-close" data-package-close aria-label="Close package details">${icon("close")}</button><div class="package-dialog-content"></div></dialog>
@@ -1121,6 +1147,25 @@
   }
 
   class AdventureZoneSite extends HTMLElement {
+    static get observedAttributes() { return ["offer-request"]; }
+    attributeChangedCallback(name, before, after) {
+      if (name === "offer-request" && before !== after && this.isConnected) this.openEarlyOffer();
+    }
+    openEarlyOffer() {
+      const root = this.shadowRoot;
+      const dialog = root.querySelector(".early-dialog");
+      if (!dialog || dialog.open) return;
+      this.earlyOpener = root.activeElement;
+      dialog.showModal();
+      if (this.isWixPreviewFrame) {
+        dialog.style.position = "absolute";
+        dialog.style.top = `${root.querySelector(".contact").offsetTop + 180}px`;
+        dialog.style.bottom = "auto";
+        dialog.scrollIntoView({ behavior: "instant", block: "center" });
+      }
+      root.querySelector("[data-early-close]").focus({ preventScroll: true });
+    }
+
     constructor() {
       super();
       this.attachShadow({ mode: "open" });
@@ -1145,6 +1190,7 @@
       this.shadowRoot.querySelector(".az-site").classList.toggle("wix-preview-frame", this.isWixPreviewFrame);
       this.abortController = new AbortController();
       this.bindInteractions();
+      this.startBounceEntrance();
       if (this.isConventionVisit()) {
         this.openConventionWelcome();
       }
@@ -1168,8 +1214,42 @@
       this.inquiryAbortController?.abort();
       this.resizeObserver?.disconnect();
       window.clearTimeout(this.teamLayoutTimer);
+      window.clearTimeout(this.entranceTimer);
+      window.clearTimeout(this.confettiTimer);
       if (this.conventionOpen) document.body.style.overflow = this.previousBodyOverflow;
       this.restorePackageDialog();
+    }
+
+    startBounceEntrance() {
+      const entrance = this.shadowRoot.querySelector('.bounce-entrance');
+      if (!entrance || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || this.isConventionVisit() || window.location.hash || new URLSearchParams(window.location.search).has('section')) return;
+      try {
+        if (sessionStorage.getItem('az-carnival-entrance-seen')) return;
+        sessionStorage.setItem('az-carnival-entrance-seen', 'yes');
+      } catch { /* The entrance still works when storage is unavailable. */ }
+      entrance.hidden = false;
+      const dismiss = () => { entrance.hidden = true; window.clearTimeout(this.entranceTimer); };
+      entrance.querySelector('.entrance-skip').addEventListener('click', dismiss, { signal: this.abortController.signal });
+      this.entranceTimer = window.setTimeout(dismiss, 1100);
+    }
+
+    celebrateInquiry(form) {
+      if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+      form.querySelector('.inquiry-confetti')?.remove();
+      window.clearTimeout(this.confettiTimer);
+      const confetti = document.createElement('div');
+      confetti.className = 'inquiry-confetti';
+      confetti.setAttribute('aria-hidden', 'true');
+      const colors = ['#ffcc00', '#ff008e', '#0f1729'];
+      for (let index = 0; index < 24; index++) {
+        const piece = document.createElement('i');
+        piece.style.setProperty('--confetti-x', `${(index * 37) % 100}%`);
+        piece.style.setProperty('--confetti-color', colors[index % colors.length]);
+        piece.style.setProperty('--confetti-delay', `${(index % 5) * 35}ms`);
+        confetti.append(piece);
+      }
+      form.append(confetti);
+      this.confettiTimer = window.setTimeout(() => confetti.remove(), 1500);
     }
 
     bindInteractions() {
@@ -1208,18 +1288,7 @@
         if (!this.reviewsPaused && !document.hidden && !reviewSection.matches(":hover, :focus-within")) this.rotateReviews(1);
       }, 10000));
       const earlyDialog = root.querySelector(".early-dialog");
-      root.querySelector("[data-early-offer]").addEventListener("click", () => {
-        // Click-only: the offer never opens automatically after dismissal.
-        this.earlyOpener = root.activeElement;
-        earlyDialog.showModal();
-        if (this.isWixPreviewFrame) {
-          earlyDialog.style.position = "absolute";
-          earlyDialog.style.top = `${root.querySelector(".early-invitation").offsetTop - 520}px`;
-          earlyDialog.style.bottom = "auto";
-          earlyDialog.scrollIntoView({ behavior: "instant", block: "center" });
-        }
-        root.querySelector("[data-early-close]").focus({ preventScroll: true });
-      }, { signal });
+      root.querySelectorAll("[data-early-offer]").forEach(button => button.addEventListener("click", () => this.openEarlyOffer(), { signal }));
       root.querySelector("[data-early-close]").addEventListener("click", () => earlyDialog.close(), { signal });
       earlyDialog.addEventListener("click", event => {
         if (event.target === earlyDialog) {
@@ -1630,6 +1699,7 @@
           .filter(Boolean)
           .join(" ");
         this.showFormStatus(confirmation);
+        this.celebrateInquiry(form);
         this.dispatchEvent(new CustomEvent("adventure-zone-inquiry", {
           bubbles: true,
           cancelable: false,
@@ -1670,6 +1740,10 @@
 
   const mascotStyles = `
     :host { position: fixed; right: 0; bottom: 0; left: auto; display: block; width: 130px; height: 230px; overflow: visible; pointer-events: none; }
+    .mascot-bubble { position: absolute; right: 0; bottom: 210px; width: 126px; min-height: 82px; padding: 12px 8px; border: 3px solid #0f1729; border-radius: 22px; background: #ffdf00; color: #0f1729; box-shadow: -4px 4px 0 #ff238c; font: 800 14px/1.25 Arial, sans-serif; text-align: center; cursor: pointer; pointer-events: auto; z-index: 2; }
+    .mascot-bubble strong { display: block; font-size: 21px; }
+    .mascot-bubble::after { content: ""; position: absolute; right: 24px; bottom: -13px; width: 18px; height: 18px; background: #ffdf00; border-right: 3px solid #0f1729; border-bottom: 3px solid #0f1729; transform: rotate(45deg); }
+    .mascot-bubble:focus-visible { outline: 3px solid #ff238c; outline-offset: 5px; }
     *, *::before, *::after { box-sizing: border-box; }
     .mascot-shell { display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 100%; overflow: visible; transform: translateY(3px); }
     .tube-man-sway, .tube-man-wobble, .tube-man-image { transform-origin: 50% 100%; will-change: transform; }
@@ -1691,7 +1765,7 @@
       77% { transform: translateY(-3px) scaleX(.98) scaleY(1.035) skewX(2deg); }
     }
     @media (max-width: 767px) {
-      :host { right: 0; bottom: 0; left: 0; width: 100%; height: 100%; }
+      :host(:not(.wix-preview-mascot)) { display: none; }
     }
     @media (prefers-reduced-motion: reduce) {
       .tube-man-sway, .tube-man-wobble { animation: none; }
@@ -1705,7 +1779,10 @@
     }
 
     connectedCallback() {
-      this.shadowRoot.innerHTML = `<style>${mascotStyles}</style><div class="mascot-shell"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt="The Adventure Zone inflatable tube-man mascot"></div></div></div>`;
+      if (window.location.href.includes("CustomElementPreviewIframe")) this.classList.add("wix-preview-mascot");
+      this.shadowRoot.innerHTML = `<style>${mascotStyles}</style><button type="button" class="mascot-bubble" aria-label="Planning an event? Ask about 10% off!">Psst...<br>Ask about <strong>10% off!</strong></button><div class="mascot-shell"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt="The Adventure Zone inflatable tube-man mascot"></div></div></div>`;
+      this.shadowRoot.querySelector(".mascot-bubble").addEventListener("click", () => this.dispatchEvent(new CustomEvent("early-offer-open", { bubbles: true, composed: true })));
+
     }
   }
 
