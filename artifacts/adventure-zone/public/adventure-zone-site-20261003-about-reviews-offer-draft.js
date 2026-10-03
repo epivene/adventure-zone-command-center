@@ -505,6 +505,8 @@
     .urgent-contact { max-width: 760px; margin: -12px auto 28px; padding: 14px 16px; color: var(--az-navy); background: rgba(255,255,255,.78); border-left: 4px solid var(--az-pink); font-size: 14px; font-weight: 800; line-height: 1.5; text-align: center; }
     .urgent-contact a { color: var(--az-navy); text-decoration: underline; text-decoration-color: var(--az-pink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
     .contact-form { padding: 20px; background: var(--az-white); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); }
+    .carnival-form-note { margin: 0 0 24px; padding: 16px; color: var(--az-navy); background: var(--az-cream); border-left: 5px solid var(--az-pink); font-size: 15px; line-height: 1.5; }
+    .carnival-form-note strong { display: block; margin-bottom: 6px; }
     .convention-form-note { margin: 0 0 24px; padding: 14px 16px; color: var(--az-navy); background: var(--az-yellow); border-left: 5px solid var(--az-pink); font-size: 14px; font-weight: 800; line-height: 1.45; }
     .convention-form-note[hidden] { display: none; }
     .convention-form-note strong { display: block; margin-bottom: 3px; font-size: 12px; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; }
@@ -940,6 +942,7 @@
 
   function formMarkup() {
     return `<form class="contact-form" novalidate>
+      <p class="carnival-form-note"><strong>Let?s bring the carnival to your event!</strong>We?re a fully staffed traveling bounce house carnival, offering complete event packages. We don?t rent bounce houses individually. Our team handles setup, operation, and teardown, so you can focus on enjoying your event.</p>
       <div class="convention-form-note" hidden><strong>Convention Guest</strong>Your convention visit will automatically be included with your inquiry.</div>
       <div class="form-grid">
         <div class="field"><label for="az-name">Your Name *</label><input id="az-name" name="name" required maxlength="120" placeholder="Jane Smith"></div>
