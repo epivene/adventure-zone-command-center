@@ -307,9 +307,12 @@
     .about-team-photo img { display: block; width: 100%; max-height: 300px; object-fit: cover; border: 4px solid var(--az-navy); }
     .about-team-photo figcaption { padding: 8px 0; font-weight: 800; font-size: 13px; }
     .reviews { position: relative; z-index: 36; background: var(--az-cream); color: var(--az-navy); }
-    .reviews h2 { max-width: 900px; font-size: clamp(28px, 5vw, 54px); }
-    .review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 28px; }
-    .review-card { padding: 24px; border: 3px solid var(--az-navy); background: var(--az-white); box-shadow: 6px 6px 0 var(--az-pink); }
+    .review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+    .review-card { min-height: 280px; padding: 24px; border: 3px solid var(--az-navy); background: var(--az-white); box-shadow: 6px 6px 0 var(--az-pink); }
+    .review-card[hidden] { display: none; }
+    .review-controls { display: flex; justify-content: center; gap: 12px; margin-top: 24px; }
+    .review-controls button { min-width: 44px; min-height: 44px; border: 2px solid var(--az-navy); color: var(--az-navy); background: var(--az-yellow); font-weight: 800; }
+    @media(max-width: 767px) { .review-card { min-height: 360px; } }
     .review-card blockquote { margin: 0; font-size: 17px; line-height: 1.55; }
     .review-card .review-attribution { margin: 20px 0 0; font-weight: 800; font-size: 14px; }
     .early-invitation { display: flex; align-items: center; justify-content: center; gap: 18px; padding-top: 24px; padding-bottom: 24px; }
@@ -1055,13 +1058,13 @@
         </div>
       </div></section>
 
-      <section class="section reviews" id="reviews"><div class="container"><div class="tag">Event stories</div><h2 class="display">Hear it from the events we’ve joined.</h2><div class="review-grid">
+      <section class="section reviews" id="reviews" aria-label="Customer feedback"><div class="container"><div class="review-grid">
         <article class="review-card"><blockquote>“Your staff is always friendly, works very hard, and does a great job checking in with our staff before making any changes or just to make sure everything is going well.”</blockquote><p class="review-attribution">— Event organizer</p></article>
         <article class="review-card"><blockquote>“Your crew did an amazing job.”</blockquote><p class="review-attribution">— Fair organizer</p></article>
         <article class="review-card"><blockquote>“Your participation made a big difference.”</blockquote><p class="review-attribution">— Event organizer</p></article>
         <article class="review-card"><blockquote>“We appreciate that you were able to be here and provide a great family friendly entertainment to our fairgoers!”</blockquote><p class="review-attribution">— Fair coordinator</p></article>
         <article class="review-card"><blockquote>“We came back at the end of our time to play more games there, just because of Jim.”</blockquote><p class="review-attribution">— Guest</p></article>
-      </div></div></section>
+      </div><div class="review-controls"><button type="button" data-review-prev aria-label="Previous feedback">←</button><button type="button" data-review-pause aria-label="Pause feedback rotation">Ⅱ</button><button type="button" data-review-next aria-label="Next feedback">→</button></div></div></section>
       <section class="section how"><div class="container how-layout">
         <div class="how-copy"><h2 class="display">How It Works</h2><p>You provide the space and the crowd. We handle the rest.</p><a class="button" href="#contact">Check Dates</a></div>
         <div class="step-grid">${stepCard("01", "pin", "Setup", "Our professional crew arrives early, handles all rigging, power routing, and safety checks before the gates open.")}${stepCard("02", "hardhat", "Staffing", "Every attraction is manned by our trained team. We don't rely on your volunteers to keep things safe.")}${stepCard("03", "zap", "Operation", "We manage the lines, enforce the rules, and ensure high throughput so more kids have more fun.")}${stepCard("04", "clock", "Teardown", "When the event ends, we pack it all up efficiently, leaving your grounds exactly as we found them.")}</div>
@@ -1182,6 +1185,24 @@
           root.querySelector('[name="name"]').focus({ preventScroll: true });
         }
       }, { signal });
+      const reviewSection = root.querySelector("#reviews");
+      this.reviewCards = [...root.querySelectorAll(".review-card")];
+      this.reviewIndex = 0;
+      this.reviewsPaused = !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+      const reviewPause = root.querySelector("[data-review-pause]");
+      const updateReviewPause = () => {
+        reviewPause.textContent = this.reviewsPaused ? "▶" : "Ⅱ";
+        reviewPause.setAttribute("aria-label", this.reviewsPaused ? "Play feedback rotation" : "Pause feedback rotation");
+      };
+      updateReviewPause();
+      this.renderReviews();
+      root.querySelector("[data-review-prev]").addEventListener("click", () => this.rotateReviews(-1), { signal });
+      root.querySelector("[data-review-next]").addEventListener("click", () => this.rotateReviews(1), { signal });
+      reviewPause.addEventListener("click", () => { this.reviewsPaused = !this.reviewsPaused; updateReviewPause(); }, { signal });
+      window.addEventListener("resize", () => this.renderReviews(), { signal, passive: true });
+      this.timers.push(window.setInterval(() => {
+        if (!this.reviewsPaused && !document.hidden && !reviewSection.matches(":hover, :focus-within")) this.rotateReviews(1);
+      }, 10000));
       const earlyDialog = root.querySelector(".early-dialog");
       root.querySelector("[data-early-offer]").addEventListener("click", () => {
         // Click-only: the offer never opens automatically after dismissal.
@@ -1486,6 +1507,23 @@
       this.shadowRoot.querySelectorAll(".team-bubble").forEach((bubble) => {
         bubble.classList.add("visible");
       });
+    }
+
+    renderReviews() {
+      const grid = this.shadowRoot.querySelector(".review-grid");
+      if (!grid || !this.reviewCards?.length) return;
+      const visibleCount = window.innerWidth < 768 ? 1 : 3;
+      this.reviewCards.forEach((_, slot) => {
+        const card = this.reviewCards[(this.reviewIndex + slot) % this.reviewCards.length];
+        card.hidden = slot >= visibleCount;
+        grid.append(card);
+      });
+    }
+
+    rotateReviews(direction) {
+      if (!this.reviewCards?.length) return;
+      this.reviewIndex = (this.reviewIndex + direction + this.reviewCards.length) % this.reviewCards.length;
+      this.renderReviews();
     }
 
     startRotations() {
