@@ -1198,7 +1198,7 @@
           this.earlyInquiryRequested = false;
           const nameField = root.querySelector("#az-name");
           nameField.focus({ preventScroll: true });
-          nameField.scrollIntoView({ behavior: "instant", block: "center" });
+          nameField.scrollIntoView({ behavior: "instant", block: "start" });
         } else {
           this.earlyOpener?.focus({ preventScroll: true });
         }
