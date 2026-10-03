@@ -1,3 +1,4 @@
+import { GmailDraftFilingService } from "./gmail-draft-filing-service";
 import { TodayReadService } from "./today-read-service";
 import { loadMasterTodayQueue } from "../today/master-work-queue-repository";
 import { createEmailAttentionService } from "../google-workspace/email-thread-attention-runtime";
@@ -159,6 +160,7 @@ export function mountChatGPTConnection(
         updates: new ProfileUpdateService(db),
         merges: new ProfileMergeService(db),
         drafts: new DraftFollowupService(db),
+        draftFiling: new GmailDraftFilingService(db),
         operations: new OperationStore(db),
       },
     }),

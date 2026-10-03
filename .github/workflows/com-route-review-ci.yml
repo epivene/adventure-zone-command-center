@@ -26,6 +26,8 @@ jobs:
         run: >-
           pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000
           src/features/chatgpt-connection/mcp-server.test.ts
+          src/features/chatgpt-connection/gmail-draft-filing-service.pglite.test.ts
+          src/features/chatgpt-connection/draft-followup-service.pglite.test.ts
           src/features/chatgpt-connection/operational-reads.pglite.test.ts
           src/features/chatgpt-connection/today-read-service.test.ts
           src/features/assistant-workspace/orchestrator.test.ts

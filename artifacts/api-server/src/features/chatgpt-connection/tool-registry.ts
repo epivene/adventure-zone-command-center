@@ -1,3 +1,4 @@
+import { GmailDraftFilingService, draftFilingInput, draftFilingApplyInput } from "./gmail-draft-filing-service";
 import { operationalReviewToolReminder } from "../operational-review-policy";
 import { emailReviewToolReminder } from "../email-next-step-review";
 import {todayReadInput,type TodayReadService} from "./today-read-service";
@@ -19,6 +20,7 @@ import { closeFollowupSchema, type DraftFollowupService } from "./draft-followup
 import type { OperationStore } from "./operation-store";
 export type ConnectionServices = {
   today?: TodayReadService;
+  draftFiling?: GmailDraftFilingService;
   attention?: EmailThreadAttentionService;
   work: BookingWorkService;
   reads: ConnectionReadService;
@@ -301,6 +303,19 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
     description:"Read the app's current master Today queue: needsAttention (default), active, completedToday, or decisionReview. decisionReview combines open work with saved reasons, profile links, suggested next steps and owner decisions; omits completed and not-yet-due waiting/follow-up work. Recommendations require source verification; draft items are not proof of ready drafts. Optional profileId filter. Follow nextCursor until null; restart without cursor on TODAY_QUEUE_CHANGED. This is current data, not visual UI verification. Absence does not prove resolution: use read_email_profile_assignment for an exact thread's current state. Operation receipts are historical. No writes or paid app AI." + " " + emailReviewToolReminder,
     schema:todayReadInput,call:a=>{if(!s.today)throw new Error("TODAY_READ_UNAVAILABLE");return s.today.read(p,a);},
   });
+  if (s.draftFiling) tools.push(
+    { name: "read_gmail_draft_filing", scope: "crm:read", readOnly: true,
+      description: "Read the current Gmail draft message ID and exact content/profile/account revision before filing. Gmail edits replace message IDs: use draftId from the latest Gmail draft inventory. Read the full current draft and verify its event/profile match; this preview is not content approval. No writes.",
+      schema: draftFilingInput, call: a => s.draftFiling!.preview(p, a) },
+    { name: "file_gmail_draft_to_profile", scope: "email:organize", readOnly: false, destructive: false,
+      description: "File only the verified current unsent Gmail draft under the app's mapped Profiles label. First read_gmail_draft_filing and the complete draft, compare the event/profile, then use expectedRevision. Preserves other thread messages, Inbox, attention labels and follow-ups. Does not send, archive, create customer email history, or certify outreach readiness. Reuse requestKey on identical retry; stale revision means reread and reassess.",
+      schema: draftFilingApplyInput.extend({ requestKey }).strict(),
+      call: ({ requestKey, ...a }) => s.draftFiling!.apply(p, { requestKey }, a) },
+    { name: "read_email_filing_conflicts", scope: "crm:read", readOnly: true,
+      description: "Read stored profile mappings for the exact current Google account and Gmail thread when filing reports EMAIL_ATTENTION_PROFILE_CONFLICT. Returns associated profile IDs/names without changing them. Compare full conversation/profile evidence; do not merge or overwrite conflicting destinations automatically.",
+      schema: z.object({ gmailConnectionId: id, threadId: z.string().trim().min(1).max(200) }).strict(),
+      call: a => s.draftFiling!.inspect(p, a) },
+  );
   tools.push(...emailAttentionTools(s.attention, p));
   tools.push(...bookingWorkTools(s.work, p));
   return tools;
