@@ -309,7 +309,9 @@
     .reviews { background: var(--az-cream); color: var(--az-navy); }
     .reviews h2 { max-width: 900px; font-size: clamp(28px, 5vw, 54px); }
     .review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 28px; }
-    .review-placeholder { padding: 24px; border: 3px dashed var(--az-navy); background: var(--az-white); box-shadow: 6px 6px 0 var(--az-pink); }
+    .review-card { padding: 24px; border: 3px solid var(--az-navy); background: var(--az-white); box-shadow: 6px 6px 0 var(--az-pink); }
+    .review-card blockquote { margin: 0; font-size: 17px; line-height: 1.55; }
+    .review-card .review-attribution { margin: 20px 0 0; font-weight: 800; font-size: 14px; }
     .early-invitation { display: flex; align-items: center; justify-content: center; gap: 18px; padding-top: 24px; padding-bottom: 24px; }
     .early-invitation .button { white-space: normal; text-align: center; }
     .early-mascot { flex: 0 0 64px; width: 64px; }
@@ -1053,7 +1055,13 @@
         </div>
       </div></section>
 
-      <section class="section reviews" id="reviews"><div class="container"><div class="tag">Event stories</div><h2 class="display">Hear it from the events we’ve joined.</h2><p>Draft layout — customer testimonials are awaiting verification and approval.</p><div class="review-grid"><article class="review-placeholder"><strong>REVIEW PLACEHOLDER 1</strong><p>Approved customer quote to be added.</p><small>Customer / event name and source link pending.</small></article><article class="review-placeholder"><strong>REVIEW PLACEHOLDER 2</strong><p>Approved customer quote to be added.</p><small>Customer / event name and source link pending.</small></article><article class="review-placeholder"><strong>REVIEW PLACEHOLDER 3</strong><p>Approved customer quote to be added.</p><small>Customer / event name and source link pending.</small></article></div></div></section>
+      <section class="section reviews" id="reviews"><div class="container"><div class="tag">Event stories</div><h2 class="display">Hear it from the events we’ve joined.</h2><div class="review-grid">
+        <article class="review-card"><blockquote>“Your staff is always friendly, works very hard, and does a great job checking in with our staff before making any changes or just to make sure everything is going well.”</blockquote><p class="review-attribution">— Event organizer</p></article>
+        <article class="review-card"><blockquote>“Your crew did an amazing job.”</blockquote><p class="review-attribution">— Fair organizer</p></article>
+        <article class="review-card"><blockquote>“Your participation made a big difference.”</blockquote><p class="review-attribution">— Event organizer</p></article>
+        <article class="review-card"><blockquote>“We appreciate that you were able to be here and provide a great family friendly entertainment to our fairgoers!”</blockquote><p class="review-attribution">— Fair coordinator</p></article>
+        <article class="review-card"><blockquote>“We came back at the end of our time to play more games there, just because of Jim.”</blockquote><p class="review-attribution">— Guest</p></article>
+      </div></div></section>
       <section class="section how"><div class="container how-layout">
         <div class="how-copy"><h2 class="display">How It Works</h2><p>You provide the space and the crowd. We handle the rest.</p><a class="button" href="#contact">Check Dates</a></div>
         <div class="step-grid">${stepCard("01", "pin", "Setup", "Our professional crew arrives early, handles all rigging, power routing, and safety checks before the gates open.")}${stepCard("02", "hardhat", "Staffing", "Every attraction is manned by our trained team. We don't rely on your volunteers to keep things safe.")}${stepCard("03", "zap", "Operation", "We manage the lines, enforce the rules, and ensure high throughput so more kids have more fun.")}${stepCard("04", "clock", "Teardown", "When the event ends, we pack it all up efficiently, leaving your grounds exactly as we found them.")}</div>
