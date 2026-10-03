@@ -68,6 +68,21 @@ jobs:
       - name: Test booking review visibility
         if: success() || failure()
         run: pnpm --filter @workspace/adventure-zone test --maxWorkers=2 src/features/bookings/booking-list-visibility.test.ts src/features/event-date-coverage/BookingDateRepairs.test.tsx src/components/bookings/leg-operations-panel.test.tsx
+      - name: Test current-main call list integration
+        run: >-
+          pnpm --filter @workspace/adventure-zone test --maxWorkers=2
+          src/pages/TodayPage.test.tsx
+          src/features/today/leg-call-list.test.ts
+          src/components/today/leg-call-list.test.tsx
+          src/components/today/call-queue-workspace.test.tsx
+          src/components/today/call-queue-guided-call.test.tsx
+      - name: Test current-main email next-step integration
+        run: >-
+          pnpm --filter @workspace/api-server test --maxWorkers=2
+          src/features/assistant-workspace/read-tools.test.ts
+          src/features/assistant-workspace/orchestrator.test.ts
+          src/features/chatgpt-connection/mcp-server.test.ts
+          src/features/chatgpt-connection/today-read-service.test.ts
       - name: Test ACT import compatibility and retain failures
         run: |
           pnpm --filter @workspace/api-server test --maxWorkers=2 --testTimeout=30000 --reporter=json --outputFile="$RUNNER_TEMP/head-act.json" src/features/act-replacement || true

@@ -1,0 +1,54 @@
+name: Leg Call List
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/adventure-zone/src/features/today/leg-call-list*"
+      - "artifacts/adventure-zone/src/components/today/leg-call-list*"
+      - "artifacts/adventure-zone/src/components/today/call-queue*"
+      - "artifacts/adventure-zone/src/pages/TodayPage.tsx"
+      - "artifacts/adventure-zone/src/pages/CallWorkspacePage.tsx"
+      - ".github/workflows/leg-call-list-ci.yml"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "artifacts/adventure-zone/src/features/today/leg-call-list*"
+      - "artifacts/adventure-zone/src/components/today/leg-call-list*"
+      - "artifacts/adventure-zone/src/pages/TodayPage.tsx"
+      - ".github/workflows/leg-call-list-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leg-call-list-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  leg-call-list:
+    name: Call list regressions and frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test call list and existing call outcome workflow
+        run: >-
+          pnpm --filter @workspace/adventure-zone test --maxWorkers=2
+          src/pages/TodayPage.test.tsx
+          src/features/today/leg-call-list.test.ts
+          src/components/today/leg-call-list.test.tsx
+          src/components/today/call-queue-workspace.test.tsx
+          src/components/today/call-queue-guided-call.test.tsx
+      - name: Build frontend
+        run: pnpm --filter @workspace/adventure-zone build

@@ -1,3 +1,4 @@
+import { emailReviewToolReminder } from "../email-next-step-review";
 import { readOperational } from "./operational-reads";
 import { z } from "zod";
 import {
@@ -208,7 +209,7 @@ export class ConnectionReadService {
       ),
       complete: false,
       instruction:
-        "This is one page of one section, not a complete profile history. Before saving dates, read every page of dates and bookings. Dates includes active, superseded and needs_review research facts; expected means estimated. An empty dates section does not exclude booking dates. A confirmed event date is not a confirmed Adventure Zone booking. Dates reflect recorded activity dates, not proof of an event year. Open other sections and follow nextCursor; excerpt=true means consult the original record in the app.",
+        "This is one page of one section, not a complete profile history. Before saving dates, read every page of dates and bookings. Dates includes active, superseded and needs_review research facts; expected means estimated. An empty dates section does not exclude booking dates. A confirmed event date is not a confirmed Adventure Zone booking. Dates reflect recorded activity dates, not proof of an event year. Open other sections and follow nextCursor; excerpt=true means consult the original record in the app." + (section === "history" ? " " + emailReviewToolReminder : ""),
     };
   }
   async documentText(

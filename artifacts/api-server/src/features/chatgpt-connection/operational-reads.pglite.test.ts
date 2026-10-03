@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import * as schema from "@workspace/db/schema";
+import { legSeasonPlans, legEventPlans, crewAvailability, packageSets, packageSetMembers } from "@workspace/db/leg-planning-schema";
 import { fixture } from "./test-database";
 import { ConnectionReadService } from "./read-service";
 import { connectionTools } from "./tool-registry";
@@ -33,6 +34,12 @@ beforeEach(async () => {
     schema.tripStops,
     schema.tripSegments,
     schema.crewWorkHistory,
+    schema.crewWorkers,
+    legSeasonPlans,
+    legEventPlans,
+    crewAvailability,
+    packageSets,
+    packageSetMembers,
     schema.resourcePackageTags,
     schema.bookingResourcePackageAttributions,
   ]) {
@@ -44,6 +51,7 @@ beforeEach(async () => {
     );
     await f.db.exec(`CREATE TABLE "${cfg.name}" (${cols.join(",")})`);
   }
+  await f.db.exec("CREATE TABLE crew_worker_leg_memberships(worker_id uuid,leg_id uuid,created_at timestamptz)");
   await f.db.exec(
     readFileSync(
       new URL(
@@ -196,6 +204,12 @@ it("executes every section against real production columns and labels crew data 
     "demand",
     "resource_tags",
     "resource_attributions",
+    "leg_seasons",
+    "operating_plans",
+    "crew_roster",
+    "crew_memberships",
+    "crew_availability",
+    "package_sets",
   ]) {
     const page = await read(section);
     expect(page.availability).toBe("available");
@@ -252,3 +266,65 @@ it('bounds large records, marks withheld fields and continues without dropping r
   expect(rest.items).toHaveLength(1);
   expect(rest.items[0].id).not.toBe(result.items[0].id);
 });
+
+it("reads the current roster and membership without exposing private personnel fields or upgrading membership to availability", async () => {
+  const worker = randomUUID();
+  await f.db.query("INSERT INTO crew_workers(id,name,phone,email,city,region,rehire_status) VALUES($1,'Pat','PRIVATE PHONE','private@example.test','Logan','UT','do_not_rehire')", [worker]);
+  await f.db.query("INSERT INTO crew_worker_leg_memberships(worker_id,leg_id) VALUES($1,$2)", [worker,leg]);
+  expect((await read("crew_roster")).items[0]).toMatchObject({id:worker,name:"Pat",city:"Logan",region:"UT"});
+  expect(JSON.stringify(await read("crew_roster"))).not.toMatch(/PRIVATE PHONE|private@example|do_not_rehire/);
+  expect((await read("crew_memberships",{legId:leg})).items[0]).toMatchObject({workerId:worker,workerName:"Pat",legId:leg});
+  expect((await read("crew_history")).items).toEqual([]);
+  expect((await read("crew_availability",{eventYear:2027})).items).toEqual([]);
+  const tools = connectionTools({reads:service} as any,f.principal);
+  for(const section of ["crew_roster","crew_memberships","crew_availability","package_sets"]) {
+    const tool = tools.find(t=>t.name==="read_operational_resources")!;
+    expect(tool.schema.safeParse({section}).success).toBe(true);
+    expect(tool.readOnly).toBe(true);
+  }
+});
+it("filters and paginates distinct saved seasons for the same leg without a prior-year boundary leak", async () => {
+  for(const seasonYear of [2026,2027,2028]) await f.db.query(
+    "INSERT INTO leg_season_plans(leg_id,season_year,revision,payload) VALUES($1,$2,1,$3)",
+    [leg,seasonYear,JSON.stringify({leadership:"tentative",managerName:"Jeremy",managerWorkerId:null,workerIds:[],baseAddress:"Saved base",transportResourceIds:[resource]})]);
+  const year = await read("leg_seasons",{eventYear:2027,legId:leg});
+  expect(year.items).toHaveLength(1);
+  expect(year.items[0]).toMatchObject({seasonYear:2027,leadership:"tentative",managerName:"Jeremy",baseAddress:"Saved base",transportResourceIds:[resource]});
+  const first = await read("leg_seasons",{legId:leg,limit:1});
+  const second = await read("leg_seasons",{legId:leg,limit:1,cursor:first.nextCursor});
+  const third = await read("leg_seasons",{legId:leg,limit:1,cursor:second.nextCursor});
+  expect(new Set([...first.items,...second.items,...third.items].map((row:any)=>row.id)).size).toBe(3);
+  expect(third.nextCursor).toBeNull();
+  await expect(read("leg_seasons",{legId:randomUUID(),cursor:first.nextCursor})).rejects.toMatchObject({code:"CONNECTION_INVALID_CURSOR"});
+});
+it("preserves committed and draft operating plans and their saved season independently from booking dates", async () => {
+  const committed = {seasonYear:2027,crew:[{workerId:randomUUID(),state:"confirmed"}],packageSetIds:[randomUUID()],transportResourceIds:[resource]};
+  const draft = {...committed,seasonYear:2028,crew:[]};
+  await f.db.query("INSERT INTO leg_event_plans(booking_id,leg_id,revision,draft,committed,invalidation_reasons) VALUES($1,$2,2,$3,$4,$5)",[booking,leg,JSON.stringify(draft),JSON.stringify(committed),JSON.stringify(["Transport review needed"])]);
+  const page = await read("operating_plans",{eventYear:2027,bookingId:booking});
+  expect(page.items).toHaveLength(1);
+  expect(page.items[0]).toMatchObject({draft,committed,revision:2,invalidationReasons:["Transport review needed"],profileHref:"/profiles/"+f.profileId});
+  expect((await read("operating_plans",{eventYear:2028})).items).toEqual([]);
+  await f.db.query("UPDATE leg_event_plans SET committed=NULL WHERE booking_id=$1",[booking]);
+  expect((await read("operating_plans",{eventYear:2028})).items[0].committed).toBeNull();
+});
+it("returns package-set verification and actual membership instead of trusting payload resource ids", async () => {
+  const packageId=randomUUID(),setId=randomUUID(),phantom=randomUUID();
+  await f.db.query("INSERT INTO package_templates(id,name) VALUES($1,'Adventure Zone')",[packageId]);
+  await f.db.query("INSERT INTO package_sets(id,package_id,revision,payload) VALUES($1,$2,1,$3)",[setId,packageId,JSON.stringify({name:"Saved AZ set",classification:"normal",state:"unverified",resourceIds:[phantom],requirements:{"Inflatable attraction":10},source:null})]);
+  await f.db.query("INSERT INTO package_set_members(set_id,resource_id) VALUES($1,$2)",[setId,resource]);
+  expect((await read("package_sets")).items[0]).toMatchObject({id:setId,name:"Saved AZ set",classification:"normal",state:"unverified",resourceIds:[resource]});
+});
+it("reads sourced availability with real overlap and keeps its confirmation state explicit", async () => {
+  const worker=randomUUID(),id=randomUUID();
+  await f.db.query("INSERT INTO crew_workers(id,name) VALUES($1,'Pat')",[worker]);
+  await f.db.query("INSERT INTO crew_availability(id,worker_id,starts_at,ends_at,state,revision,payload) VALUES($1,$2,'2027-07-01','2027-07-05','unverified',1,$3)",[id,worker,JSON.stringify({window:{startsAt:"2027-07-01",endsAt:"2027-07-05",semantics:"inclusive_date",source:"Roster"},source:{type:"saved_roster"}})]);
+  expect((await read("crew_availability",{dateFrom:"2027-07-04",dateTo:"2027-07-04"})).items[0]).toMatchObject({id,workerName:"Pat",state:"unverified",sourceWindow:{source:"Roster"}});
+  expect((await read("crew_availability",{eventYear:2026})).items).toEqual([]);
+});
+it("reports missing season storage as unavailable and rejects inapplicable roster filters", async () => {
+  await f.db.exec("DROP TABLE leg_season_plans");
+  expect(await read("leg_seasons",{eventYear:2027})).toMatchObject({availability:"unavailable",complete:false,items:[]});
+  for(const input of [{eventYear:2027},{legId:leg}]) await expect(read("crew_roster",input)).rejects.toMatchObject({code:"CONNECTION_INVALID_OPERATIONAL_FILTER"});
+});
+

@@ -75,6 +75,7 @@ function dashboard(overrides: Record<string, unknown> = {}) {
 
 function mockDashboard(value: ReturnType<typeof dashboard>) {
   apiGet.mockImplementation((path: string) => {
+    if (path === "/outreach-planner/") return Promise.resolve({ enabled: false, candidates: [], openings: [], legs: [], packages: [], researchTasks: [] });
     if (path === "/today") return Promise.resolve(value);
     if (path === "/calls/config") {
       return Promise.resolve({
@@ -103,7 +104,8 @@ describe("TodayPage renewals", () => {
   it("shows document attention separately from calls and follow-ups", async () => {
     mockDashboard(dashboard());
     apiGet.mockImplementation((path: string) => {
-      if (path === "/today") return Promise.resolve(dashboard());
+      if (path === "/outreach-planner/") return Promise.resolve({ enabled: false, candidates: [], openings: [], legs: [], packages: [], researchTasks: [] });
+    if (path === "/today") return Promise.resolve(dashboard());
       if (path === "/calls/config") return Promise.resolve({ assistedCallingEnabled: false, voicemailLauncherUrl: null });
       if (path === "/business-documents/review-count") return Promise.resolve({ count: 3 });
       return Promise.reject(new Error(`Unexpected API path: ${path}`));
@@ -197,7 +199,7 @@ describe("TodayPage renewals", () => {
     expect(screen.getByText("New Lead · Needs follow-up decision")).toBeInTheDocument();
   });
 
-  it("starts the focused work disclosures closed even when contracts are the priority", async () => {
+  it("keeps later work collapsed alongside the invoice and contract workspace", async () => {
     mockDashboard(
       dashboard({
         contractCount: 2,
@@ -211,9 +213,8 @@ describe("TodayPage renewals", () => {
       expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
 
-    const contracts = summaryWithText("Contracts (2)").closest("details");
+    expect(screen.getByRole("heading", { name: "Invoices & Contracts" })).toBeVisible();
     const later = screen.getByText("Later").closest("details");
-    expect(contracts).not.toHaveAttribute("open");
     expect(later).not.toHaveAttribute("open");
   });
 });

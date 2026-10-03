@@ -61,3 +61,15 @@ Com's review procedure:
 6. Keep email unsent until explicit instruction. Follow existing preview/apply and revision controls for any separately authorized record changes. Do not mark reminders complete merely because they were reviewed.
 
 After merge/deploy, refresh tools (and reboot Com if its tool catalog is stale). Ask: “Use Primary to review what needs my decision with read_today_queue section decisionReview. Verify the underlying records and return a short linked list with your recommendation and my decision. Don't change records or send anything.” No recurring schedule is installed by this feature.
+
+## Automatic replies still need a next-step review
+
+During an email review, Com must read the complete current thread, including sent mail, and inspect automatic acknowledgments and out-of-office messages for website/application directions, deadlines, alternate contacts and requested information. “No personal reply yet” is only a reply-type finding; it does not finish the next-step review.
+
+Com should immediately use its available read-only public research to verify the official application/contact route, current event year, opening status, category, requirements and deadline. A generic website link alone does not prove we must apply. Explain that Adventure Zone provides a staffed bounce house carnival/family attraction and verify whether vendor forms cover that service. Present sources, a recommendation, proposed wording and any missing facts.
+
+Desiree must approve the concrete submission or message before Com submits a form, uploads documents, pays fees, accepts terms or sends anything. Research and preparing wording do not grant that approval. Do not resolve a thread or complete a reminder merely because it is automatic or its website was reviewed.
+
+The shared policy is delivered in connector initialization instructions, relevant tool descriptions, profile-history read guidance and in-app assistant instructions. In-app full-thread reads additionally return bounded, unverified candidate excerpts from the latest incoming message; full thread evidence remains intact. These hints are not exhaustive, do not fetch websites and do not establish application requirements. Com performs the actual source check using its available research tools. Report unavailable capabilities explicitly.
+
+This applies during Com's review; it does not install a background mailbox watcher or a recurring task. Merge/deploy and refresh Com's connector to load the new instructions. Verify the Buffalo Bill Days case in a fresh review: show the website findings and draft next step with nothing submitted or sent.
