@@ -1240,7 +1240,7 @@
       };
       this.arrivalObserver?.disconnect();
       (this.arrivalTimers||[]).forEach(timer=>window.clearTimeout(timer));this.arrivalTimers=[];
-      root.querySelectorAll('.site-header .logo-link, .site-header > .button, .hero .eyebrow, .hero h1, .hero-copy, .hero-actions .button').forEach(animate);
+      root.querySelectorAll('.site-header .logo-link, .site-header .button, .site-header .menu-toggle, .hero .eyebrow, .hero h1, .hero-copy, .hero-actions .button').forEach(animate);
       const pieces=[...root.querySelectorAll('.packages h2, .foam-banner, .package-card, #reviews, #about h2, #about figure, #experience h2, #partnerships article, #gallery h2, #contact h2')];
       if(typeof IntersectionObserver==='undefined'||this.isWixPreviewFrame){pieces.forEach(animate);return;}
       this.arrivalObserver=new IntersectionObserver(entries=>{
