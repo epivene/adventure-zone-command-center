@@ -850,57 +850,19 @@
       .packages-heading .fleet-label { margin-bottom:12px; }
     }
 
-    .bounce-entrance { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; padding: 0; margin: 0; border: 0; color: var(--az-white); background: transparent; overflow: hidden; z-index: 100; }
-    .bounce-entrance:not([open]) { display: none; }
-    .bounce-entrance::backdrop { background: transparent; }
-    .wix-preview-frame .bounce-entrance { position: absolute; inset: 0 auto auto 0; width: 100%; height: 640px; }
-    .intro-active .site-header, .intro-active .team-float, .intro-active .tube-man-position { visibility: hidden; }
-    .entry-exterior, .entry-slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-    .entry-exterior { object-position: 50% 60%; transform-origin: 50% 61%; }
-    .entry-slide { opacity: 0; object-position: center; transform-origin: 50% 72%; }
-    .entry-shade { position: absolute; inset: 0; background: linear-gradient(180deg,rgba(15,23,41,.25),transparent 28%,rgba(15,23,41,.1) 56%,rgba(15,23,41,.75)); }
-    .entry-brand { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); width: 145px; filter: drop-shadow(0 3px 6px #0f1729); }
-    .entry-welcome { position: absolute; left: 50%; bottom: 9%; transform: translateX(-50%); width: min(520px, calc(100% - 36px)); text-align: center; }
-    .entry-welcome h2 { margin: 0 0 10px; font-size: clamp(34px,5vw,62px); line-height: .98; text-shadow: 0 3px 0 #0f1729,0 0 24px #0f1729; }
-    .entry-welcome p { margin: 0 0 18px; font-size: clamp(14px,2vw,18px); font-weight: 700; text-shadow: 0 2px 6px #0f1729; }
-    .entry-enter { min-width: 210px; min-height: 56px; border-radius: 18px; border: 3px solid var(--az-navy); color: var(--az-navy); background: var(--az-yellow); box-shadow: 5px 5px 0 var(--az-pink); font: 900 22px/1 Arial,sans-serif; letter-spacing: .08em; cursor: pointer; }
-    .entry-enter:hover { transform: translateY(-3px); }
-    .entrance-skip { position: absolute; top: 20px; right: 20px; min-height: 44px; padding: 10px 16px; border: 1px solid rgba(255,255,255,.6); border-radius: 24px; color: white; background: rgba(15,23,41,.75); font: 700 13px/1.2 Arial,sans-serif; cursor: pointer; z-index: 6; }
-    .entry-ride-label { position: absolute; left: 0; right: 0; bottom: 8%; text-align: center; font: 900 clamp(25px,4vw,48px)/1 Arial,sans-serif; text-shadow: 0 3px 8px #0f1729; opacity: 0; }
-    .bounce-entrance[open] .entry-exterior, .bounce-entrance[open] .entry-slide { will-change: transform, opacity; backface-visibility: hidden; }
-    .riding .entry-exterior { animation: doorway-dive 1.9s cubic-bezier(.3,.05,.45,1) forwards; }
-    .riding .entry-slide { animation: inflatable-slide-ride 3.15s 1s cubic-bezier(.3,.1,.35,1) both; }
-    .riding .entry-welcome, .riding .entry-brand { transition: opacity .4s; opacity: 0; pointer-events: none; }
-    .riding .entry-shade { opacity: 0; transition: opacity .5s; }
-    .riding .entry-ride-label { animation: ride-label 2.7s 1.1s both; }
-    .riding { animation: entrance-reveal 1.15s 3s cubic-bezier(.25,.1,.25,1) forwards; }
-    .riding::backdrop { animation: entrance-reveal 1.15s 3s cubic-bezier(.25,.1,.25,1) forwards; }
-    .intro-landing .site-header { visibility: visible; animation: homepage-header-reveal 1.15s ease-out both; }
-    .intro-landing #hero { animation: homepage-glide 1.15s cubic-bezier(.2,.65,.3,1) both; }
-    @keyframes doorway-dive { 0% { transform: translate3d(0,0,0) scale(1); opacity: 1; } 58% { opacity: 1; } 100% { transform: translate3d(0,0,0) scale(3.8); opacity: 0; } }
-    @keyframes inflatable-slide-ride { 0% { opacity: 0; transform: translate3d(0,3%,0) scale(1.16); } 25% { opacity: 1; } 100% { opacity: 1; transform: translate3d(0,-5%,0) scale(2.25); } }
-    @keyframes ride-label { 0%,100% { opacity: 0; } 25%,65% { opacity: 1; } }
-    @keyframes entrance-reveal { from { opacity: 1; } to { opacity: 0; } }
-    @keyframes homepage-glide { from { transform: translate3d(0,48px,0); opacity: .35; } to { transform: translate3d(0,0,0); opacity: 1; } }
-    @keyframes homepage-header-reveal { from { opacity: 0; } to { opacity: 1; } }
-    @media(max-width: 767px) { .wix-preview-frame .bounce-entrance { height: 568px; } .entry-exterior { object-position: 45% 60%; } .entry-brand { width: 110px; top: 20px; } .entrance-skip { top: 14px; right: 12px; padding: 9px 12px; } .entry-welcome { bottom: 8%; } .entry-welcome h2 { font-size: 38px; } .entry-welcome p { font-size: 14px; } }
-    .entry-3d { position: absolute; inset: 0; z-index: 1; opacity: 0; }
-    .entry-3d canvas { width: 100%; height: 100%; display: block; }
-    .bounce-entrance.has-3d, .bounce-entrance.has-3d::backdrop { background: transparent; }
-    .has-3d .entry-shade { display: none; }
-    .intro-active.intro-landing #hero { animation: none; }
-    .has-3d .entry-3d { opacity: 1; }
-    .has-3d .entry-exterior, .has-3d .entry-slide { display: none; }
-    .entry-shade { display: none; z-index: 2; pointer-events: none; }
-    .entry-brand, .entry-welcome, .entry-ride-label { z-index: 3; }
-    .has-3d.riding, .has-3d.riding::backdrop { animation: none; }
-    .has-3d.riding.ride-reveal, .has-3d.riding.ride-reveal::backdrop { animation: entrance-reveal 1.15s ease-in-out forwards; }
-    .has-3d .entry-ride-label { display: none; }
-    .entry-enter[hidden] { display: none; }
-    .entry-enter:disabled { opacity: .75; cursor: wait; }
-    .entrance-replay { display: inline-flex; align-items: center; gap: 6px; margin-top: 18px; padding: 7px 12px; border: 2px solid var(--az-yellow); border-radius: 24px; color: var(--az-yellow); background: rgba(15,23,41,.7); font: 800 13px/1.2 Arial,sans-serif; cursor: pointer; }
-    .entrance-replay .az-icon { width: 16px; height: 16px; }
-    .entrance-replay:focus-visible { outline: 3px solid var(--az-pink); outline-offset: 4px; }
+    .arrival-piece { transform-origin: 50% 100%; }
+    .arrival-piece.arriving { animation: carnival-drop-in 1.05s var(--arrival-delay,0ms) both; }
+    .arrival-piece.arriving:focus-within { animation: none; }
+    @keyframes carnival-drop-in {
+      0% { opacity: 0; transform: translateY(-80vh) rotate(var(--arrival-turn,-4deg)); animation-timing-function: cubic-bezier(.55,.05,.85,.45); }
+      43% { opacity: 1; transform: translateY(0) rotate(0) scale(1.12,.82); animation-timing-function: ease-out; }
+      62% { transform: translateY(-48px) rotate(2deg) scale(.98,1.03); animation-timing-function: ease-in; }
+      78% { transform: translateY(0) rotate(0) scale(1.055,.94); animation-timing-function: ease-out; }
+      89% { transform: translateY(-12px) rotate(-.7deg); animation-timing-function: ease-in; }
+      100% { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
+    }
+    @media(max-width:767px) { .arrival-piece.arriving { animation-duration: .9s; } }
+    @media(prefers-reduced-motion:reduce) { .arrival-piece.arriving { animation: none; } }
     .package-card:hover, .package-card:focus-within, .package-card:active, .foam-banner:hover, .foam-banner:focus-visible, .foam-banner:active { animation: carnival-card-bounce .55s ease-out; }
     @keyframes carnival-card-bounce { 0% { transform: translateY(0) scale(1); } 28% { transform: translateY(2px) scale(1.025,.98); } 60% { transform: translateY(-10px) scale(.995,1.015); } 100% { transform: translateY(-8px) scale(1); } }
     .packages { position: relative; }
@@ -1081,14 +1043,6 @@
 
       <aside class="team-float" aria-label="Meet the Adventure Zone team">${teamMarkup()}</aside>
 
-      <dialog class="bounce-entrance" aria-label="The Adventure Zone entrance">
-        <div class="entry-3d" aria-hidden="true"></div>
-        <div class="entry-shade" aria-hidden="true"></div>
-        <img class="entry-brand" src="${IMAGE.logo}" alt="The Adventure Zone">
-        <button class="entrance-skip" type="button">Skip to site</button>
-        <button class="entry-enter" type="button" hidden aria-hidden="true" tabindex="-1">ENTER ${icon("arrow")}</button>
-        <div class="entry-ride-label" aria-hidden="true">Here we go!</div>
-      </dialog>
       <section class="hero" id="hero">
         <div class="hero-backdrop"><video class="hero-video" src="${IMAGE.heroVideo}" poster="${IMAGE.hero}" autoplay loop muted playsinline preload="metadata" aria-hidden="true"></video></div>
         <div class="hero-overlay"></div>
@@ -1096,7 +1050,7 @@
           <div class="eyebrow">${icon("star")}<span>America's Best Bounce House Carnival!</span>${icon("star")}</div>
           <h1 class="display" tabindex="-1">We Bring <br><span class="yellow">The Action</span></h1>
           <p class="hero-copy">A fully staffed inflatable bounce house carnival for fairs, festivals, rodeos, and community events.</p>
-          <div class="hero-actions"><a class="button" href="#packages">See Packages</a><a class="button outline" href="#contact">Plan Your Event</a></div><button type="button" class="entrance-replay" data-replay-entrance aria-label="Replay the bounce house entrance">${icon("zap")}Bounce In!</button>
+          <div class="hero-actions"><a class="button" href="#packages">See Packages</a><a class="button outline" href="#contact">Plan Your Event</a></div>
         </div>
       </section>
 
@@ -1257,113 +1211,42 @@
     disconnectedCallback() {
       this.timers.forEach((timer) => window.clearInterval(timer));
       this.timers = [];
-      this.bounceRide3D?.dispose();
-      this.bounceRide3D = null;
+      this.arrivalObserver?.disconnect();
+      (this.arrivalTimers||[]).forEach(timer=>window.clearTimeout(timer));
       this.abortController?.abort();
       this.inquiryAbortController?.abort();
       this.resizeObserver?.disconnect();
       window.clearTimeout(this.teamLayoutTimer);
       window.clearTimeout(this.earlyScrollTimer);
-      window.clearTimeout(this.entranceAutoTimer);
-      window.clearTimeout(this.entranceTimer);
-    window.clearTimeout(this.entranceLandingTimer);
-      window.clearTimeout(this.entranceScrollTimer);
-      window.clearTimeout(this.entranceAnnounceTimer);
-      if (this.entrancePreviousOverflow !== undefined) document.body.style.overflow = this.entrancePreviousOverflow;
       window.clearTimeout(this.confettiTimer);
       if (this.conventionOpen) document.body.style.overflow = this.previousBodyOverflow;
       this.restorePackageDialog();
     }
 
     startBounceEntrance(replay = false) {
-      const entrance = this.shadowRoot.querySelector('.bounce-entrance');
-      if (!entrance || entrance.open) return;
-      if (!replay) {
-        if (this.isConventionVisit() || this.getAttribute('entrance-completed') === 'yes' || this.getAttribute('offer-request') || window.location.hash || new URLSearchParams(window.location.search).has('section')) return;
-      }
-      entrance.classList.remove('riding', 'ride-reveal');
-    this.shadowRoot.querySelector('.az-site').classList.remove('intro-landing');
-      entrance.style.opacity = '';
-      this.shadowRoot.querySelector('.az-site').classList.add('intro-active');
-      entrance.showModal();
-      this.prepareBounceRide3D().then(() => {
-        if (!entrance.open) return;
-        this.entranceAutoTimer = window.setTimeout(() => this.rideBounceEntrance(), 650);
-      });
-      if (this.isWixPreviewFrame) {
-        entrance.scrollIntoView({ behavior: 'instant', block: 'start' });
-        this.entranceScrollTimer = window.setTimeout(() => { if (entrance.open) entrance.scrollIntoView({ behavior: 'instant', block: 'start' }); }, 900);
-      } else {
-        this.entrancePreviousOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
-      }
-      entrance.querySelector('.entrance-skip').focus({ preventScroll: true });
-      const announce = () => { if (entrance.open) this.dispatchEvent(new CustomEvent('bounce-house-open', { bubbles: true, composed: true })); };
-      announce();
-      this.entranceAnnounceTimer = window.setTimeout(announce, 1000);
-    }
-
-    finishBounceEntrance() {
-      const entrance = this.shadowRoot.querySelector('.bounce-entrance');
-      window.clearTimeout(this.entranceAutoTimer);
-      window.clearTimeout(this.entranceTimer);
-    window.clearTimeout(this.entranceLandingTimer);
-      window.clearTimeout(this.entranceScrollTimer);
-      window.clearTimeout(this.entranceAnnounceTimer);
-      try { sessionStorage.setItem('az-bounce-house-ride-seen', 'yes'); } catch { /* Storage is optional. */ }
-      this.bounceRide3D?.reset();
-      if (entrance.open) entrance.close();
-      entrance.classList.remove('riding', 'ride-reveal');
-    this.shadowRoot.querySelector('.az-site').classList.remove('intro-landing');
-      this.shadowRoot.querySelector('.az-site').classList.remove('intro-active');
-      if (!this.isWixPreviewFrame && this.entrancePreviousOverflow !== undefined) document.body.style.overflow = this.entrancePreviousOverflow;
-      this.shadowRoot.querySelector('#hero h1').focus({ preventScroll: true });
-      this.scrollToId('hero');
-      this.dispatchEvent(new CustomEvent('bounce-house-close', { bubbles: true, composed: true }));
-    }
-
-    async prepareBounceRide3D() {
-      if (this.bounceRide3D) { this.bounceRide3D.reset(); return this.bounceRide3D; }
-      if (this.bounceRide3DLoading) return this.bounceRide3DLoading;
-      const entrance = this.shadowRoot.querySelector('.bounce-entrance');
-      const button = entrance.querySelector('.entry-enter');
-      button.disabled = true;
-      this.bounceRide3DLoading = (async () => {
-        if (!window.AzBounceRide3D) {
-          if (!window.azBounceRide3DScript) window.azBounceRide3DScript = new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = this.getAttribute('ride-script-src') || 'https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-ride-3d-20261003.js?v=auto-textured-ride-v6';
-            script.onload = resolve; script.onerror = reject; document.head.append(script);
-          });
-          await window.azBounceRide3DScript;
-        }
-        if (!this.isConnected) return null;
-        this.bounceRide3D = window.AzBounceRide3D.createBounceRide3D(entrance.querySelector('.entry-3d'));
-        entrance.classList.add('has-3d');
-        return this.bounceRide3D;
-      })().catch(() => null).finally(() => {
-        button.disabled = false; this.bounceRide3DLoading = null;
-        if (entrance.open && !entrance.classList.contains('riding')) entrance.querySelector('.entrance-skip').focus({ preventScroll: true });
-      });
-      return this.bounceRide3DLoading;
-    }
-
-    async rideBounceEntrance() {
-      const entrance = this.shadowRoot.querySelector('.bounce-entrance');
-      if (!entrance.open || entrance.classList.contains('riding')) return;
-      if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) { this.finishBounceEntrance(); return; }
-      const ride = await this.prepareBounceRide3D();
-      if (!entrance.open) return;
-      if (!ride) { this.finishBounceEntrance(); return; }
-      window.clearTimeout(this.entranceScrollTimer);
-      window.clearTimeout(this.entranceAnnounceTimer);
-      entrance.classList.add('riding');
-      this.dispatchEvent(new CustomEvent('bounce-house-ride', { bubbles: true, composed: true }));
-      ride.start(() => {
-        entrance.classList.add('ride-reveal');
-        this.shadowRoot.querySelector('.az-site').classList.add('intro-landing');
-        this.dispatchEvent(new CustomEvent('bounce-house-landing', { bubbles: true, composed: true }));
-      }, () => this.finishBounceEntrance());
+      if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+      if (!replay && (this.isConventionVisit() || this.getAttribute('offer-request') || window.location.hash || new URLSearchParams(window.location.search).has('section'))) return;
+      const root=this.shadowRoot;
+      const animate=(element,index=0)=>{
+        element.classList.add('arrival-piece');
+        element.style.setProperty('--arrival-delay', `${Math.min(index*75,450)}ms`);
+        element.style.setProperty('--arrival-turn', `${index%2?4:-4}deg`);
+        element.classList.remove('arriving');
+        // Restart only on explicit replay; all content remains directly usable.
+        if(replay)void element.offsetWidth;
+        element.classList.add('arriving');
+        const timer=window.setTimeout(()=>element.classList.remove('arriving'),1600);
+        this.arrivalTimers.push(timer);
+      };
+      this.arrivalObserver?.disconnect();
+      (this.arrivalTimers||[]).forEach(timer=>window.clearTimeout(timer));this.arrivalTimers=[];
+      root.querySelectorAll('.site-header .logo-link, .site-header > .button, .hero .eyebrow, .hero h1, .hero-copy, .hero-actions .button').forEach(animate);
+      const pieces=[...root.querySelectorAll('.packages h2, .foam-banner, .package-card, #reviews, #about h2, #about figure, #experience h2, #partnerships article, #gallery h2, #contact h2')];
+      if(typeof IntersectionObserver==='undefined'||this.isWixPreviewFrame){pieces.forEach(animate);return;}
+      this.arrivalObserver=new IntersectionObserver(entries=>{
+        entries.forEach((entry,index)=>{if(entry.isIntersecting){animate(entry.target,index);this.arrivalObserver.unobserve(entry.target);}});
+      },{threshold:.15});
+      pieces.forEach(element=>this.arrivalObserver.observe(element));
     }
 
     celebrateInquiry(form) {
@@ -1420,11 +1303,6 @@
       this.timers.push(window.setInterval(() => {
         if (!this.reviewsPaused && !document.hidden && !reviewSection.matches(":hover, :focus-within")) this.rotateReviews(1);
       }, 10000));
-      const entrance = root.querySelector('.bounce-entrance');
-      entrance.querySelector('.entry-enter').addEventListener('click', () => this.rideBounceEntrance(), { signal });
-      entrance.querySelector('.entrance-skip').addEventListener('click', () => this.finishBounceEntrance(), { signal });
-      entrance.addEventListener('cancel', event => { event.preventDefault(); this.finishBounceEntrance(); }, { signal });
-      root.querySelector("[data-replay-entrance]").addEventListener("click", () => this.startBounceEntrance(true), { signal });
       const earlyDialog = root.querySelector(".early-dialog");
       root.querySelectorAll("[data-early-offer]").forEach(button => button.addEventListener("click", () => this.openEarlyOffer(), { signal }));
       root.querySelector("[data-early-close]").addEventListener("click", () => earlyDialog.close(), { signal });
