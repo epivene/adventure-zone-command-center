@@ -850,9 +850,9 @@
       .packages-heading .fleet-label { margin-bottom:12px; }
     }
 
-    .bounce-entrance { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; padding: 0; margin: 0; border: 0; color: var(--az-white); background: #0f1729; overflow: hidden; z-index: 100; }
+    .bounce-entrance { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; padding: 0; margin: 0; border: 0; color: var(--az-white); background: transparent; overflow: hidden; z-index: 100; }
     .bounce-entrance:not([open]) { display: none; }
-    .bounce-entrance::backdrop { background: #0f1729; }
+    .bounce-entrance::backdrop { background: transparent; }
     .wix-preview-frame .bounce-entrance { position: absolute; inset: 0 auto auto 0; width: 100%; height: 640px; }
     .intro-active .site-header, .intro-active .team-float, .intro-active .tube-man-position { visibility: hidden; }
     .entry-exterior, .entry-slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -891,7 +891,7 @@
     .intro-active.intro-landing #hero { animation: none; }
     .has-3d .entry-3d { opacity: 1; }
     .has-3d .entry-exterior, .has-3d .entry-slide { display: none; }
-    .entry-shade { z-index: 2; pointer-events: none; }
+    .entry-shade { display: none; z-index: 2; pointer-events: none; }
     .entry-brand, .entry-welcome, .entry-ride-label { z-index: 3; }
     .has-3d.riding, .has-3d.riding::backdrop { animation: none; }
     .has-3d.riding.ride-reveal, .has-3d.riding.ride-reveal::backdrop { animation: entrance-reveal 1.15s ease-in-out forwards; }
@@ -1080,14 +1080,12 @@
 
       <aside class="team-float" aria-label="Meet the Adventure Zone team">${teamMarkup()}</aside>
 
-      <dialog class="bounce-entrance" aria-labelledby="bounce-entry-title">
+      <dialog class="bounce-entrance" aria-label="The Adventure Zone entrance">
         <div class="entry-3d" aria-hidden="true"></div>
-        <img class="entry-exterior" src="https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-entry-20261003.webp" alt="" fetchpriority="high" decoding="async">
-        <img class="entry-slide" src="https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-slide-20261003.webp" alt="" decoding="async">
         <div class="entry-shade" aria-hidden="true"></div>
         <img class="entry-brand" src="${IMAGE.logo}" alt="The Adventure Zone">
         <button class="entrance-skip" type="button">Skip to site</button>
-        <div class="entry-welcome"><h2 class="display" id="bounce-entry-title">Step into the fun.</h2><p>Your Adventure Zone starts here.</p><button class="entry-enter" type="button">ENTER ${icon("arrow")}</button></div>
+        <div class="entry-welcome"><p>Your Adventure Zone starts here.</p><button class="entry-enter" type="button">ENTER ${icon("arrow")}</button></div>
         <div class="entry-ride-label" aria-hidden="true">Here we go!</div>
       </dialog>
       <section class="hero" id="hero">
@@ -1329,7 +1327,7 @@
         if (!window.AzBounceRide3D) {
           if (!window.azBounceRide3DScript) window.azBounceRide3DScript = new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = this.getAttribute('ride-script-src') || 'https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-ride-3d-20261003.js?v=transparent-ride-v3';
+            script.src = this.getAttribute('ride-script-src') || 'https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-ride-3d-20261003.js?v=springy-ride-v4';
             script.onload = resolve; script.onerror = reject; document.head.append(script);
           });
           await window.azBounceRide3DScript;

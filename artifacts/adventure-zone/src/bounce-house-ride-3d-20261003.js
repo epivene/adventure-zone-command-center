@@ -92,12 +92,13 @@ export function createBounceRide3D(host) {
     if(camera.aspect<1)camera.position.z+=4*Math.max(0,1-t/.25)**2;
     const look=cameraPath.getPoint(Math.min(1,t+.045));
     if(t===0)look.set(0,camera.aspect<1?2.7:4.2,-2);else if(t>.96)look.set(0,1.5,-65);
-    // Three soft landings: vertical airtime, lateral sway and a tiny camera roll.
+    // Full-height jumps with visible airtime and a springy compression at landing.
     camera.position.y+=bounce;
-    camera.position.x+=Math.sin(phase*Math.PI*2)*.28*Math.min(1,bounce);
-    look.y+=bounce*.65;
+    camera.position.x+=Math.sin(phase*Math.PI*2)*.36*Math.min(1,Math.max(0,bounce));
+    look.y+=bounce;
     camera.lookAt(look);
-    camera.rotateZ(Math.sin(phase*Math.PI*2)*.018*Math.min(1,bounce));
+    camera.rotateZ(Math.sin(phase*Math.PI*2)*.035*Math.min(1,Math.max(0,bounce)));
+    camera.rotateX(Math.sin(phase*Math.PI*2)*.065*Math.min(1,Math.max(0,bounce)));
     renderer.render(scene,camera);
   }
   const observer=new ResizeObserver(resize);observer.observe(host);resize();
@@ -115,7 +116,8 @@ export function createBounceRide3D(host) {
           phase=(elapsed-1800)/1100;
           travel=.20+.14*smooth((elapsed-1800)/3300);
           const jump=phase-Math.floor(phase);
-          bounce=1.75*Math.sin(Math.PI*jump)**2;
+          bounce=3.2*Math.sin(Math.PI*jump)**2;
+          if(jump>.84)bounce-=.32*Math.sin(Math.PI*(jump-.84)/.16)**2;
         }else travel=.34+.66*smooth(Math.min(1,(elapsed-5100)/5400));
         draw(travel,bounce,phase);
         if(elapsed>=9350&&!landed){landed=true;onLanding();}
