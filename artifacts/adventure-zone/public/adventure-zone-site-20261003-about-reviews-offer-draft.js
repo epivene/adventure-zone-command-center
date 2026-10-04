@@ -886,6 +886,9 @@
     @media(max-width: 767px) { .wix-preview-frame .bounce-entrance { height: 568px; } .entry-exterior { object-position: 45% 60%; } .entry-brand { width: 110px; top: 20px; } .entrance-skip { top: 14px; right: 12px; padding: 9px 12px; } .entry-welcome { bottom: 8%; } .entry-welcome h2 { font-size: 38px; } .entry-welcome p { font-size: 14px; } }
     .entry-3d { position: absolute; inset: 0; z-index: 1; opacity: 0; }
     .entry-3d canvas { width: 100%; height: 100%; display: block; }
+    .bounce-entrance.has-3d, .bounce-entrance.has-3d::backdrop { background: transparent; }
+    .has-3d .entry-shade { display: none; }
+    .intro-active.intro-landing #hero { animation: none; }
     .has-3d .entry-3d { opacity: 1; }
     .has-3d .entry-exterior, .has-3d .entry-slide { display: none; }
     .entry-shade { z-index: 2; pointer-events: none; }
@@ -1326,7 +1329,7 @@
         if (!window.AzBounceRide3D) {
           if (!window.azBounceRide3DScript) window.azBounceRide3DScript = new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = this.getAttribute('ride-script-src') || 'https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-ride-3d-20261003.js?v=real-bounce-v2';
+            script.src = this.getAttribute('ride-script-src') || 'https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-ride-3d-20261003.js?v=transparent-ride-v3';
             script.onload = resolve; script.onerror = reject; document.head.append(script);
           });
           await window.azBounceRide3DScript;

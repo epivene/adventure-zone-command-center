@@ -3,3 +3,5 @@ The draft homepage loads `public/assets/bounce-house-ride-3d-20261003.js` as a c
 Source: `bounce-house-ride-3d-20261003.js`. Bundle with Three.js 0.180.0 and esbuild 0.25.10, using `--bundle --minify --format=iife --global-name=AzBounceRide3D`. Install those dependencies beside the source or supply that node_modules directory through NODE_PATH. Output to the public asset path above. Keep Three.js's bundled license notice.
 
 The camera ride lasts 10.5 seconds, including three soft vertical jumps before the slide; the homepage reveal overlaps its last 1.15 seconds. Skip, Escape, and reduced-motion preferences bypass the ride. If WebGL fails, Enter still opens the homepage. The scene has no idle animation and cancels its frame callback when dismissed; the renderer and geometry are disposed when the Wix custom element disconnects.
+
+The WebGL canvas and 3D dialog backdrop are transparent: the real homepage remains visible through the arches throughout the ride. There is no simulated sky, ground plane, or decorative sky stars.

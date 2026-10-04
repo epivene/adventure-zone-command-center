@@ -4,9 +4,9 @@ import * as THREE from 'three';
 // No event or route information.
 export function createBounceRide3D(host) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#12203d');
-  scene.fog = new THREE.Fog('#12203d', 55, 110);
-  const renderer = new THREE.WebGLRenderer({antialias:true, alpha:false, powerPreference:'high-performance'});
+  scene.background = null;
+  const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true, powerPreference:'high-performance'});
+  renderer.setClearColor(0x000000, 0);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -80,10 +80,7 @@ export function createBounceRide3D(host) {
     for(let i=0;i<=24;i++){const a=Math.PI-i*Math.PI/24;arch.push(v(Math.cos(a)*3,p.y+1.4+Math.sin(a)*3.1,p.z));}
     tube(new THREE.CatmullRomCurve3(arch),.4,t===.28?'pink':'yellow',40);
   }
-  materials.ground=new THREE.MeshStandardMaterial({color:'#132e60',roughness:1});
-  const ground=mesh(new THREE.PlaneGeometry(180,180),'ground',v(0,-1.1,-25));ground.rotation.x=-Math.PI/2;
-  // Distant golden stars and an exit arch, all part of the same geometry.
-  for(let i=0;i<18;i++){const x=(i%2?1:-1)*(10+(i*7)%18),z=-8-(i*9)%56;sphere(x,9+(i%5)*2,z,.14+(i%3)*.08,'yellow');}
+  // Transparent surroundings let the real homepage remain the destination.
   const exit=[];for(let i=0;i<=24;i++){const a=Math.PI-i*Math.PI/24;exit.push(v(Math.cos(a)*4,1+Math.sin(a)*5,-57));}
   tube(new THREE.CatmullRomCurve3(exit),.7,'yellow',48);
   const glow=new THREE.PointLight('#ffdb71',40,25);glow.position.set(0,4,-54);scene.add(glow);
