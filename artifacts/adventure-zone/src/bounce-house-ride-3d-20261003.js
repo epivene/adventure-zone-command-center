@@ -20,6 +20,16 @@ export function createBounceRide3D(host) {
   for(const [name,color] of Object.entries({pink:'#d81b30',yellow:'#ffd21a',navy:'#172e62',cream:'#fff6d7',blue:'#1555bd'})) {
     materials[name]=new THREE.MeshPhysicalMaterial({color,roughness:.48,metalness:0,clearcoat:.4,clearcoatRoughness:.4});
   }
+  // Subtle woven vinyl grain, generated locally without external image assets.
+  const fabricCanvas=document.createElement('canvas');fabricCanvas.width=fabricCanvas.height=256;
+  const fabric=fabricCanvas.getContext('2d');fabric.fillStyle='#aaaaaa';fabric.fillRect(0,0,256,256);
+  for(let n=0;n<256;n+=4){
+    fabric.fillStyle=n%8?'#b4b4b4':'#989898';fabric.fillRect(n,0,1,256);
+    fabric.fillStyle=n%8?'#a0a0a0':'#b0b0b0';fabric.fillRect(0,n,256,1);
+  }
+  const fabricTexture=new THREE.CanvasTexture(fabricCanvas);
+  fabricTexture.wrapS=fabricTexture.wrapT=THREE.RepeatWrapping;fabricTexture.repeat.set(6,4);
+  for(const material of Object.values(materials)){material.bumpMap=fabricTexture;material.bumpScale=.035;material.roughness=.58;}
   const v=(x,y,z)=>new THREE.Vector3(x,y,z);
   function mesh(geometry, material, position) {
     const item=new THREE.Mesh(geometry, materials[material]);item.position.copy(position);scene.add(item);return item;
@@ -66,12 +76,12 @@ export function createBounceRide3D(host) {
     tube(new THREE.CatmullRomCurve3(arch),.42,z===-7?'pink':'yellow',40);
   }
   // One welded deck joins the bounce floor to the climb, crest and descent.
-  const slidePath=curve([[0,.25,-10],[0,.5,-13],[0,1.3,-16],[0,4,-21],[0,6.9,-26],[0,7.4,-30],[0,6.6,-34],[0,3.3,-40],[0,.5,-46],[0,.1,-54]]);
+  const slidePath=curve([[0,.25,-10],[0,.5,-13],[0,1.3,-16],[0,4,-21],[0,6.9,-26],[0,7.4,-30],[0,6.6,-34],[0,3.3,-40],[0,.5,-46],[0,.1,-54],[0,.1,-64],[0,.1,-74]]);
   const samples=slidePath.getPoints(160),vertices=[],indices=[];
   for(const p of samples)vertices.push(-2.6,p.y+.28,p.z,2.6,p.y+.28,p.z);
   for(let i=0;i<samples.length-1;i++){const n=i*2;indices.push(n,n+2,n+1,n+1,n+2,n+3);}
   const deck=new THREE.BufferGeometry();deck.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));deck.setIndex(indices);deck.computeVertexNormals();
-  materials.slide=new THREE.MeshPhysicalMaterial({color:'#1764c4',roughness:.52,clearcoat:.3,side:THREE.DoubleSide});
+  materials.slide=new THREE.MeshPhysicalMaterial({color:'#1764c4',roughness:.58,clearcoat:.3,bumpMap:fabricTexture,bumpScale:.035,side:THREE.DoubleSide});
   mesh(deck,'slide',v(0,0,0));
   for(const x of [-1.3,0,1.3])tube(new THREE.CatmullRomCurve3(samples.map(p=>v(x,p.y+.29,p.z))),.024,'blue',160);
   for(const side of [-1,1]){
@@ -87,12 +97,11 @@ export function createBounceRide3D(host) {
     tube(new THREE.CatmullRomCurve3(arch),.35,t===.40?'pink':'yellow',48);
   }
   // Transparent surroundings let the real homepage remain the destination.
-  const exit=[];for(let i=0;i<=24;i++){const a=Math.PI-i*Math.PI/24;exit.push(v(Math.cos(a)*4,1+Math.sin(a)*5,-57));}
-  tube(new THREE.CatmullRomCurve3(exit),.7,'yellow',48);
-  const glow=new THREE.PointLight('#ffdb71',40,25);glow.position.set(0,4,-54);scene.add(glow);
+  // The run-out extends well beyond the camera: fade while still on the slide.
+  const glow=new THREE.PointLight('#ffdb71',22,25);glow.position.set(0,4,-54);scene.add(glow);
   const entryPath=curve([[0,4.3,12],[0,3.1,6],[0,2.1,1],[0,2.1,-3]]);
   // The climbing camera follows the exact deck geometry, with eye clearance.
-  const ridePath=curve([[0,2.1,-8],[0,2.1,-10],...samples.filter((p,i)=>i%8===0).map(p=>[p.x,p.y+1.9,p.z]),[0,2,-57]]);
+  const ridePath=curve([[0,2.1,-8],[0,2.1,-10],...samples.filter((p,i)=>i%8===0&&p.z>=-52).map(p=>[p.x,p.y+1.9,p.z]),[0,2,-57]]);
   let raf=0,disposed=false,playing=false;
   // A glimpse of your own padded shoes makes each jump read as first-person airtime.
   const feet=new THREE.Group();camera.add(feet);scene.add(camera);feet.visible=false;
@@ -140,6 +149,6 @@ export function createBounceRide3D(host) {
       };raf=requestAnimationFrame(frame);
     },
     reset(){cancelAnimationFrame(raf);playing=false;draw(0);},
-    dispose(){disposed=true;cancelAnimationFrame(raf);observer.disconnect();scene.traverse(o=>o.geometry?.dispose());Object.values(materials).forEach(m=>m.dispose());renderer.dispose();renderer.domElement.remove();}
+    dispose(){disposed=true;cancelAnimationFrame(raf);observer.disconnect();scene.traverse(o=>o.geometry?.dispose());Object.values(materials).forEach(m=>m.dispose());fabricTexture.dispose();renderer.dispose();renderer.domElement.remove();}
   };
 }

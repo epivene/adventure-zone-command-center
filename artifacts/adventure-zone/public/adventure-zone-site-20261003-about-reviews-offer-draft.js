@@ -896,6 +896,7 @@
     .has-3d.riding, .has-3d.riding::backdrop { animation: none; }
     .has-3d.riding.ride-reveal, .has-3d.riding.ride-reveal::backdrop { animation: entrance-reveal 1.15s ease-in-out forwards; }
     .has-3d .entry-ride-label { display: none; }
+    .entry-enter[hidden] { display: none; }
     .entry-enter:disabled { opacity: .75; cursor: wait; }
     .entrance-replay { display: inline-flex; align-items: center; gap: 6px; margin-top: 18px; padding: 7px 12px; border: 2px solid var(--az-yellow); border-radius: 24px; color: var(--az-yellow); background: rgba(15,23,41,.7); font: 800 13px/1.2 Arial,sans-serif; cursor: pointer; }
     .entrance-replay .az-icon { width: 16px; height: 16px; }
@@ -1085,7 +1086,7 @@
         <div class="entry-shade" aria-hidden="true"></div>
         <img class="entry-brand" src="${IMAGE.logo}" alt="The Adventure Zone">
         <button class="entrance-skip" type="button">Skip to site</button>
-        <div class="entry-welcome"><p>Your Adventure Zone starts here.</p><button class="entry-enter" type="button">ENTER ${icon("arrow")}</button></div>
+        <button class="entry-enter" type="button" hidden aria-hidden="true" tabindex="-1">ENTER ${icon("arrow")}</button>
         <div class="entry-ride-label" aria-hidden="true">Here we go!</div>
       </dialog>
       <section class="hero" id="hero">
@@ -1263,6 +1264,7 @@
       this.resizeObserver?.disconnect();
       window.clearTimeout(this.teamLayoutTimer);
       window.clearTimeout(this.earlyScrollTimer);
+      window.clearTimeout(this.entranceAutoTimer);
       window.clearTimeout(this.entranceTimer);
     window.clearTimeout(this.entranceLandingTimer);
       window.clearTimeout(this.entranceScrollTimer);
@@ -1278,14 +1280,16 @@
       if (!entrance || entrance.open) return;
       if (!replay) {
         if (this.isConventionVisit() || this.getAttribute('entrance-completed') === 'yes' || this.getAttribute('offer-request') || window.location.hash || new URLSearchParams(window.location.search).has('section')) return;
-        try { if (sessionStorage.getItem('az-bounce-house-ride-seen')) return; } catch { /* Storage is optional. */ }
       }
       entrance.classList.remove('riding', 'ride-reveal');
     this.shadowRoot.querySelector('.az-site').classList.remove('intro-landing');
       entrance.style.opacity = '';
       this.shadowRoot.querySelector('.az-site').classList.add('intro-active');
       entrance.showModal();
-      this.prepareBounceRide3D();
+      this.prepareBounceRide3D().then(() => {
+        if (!entrance.open) return;
+        this.entranceAutoTimer = window.setTimeout(() => this.rideBounceEntrance(), 650);
+      });
       if (this.isWixPreviewFrame) {
         entrance.scrollIntoView({ behavior: 'instant', block: 'start' });
         this.entranceScrollTimer = window.setTimeout(() => { if (entrance.open) entrance.scrollIntoView({ behavior: 'instant', block: 'start' }); }, 900);
@@ -1293,7 +1297,7 @@
         this.entrancePreviousOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
       }
-      entrance.querySelector('.entry-enter').focus({ preventScroll: true });
+      entrance.querySelector('.entrance-skip').focus({ preventScroll: true });
       const announce = () => { if (entrance.open) this.dispatchEvent(new CustomEvent('bounce-house-open', { bubbles: true, composed: true })); };
       announce();
       this.entranceAnnounceTimer = window.setTimeout(announce, 1000);
@@ -1301,6 +1305,7 @@
 
     finishBounceEntrance() {
       const entrance = this.shadowRoot.querySelector('.bounce-entrance');
+      window.clearTimeout(this.entranceAutoTimer);
       window.clearTimeout(this.entranceTimer);
     window.clearTimeout(this.entranceLandingTimer);
       window.clearTimeout(this.entranceScrollTimer);
@@ -1327,7 +1332,7 @@
         if (!window.AzBounceRide3D) {
           if (!window.azBounceRide3DScript) window.azBounceRide3DScript = new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = this.getAttribute('ride-script-src') || 'https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-ride-3d-20261003.js?v=connected-ride-v5';
+            script.src = this.getAttribute('ride-script-src') || 'https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-ride-3d-20261003.js?v=auto-textured-ride-v6';
             script.onload = resolve; script.onerror = reject; document.head.append(script);
           });
           await window.azBounceRide3DScript;
@@ -1338,7 +1343,7 @@
         return this.bounceRide3D;
       })().catch(() => null).finally(() => {
         button.disabled = false; this.bounceRide3DLoading = null;
-        if (entrance.open && !entrance.classList.contains('riding')) button.focus({ preventScroll: true });
+        if (entrance.open && !entrance.classList.contains('riding')) entrance.querySelector('.entrance-skip').focus({ preventScroll: true });
       });
       return this.bounceRide3DLoading;
     }

@@ -9,3 +9,5 @@ The WebGL canvas and 3D dialog backdrop are transparent: the real homepage remai
 The entrance uses only its 3D canvas; no illustrated loading image is swapped in. Its heading was removed. Jumps have 3.2 units of airtime, lateral sway, pitch, and a small landing compression.
 
 The revised route completes the doorway entry before jumping. Three ballistic jumps stay in the floor area (z -3 to -8, eye height below 4.71, overhead padding starts at 5.45). Brief first-person shoes replace artificial camera shake. A continuous mesh deck, padded climb steps, and joined rails connect the floor to the slide; its ride camera follows the deck with 1.9 units of eye clearance.
+
+Automatic mode starts 650ms after the renderer is ready, without a visible Enter button. New page loads and refreshes replay; completed Wix remounts and deep links bypass. Skip/Escape, reduced motion and WebGL failure still allow direct entry. Shared locally generated woven-vinyl bump texture is disposed with the renderer. Slide run-out extends to z -74 while the final camera remains at z -57, so the fade begins before any view past its end.
