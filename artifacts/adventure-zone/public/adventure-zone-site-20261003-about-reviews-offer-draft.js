@@ -1327,7 +1327,7 @@
         if (!window.AzBounceRide3D) {
           if (!window.azBounceRide3DScript) window.azBounceRide3DScript = new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = this.getAttribute('ride-script-src') || 'https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-ride-3d-20261003.js?v=springy-ride-v4';
+            script.src = this.getAttribute('ride-script-src') || 'https://adventure-zone-command-center-1.onrender.com/assets/bounce-house-ride-3d-20261003.js?v=connected-ride-v5';
             script.onload = resolve; script.onerror = reject; document.head.append(script);
           });
           await window.azBounceRide3DScript;

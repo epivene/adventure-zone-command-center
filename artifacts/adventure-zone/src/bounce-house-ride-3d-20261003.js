@@ -10,15 +10,15 @@ export function createBounceRide3D(host) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.35;
+  renderer.toneMappingExposure = 1.12;
   host.append(renderer.domElement);
   const camera = new THREE.PerspectiveCamera(55, 1, .08, 180);
-  scene.add(new THREE.HemisphereLight('#fff4da','#415780',3));
-  const sun = new THREE.DirectionalLight('#fff3dc',4.5); sun.position.set(-12,25,16); scene.add(sun);
+  scene.add(new THREE.HemisphereLight('#fff4da','#415780',2.4));
+  const sun = new THREE.DirectionalLight('#fff3dc',3.2); sun.position.set(-12,25,16); scene.add(sun);
   const fill = new THREE.DirectionalLight('#ffd0eb',2); fill.position.set(12,9,-15); scene.add(fill);
   const materials = {};
   for(const [name,color] of Object.entries({pink:'#d81b30',yellow:'#ffd21a',navy:'#172e62',cream:'#fff6d7',blue:'#1555bd'})) {
-    materials[name]=new THREE.MeshPhysicalMaterial({color,roughness:.32,metalness:0,clearcoat:.75,clearcoatRoughness:.26});
+    materials[name]=new THREE.MeshPhysicalMaterial({color,roughness:.48,metalness:0,clearcoat:.4,clearcoatRoughness:.4});
   }
   const v=(x,y,z)=>new THREE.Vector3(x,y,z);
   function mesh(geometry, material, position) {
@@ -65,41 +65,67 @@ export function createBounceRide3D(host) {
     const arch=[];for(let i=0;i<=24;i++){const a=Math.PI-i*Math.PI/24;arch.push(v(Math.cos(a)*6,4.5+Math.sin(a)*2,z));}
     tube(new THREE.CatmullRomCurve3(arch),.42,z===-7?'pink':'yellow',40);
   }
-  // A single center lane climbs to the slide crest, then falls away beneath you.
-  const slidePath=curve([[0,.15,-12],[0,1.1,-16],[0,4,-21],[0,6.9,-26],[0,7.4,-30],[0,6.6,-34],[0,3.3,-40],[0,.5,-46],[0,.1,-54]]);
-  for(let x=-2.3;x<=2.3;x+=.46){
-    const pts=slidePath.getPoints(120).map(p=>v(x,p.y,p.z));tube(new THREE.CatmullRomCurve3(pts),.29,'blue',120);
-  }
+  // One welded deck joins the bounce floor to the climb, crest and descent.
+  const slidePath=curve([[0,.25,-10],[0,.5,-13],[0,1.3,-16],[0,4,-21],[0,6.9,-26],[0,7.4,-30],[0,6.6,-34],[0,3.3,-40],[0,.5,-46],[0,.1,-54]]);
+  const samples=slidePath.getPoints(160),vertices=[],indices=[];
+  for(const p of samples)vertices.push(-2.6,p.y+.28,p.z,2.6,p.y+.28,p.z);
+  for(let i=0;i<samples.length-1;i++){const n=i*2;indices.push(n,n+2,n+1,n+1,n+2,n+3);}
+  const deck=new THREE.BufferGeometry();deck.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));deck.setIndex(indices);deck.computeVertexNormals();
+  materials.slide=new THREE.MeshPhysicalMaterial({color:'#1764c4',roughness:.52,clearcoat:.3,side:THREE.DoubleSide});
+  mesh(deck,'slide',v(0,0,0));
+  for(const x of [-1.3,0,1.3])tube(new THREE.CatmullRomCurve3(samples.map(p=>v(x,p.y+.29,p.z))),.024,'blue',160);
   for(const side of [-1,1]){
-    const pts=slidePath.getPoints(120).map(p=>v(side*2.95,p.y+.8,p.z));tube(new THREE.CatmullRomCurve3(pts),.8,'yellow',120);
-    const trim=slidePath.getPoints(120).map(p=>v(side*3.25,p.y+1.35,p.z));tube(new THREE.CatmullRomCurve3(trim),.22,'pink',120);
+    tube(new THREE.CatmullRomCurve3(samples.map(p=>v(side*2.85,p.y+.65,p.z))),.72,'yellow',160);
+    tube(new THREE.CatmullRomCurve3(samples.map(p=>v(side*3.15,p.y+.15,p.z))),.5,'pink',160);
+    tube(new THREE.CatmullRomCurve3(samples.map(p=>v(side*3.13,p.y+1.16,p.z))),.11,'cream',160);
   }
-  // Cheerful hoops on the climb; the descending slide is open to the sky.
-  for(const t of [.14,.28,.42]){
+  // Padded steps visibly connect the play area to the slide summit.
+  for(const p of samples.filter((p,i)=>i%5===0&&p.z<-14&&p.z>-28))pillow(v(-2.1,p.y+.38,p.z),v(2.1,p.y+.38,p.z),.13,'pink');
+  for(const t of [.25,.40,.54]){
     const p=slidePath.getPoint(t),arch=[];
-    for(let i=0;i<=24;i++){const a=Math.PI-i*Math.PI/24;arch.push(v(Math.cos(a)*3,p.y+1.4+Math.sin(a)*3.1,p.z));}
-    tube(new THREE.CatmullRomCurve3(arch),.4,t===.28?'pink':'yellow',40);
+    for(let i=0;i<=32;i++){const a=Math.PI-i*Math.PI/32;arch.push(v(Math.cos(a)*3,p.y+1.5+Math.sin(a)*3.4,p.z));}
+    tube(new THREE.CatmullRomCurve3(arch),.35,t===.40?'pink':'yellow',48);
   }
   // Transparent surroundings let the real homepage remain the destination.
   const exit=[];for(let i=0;i<=24;i++){const a=Math.PI-i*Math.PI/24;exit.push(v(Math.cos(a)*4,1+Math.sin(a)*5,-57));}
   tube(new THREE.CatmullRomCurve3(exit),.7,'yellow',48);
   const glow=new THREE.PointLight('#ffdb71',40,25);glow.position.set(0,4,-54);scene.add(glow);
-  const cameraPath=curve([[0,4.3,12],[0,3.9,9],[0,3.1,5],[0,2.8,-3],[0,2.7,-11],[0,3.6,-17],[0,6.6,-24],[0,9,-29],[0,7.6,-35],[0,4.3,-42],[0,2,-49],[0,2,-57]]);
+  const entryPath=curve([[0,4.3,12],[0,3.1,6],[0,2.1,1],[0,2.1,-3]]);
+  // The climbing camera follows the exact deck geometry, with eye clearance.
+  const ridePath=curve([[0,2.1,-8],[0,2.1,-10],...samples.filter((p,i)=>i%8===0).map(p=>[p.x,p.y+1.9,p.z]),[0,2,-57]]);
   let raf=0,disposed=false,playing=false;
+  // A glimpse of your own padded shoes makes each jump read as first-person airtime.
+  const feet=new THREE.Group();camera.add(feet);scene.add(camera);feet.visible=false;
+  for(const side of [-1,1]){
+    const shoe=new THREE.Mesh(new THREE.CapsuleGeometry(.085,.18,6,12),materials.cream);
+    shoe.rotation.x=Math.PI/2;shoe.position.set(side*.19,-.39,-.66);feet.add(shoe);
+    const cuff=new THREE.Mesh(new THREE.SphereGeometry(.073,12,8),materials.blue);cuff.position.set(side*.19,-.35,-.56);feet.add(cuff);
+  }
   function resize(){const r=host.getBoundingClientRect();if(!r.width||!r.height)return;renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();if(!playing)draw(0);}
-  function draw(t,bounce=0,phase=0){
-    const position=cameraPath.getPoint(t);camera.position.copy(position);
-    if(camera.aspect<1)camera.position.z+=4*Math.max(0,1-t/.25)**2;
-    const look=cameraPath.getPoint(Math.min(1,t+.045));
-    if(t===0)look.set(0,camera.aspect<1?2.7:4.2,-2);else if(t>.96)look.set(0,1.5,-65);
-    // Full-height jumps with visible airtime and a springy compression at landing.
-    camera.position.y+=bounce;
-    camera.position.x+=Math.sin(phase*Math.PI*2)*.36*Math.min(1,Math.max(0,bounce));
-    look.y+=bounce;
-    camera.lookAt(look);
-    camera.rotateZ(Math.sin(phase*Math.PI*2)*.035*Math.min(1,Math.max(0,bounce)));
-    camera.rotateX(Math.sin(phase*Math.PI*2)*.065*Math.min(1,Math.max(0,bounce)));
-    renderer.render(scene,camera);
+  function draw(elapsed){
+    const smooth=x=>x*x*(3-2*x);let position,look;
+    feet.visible=false;
+    if(elapsed<1800){
+      const t=smooth(elapsed/1800);position=entryPath.getPoint(t);look=position.clone().add(v(0,-.1,-8));
+      if(camera.aspect<1)position.z+=4*(1-t)**2;
+      if(!elapsed)look.set(0,camera.aspect<1?2.7:4.2,-2);
+    }else if(elapsed<5100){
+      const phase=(elapsed-1800)/1100,jump=phase%1;
+      let height;
+      if(jump<.12)height=-.2*Math.sin(Math.PI*jump/.12);
+      else if(jump<.84){const airtime=(jump-.12)/.72;height=2.6*4*airtime*(1-airtime);}
+      else height=-.24*Math.sin(Math.PI*(jump-.84)/.16);
+      // Jump in the open floor area, never through the doorway or ceiling bars.
+      position=v(0,2.1+height,-3-5*smooth(phase/3));
+      const gaze=smooth(Math.min(1,phase/.15))*smooth(Math.min(1,(3-phase)/.15));
+      look=position.clone().add(v(0,-.1-1.15*gaze,-6));
+      feet.visible=height>.3;feet.position.y=-Math.max(0,1-height/2.6)*.12;
+      for(const child of feet.children)child.rotation.z=0;
+    }else{
+      const t=smooth(Math.min(1,(elapsed-5100)/5400));position=ridePath.getPoint(t);
+      look=ridePath.getPoint(Math.min(1,t+.035));if(t>.98)look=position.clone().add(v(0,-.2,-8));
+    }
+    camera.position.copy(position);camera.lookAt(look);renderer.render(scene,camera);
   }
   const observer=new ResizeObserver(resize);observer.observe(host);resize();
   return {
@@ -108,18 +134,7 @@ export function createBounceRide3D(host) {
       const frame=now=>{
         if(disposed)return;if(started===null)started=now;
         const elapsed=now-started,progress=Math.min(1,elapsed/10500);
-        // Enter, slow down for three actual jumps, then climb and slide.
-        let travel,bounce=0,phase=0;
-        const smooth=x=>x*x*(3-2*x);
-        if(elapsed<1800)travel=.20*smooth(elapsed/1800);
-        else if(elapsed<5100){
-          phase=(elapsed-1800)/1100;
-          travel=.20+.14*smooth((elapsed-1800)/3300);
-          const jump=phase-Math.floor(phase);
-          bounce=3.2*Math.sin(Math.PI*jump)**2;
-          if(jump>.84)bounce-=.32*Math.sin(Math.PI*(jump-.84)/.16)**2;
-        }else travel=.34+.66*smooth(Math.min(1,(elapsed-5100)/5400));
-        draw(travel,bounce,phase);
+        draw(elapsed);
         if(elapsed>=9350&&!landed){landed=true;onLanding();}
         if(progress<1)raf=requestAnimationFrame(frame);else{playing=false;onDone();}
       };raf=requestAnimationFrame(frame);

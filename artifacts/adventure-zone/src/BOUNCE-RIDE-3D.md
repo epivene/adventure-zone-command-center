@@ -7,3 +7,5 @@ The camera ride lasts 10.5 seconds, including three soft vertical jumps before t
 The WebGL canvas and 3D dialog backdrop are transparent: the real homepage remains visible through the arches throughout the ride. There is no simulated sky, ground plane, or decorative sky stars.
 
 The entrance uses only its 3D canvas; no illustrated loading image is swapped in. Its heading was removed. Jumps have 3.2 units of airtime, lateral sway, pitch, and a small landing compression.
+
+The revised route completes the doorway entry before jumping. Three ballistic jumps stay in the floor area (z -3 to -8, eye height below 4.71, overhead padding starts at 5.45). Brief first-person shoes replace artificial camera shake. A continuous mesh deck, padded climb steps, and joined rails connect the floor to the slide; its ride camera follows the deck with 1.9 units of eye clearance.
