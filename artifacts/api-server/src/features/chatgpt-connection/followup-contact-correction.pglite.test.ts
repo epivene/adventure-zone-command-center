@@ -27,7 +27,7 @@ it("corrects the same reminder's linked contact, preserves history and replays e
   expect(changed.recordId).toBe(saved.recordId);
   expect(changed.revision).not.toBe(saved.revision);
   expect(await service.saveFollowup(f.principal, { requestKey: "correct" }, input)).toEqual(changed);
-  const rows = (await f.db.query("SELECT * FROM follow_ups")).rows;
+  const rows = (await f.db.query<{ due_at: string }>("SELECT * FROM follow_ups")).rows;
   expect(rows).toHaveLength(1);
   expect(rows[0]).toMatchObject({ contact_id: newContact, kind: input.kind, completed_at: null });
   expect(new Date(rows[0].due_at).toISOString()).toBe(new Date(input.dueAt).toISOString());
@@ -44,14 +44,14 @@ it("rejects unrelated or inactive contacts and keeps booking reassignment forbid
   const bookingId = randomUUID();
   await f.db.query("INSERT INTO bookings(id,organization_id) VALUES($1,$2)", [bookingId, f.profileId]);
   await expect(service.saveFollowup(f.principal, { requestKey: "booking" }, { ...input, contactId: oldContact, bookingId })).rejects.toMatchObject({ code: "CONNECTION_FOLLOWUP_ASSOCIATION_IMMUTABLE" });
-  expect((await f.db.query("SELECT contact_id FROM follow_ups")).rows[0].contact_id).toBe(oldContact);
+  expect((await f.db.query<{ contact_id: string }>("SELECT contact_id FROM follow_ups")).rows[0].contact_id).toBe(oldContact);
   expect((await f.db.query("SELECT * FROM audit_entries")).rows).toHaveLength(0);
 });
 it("rolls back the contact correction when its audit cannot be saved", async () => {
   const { input, oldContact } = await setup();
   await f.db.exec("DROP TABLE audit_entries");
   await expect(service.saveFollowup(f.principal, { requestKey: "failed-audit" }, input)).rejects.toThrow();
-  expect((await f.db.query("SELECT contact_id FROM follow_ups")).rows[0].contact_id).toBe(oldContact);
+  expect((await f.db.query<{ contact_id: string }>("SELECT contact_id FROM follow_ups")).rows[0].contact_id).toBe(oldContact);
   expect((await f.db.query("SELECT * FROM chatgpt_operations WHERE request_key='failed-audit'")).rows).toHaveLength(0);
 });
 it("does not correct closed reminders or allow a read-only connection to write", async () => {
@@ -59,6 +59,6 @@ it("does not correct closed reminders or allow a read-only connection to write",
   await expect(service.saveFollowup({ ...f.principal, scopes: ["crm:read"] }, { requestKey: "read-only" }, input)).rejects.toThrow();
   await f.db.query("UPDATE follow_ups SET completed_at=now() WHERE id=$1", [input.followupId]);
   await expect(service.saveFollowup(f.principal, { requestKey: "closed" }, input)).rejects.toMatchObject({ code: "CONNECTION_STALE_REVISION" });
-  expect((await f.db.query("SELECT contact_id FROM follow_ups")).rows[0].contact_id).toBe(oldContact);
+  expect((await f.db.query<{ contact_id: string }>("SELECT contact_id FROM follow_ups")).rows[0].contact_id).toBe(oldContact);
   expect((await f.db.query("SELECT * FROM audit_entries")).rows).toHaveLength(0);
 });
