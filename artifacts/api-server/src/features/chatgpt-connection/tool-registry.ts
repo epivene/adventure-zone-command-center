@@ -242,7 +242,7 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       name: "save_followup",
       scope: "followups:write",
       description:
-        "Save a reminder with an explicit dueAt instant and timezone. Ask for the date if missing; use America/Denver for owner-facing dates. A new booking reminder replaces its previous active reminder.",
+        "Save a reminder with an explicit dueAt and timezone; use America/Denver for owner dates. Use the owner's date or established follow-up cadence before asking for a missing date. First list_followups: edit the existing reminder with its exact expectedRevision. A verified active contact on the same profile can be corrected in place with audit history; profile and booking cannot be reassigned. A new booking reminder replaces its previous active reminder. Reuse requestKey on identical retries and verify the receipt.",
       schema: z
         .object({
           requestKey,
