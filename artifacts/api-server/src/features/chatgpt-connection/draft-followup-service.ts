@@ -392,10 +392,10 @@ export class DraftFollowupService {
           if (!row) throw new ConnectionError("CONNECTION_ACCESS_DENIED", 403);
           if (row.revision !== input.expectedRevision || row.completed_at)
             throw new ConnectionError("CONNECTION_STALE_REVISION", 409);
-          if (
-            row.contact_id !== input.contactId ||
-            row.booking_id !== input.bookingId
-          )
+          // The profile stays fixed and associations() verified the requested
+          // contact belongs to it. Correct the contact on this reminder instead
+          // of forcing a duplicate reminder with a misleading contact link.
+          if (row.booking_id !== input.bookingId)
             throw new ConnectionError(
               "CONNECTION_FOLLOWUP_ASSOCIATION_IMMUTABLE",
               409,
@@ -408,6 +408,16 @@ export class DraftFollowupService {
             outcome: null,
           });
           if (!result.ok) throw new ConnectionError(result.error.code);
+          const corrected = (await tx.query(
+            "UPDATE follow_ups SET contact_id=$2,updated_at=GREATEST(clock_timestamp(),$3::timestamptz+interval '1 microsecond') WHERE id=$1 RETURNING *,updated_at::text AS revision",
+            [row.id, input.contactId, row.revision],
+          )).rows[0];
+          if (row.contact_id !== input.contactId) {
+            await tx.query(
+              `INSERT INTO audit_entries(entity_type,entity_id,action,"before","after") VALUES('follow_up',$1,'correct_contact',$2::jsonb,$3::jsonb)`,
+              [row.id, JSON.stringify(followup(row)), JSON.stringify(followup(corrected))],
+            );
+          }
           id = row.id;
         } else {
           const result = await service.create(
