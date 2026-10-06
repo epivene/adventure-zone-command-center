@@ -1,3 +1,6 @@
+import { WebsiteInquiryReads } from "./website-inquiry-reads";
+import { WebsiteInquiryReviewService } from "../website-inquiries/website-inquiry-review-service";
+import { DrizzleWebsiteInquiryRepository } from "../website-inquiries/website-inquiry-repository";
 import { GmailDraftFilingService } from "./gmail-draft-filing-service";
 import { TodayReadService } from "./today-read-service";
 import { loadMasterTodayQueue } from "../today/master-work-queue-repository";
@@ -152,6 +155,7 @@ export function mountChatGPTConnection(
         });
       },
       services: {
+        inquiries: new WebsiteInquiryReads(db, new WebsiteInquiryReviewService({repository:new DrizzleWebsiteInquiryRepository(appDatabase)}), appOrigin),
         today: new TodayReadService(db,now=>loadMasterTodayQueue(appDatabase,now)),
         attention: createEmailAttentionService(db),
         work: new BookingWorkService(db),

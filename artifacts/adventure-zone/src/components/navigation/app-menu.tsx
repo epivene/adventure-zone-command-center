@@ -26,7 +26,7 @@ const bookingItems: MenuItem[] = [
   { href: "/profiles", label: "Profiles" },
   { href: "/dave-requests", label: "Dave Requests" },
   { href: "/emails", label: "Emails" },
-  { href: "/email-review", label: "Email Review" },
+  { href: "/emails?view=review", label: "Emails needing review" },
   { href: "/calls/workspace", label: "Calls" },
   { href: "/calls/voicemail", label: "Voicemail" },
   { href: "/website-inquiries", label: "Website Inquiries" },
@@ -68,7 +68,7 @@ const adminToolsGroups: MenuGroup[] = [
     label: "Review queues",
     items: [
       { href: "/emails", label: "Emails" },
-  { href: "/email-review", label: "Email Review" },
+  { href: "/emails?view=review", label: "Emails needing review" },
     ],
   },
   {
@@ -159,7 +159,7 @@ function MenuLink({
   const active = location === item.href || location.startsWith(`${item.href}/`);
   const ariaLabel = item.href === "/website-inquiries" && websiteInquiryCount > 0
     ? `Website Inquiries, ${websiteInquiryCount} new`
-    : item.href === "/email-review" && pendingEmailReviewCount > 0
+    : item.href === "/emails?view=review" && pendingEmailReviewCount > 0
       ? `Email Review, ${pendingEmailReviewCount} pending`
       : item.badgeCount ? `${item.label}, ${item.badgeCount} pending` : undefined;
   return (
@@ -177,7 +177,7 @@ function MenuLink({
             {websiteInquiryCount > 99 ? "99+" : websiteInquiryCount}
           </span>
         ) : null}
-        {item.href === "/email-review" && pendingEmailReviewCount > 0 ? (
+        {item.href === "/emails?view=review" && pendingEmailReviewCount > 0 ? (
           <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-950">
             {pendingEmailReviewCount > 99 ? "99+" : pendingEmailReviewCount}
           </span>

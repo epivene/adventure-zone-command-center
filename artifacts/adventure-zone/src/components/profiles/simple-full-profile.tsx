@@ -1,3 +1,5 @@
+import { ProfileActivityHistory } from "./profile-activity-history";
+import { mergeProfileHistory } from "./profile-activity-history-model";
 import { getBossProfileEmails, getBossProfileDrafts, getBossThread } from "@/components/boss/boss-profile-emails";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 import { useProfileGoogleEmail } from "@/components/google-workspace/use-profile-google-email";
@@ -152,8 +154,8 @@ export function SimpleFullProfile({
   const [internalEditing, setInternalEditing] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSection>(() =>
     typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("section") === "emails"
-      ? "emails"
+    ["contacts","events","notes","emails","documents"].includes(new URLSearchParams(window.location.search).get("section") || "")
+      ? new URLSearchParams(window.location.search).get("section") as OpenSection
       : null,
   );
   const [noteSearch, setNoteSearch] = useState("");
@@ -175,7 +177,7 @@ export function SimpleFullProfile({
   const search = useSearch();
   const [,navigate] = useLocation();
   useEffect(() => { onSectionChange?.(openSection); }, [openSection, onSectionChange]);
-  useEffect(() => { if(new URLSearchParams(search).get("section") === "emails") setOpenSection("emails"); }, [search]);
+  useEffect(() => { const section=new URLSearchParams(search).get("section"); if(section && ["contacts","events","notes","emails","documents"].includes(section)) setOpenSection(section as OpenSection); }, [search]);
   useEffect(() => { if(openSection) document.getElementById("profile-section-content")?.scrollIntoView?.({block:"start"}); }, [openSection]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [primaryContactOpen, setPrimaryContactOpen] = useState(false);
@@ -254,26 +256,11 @@ export function SimpleFullProfile({
     paperNoteSource: (note as any).paperNoteSource ?? null,
   }));
   const activities = mergeOptimisticActivities(persistedActivities, optimisticActivities);
-  const recentHistory = [
-    ...activities.map((activity) => ({
-      id: activity.id,
-      kind: activity.kind,
-      body: activity.body,
-      occurredAt: activity.occurredAt,
-    })),
-    ...emailConversations.map((conversation) => ({
-      id: `gmail:${conversation.threadId}`,
-      kind: "email",
-      body: conversation.subject || "(No subject)",
-      occurredAt: new Date(
-        (conversation.internalDateMs ?? Date.parse(conversation.date)) || 0,
-      ),
-    })),
-  ].sort(
-    (left, right) =>
-      new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime() ||
-      left.id.localeCompare(right.id),
+  const recentHistory = mergeProfileHistory(
+    activities.map(activity => ({id:activity.id,kind:activity.kind,body:activity.body,occurredAt:activity.occurredAt})),
+    emailConversations.map(conversation => ({id:"gmail:"+conversation.threadId,kind:"email",body:conversation.subject || "(No subject)",occurredAt:new Date((conversation.internalDateMs ?? Date.parse(conversation.date)) || 0),href:boss ? undefined : "/emails?"+new URLSearchParams({profileId:profile.id,threadId:conversation.threadId})}))
   );
+  const filteredHistory = noteSearch.trim() ? recentHistory.filter(item => (item.kind+" "+item.body).toLowerCase().includes(noteSearch.trim().toLowerCase())) : recentHistory;
   const normalizedSearch = noteSearch.trim().toLowerCase();
   const filteredActivities = normalizedSearch
     ? activities.filter((item) => `${item.kind} ${item.body}`.toLowerCase().includes(normalizedSearch))
@@ -877,6 +864,7 @@ export function SimpleFullProfile({
             </div>
           ) : null}
           <div className="mt-6">
+            <ProfileActivityHistory items={filteredHistory}>
             {normalizedSearch && filteredActivities.length === 0 ? (
               <p className="rounded-xl bg-[#f4f8f4] p-4 text-sm text-[#71848a]">No notes or history match “{noteSearch.trim()}”.</p>
             ) : (
@@ -890,6 +878,7 @@ export function SimpleFullProfile({
                 collapseLongBodies
               />
             )}
+            </ProfileActivityHistory>
           </div>
         </section>
       ) : null}
@@ -901,7 +890,8 @@ export function SimpleFullProfile({
         <ProfileGoogleEmailPanel organizationId={profile.id} state={gmail} readOnly={boss} getThread={boss ? getBossThread : undefined} />
       </div> : null}
 
-      <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
+      <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Organization details</summary>
+      <section className="mt-3">
         <div className="flex items-center gap-2">
           <Globe2 className="h-4 w-4 text-[#4b8575]" />
           <h2 className="text-xs font-bold uppercase tracking-[0.16em] text-[#75908b]">About this organization</h2>
@@ -920,7 +910,7 @@ export function SimpleFullProfile({
             <dd className="mt-1 break-all text-[#4d666d]">{profile.place.website || "Not recorded"}</dd>
           </div>
         </dl>
-      </section>
+      </section></details>
     </div>
   );
 }

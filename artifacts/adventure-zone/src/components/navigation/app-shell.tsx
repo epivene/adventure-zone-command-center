@@ -1,3 +1,4 @@
+import { bookingNavigation } from "@/features/navigation/booking-navigation";
 import { Link, useLocation } from "wouter";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Bot, ArrowLeft, CalendarDays, House, Inbox, MailQuestion, MapPinned, ClipboardList, Megaphone, MessageSquare, Palette, UsersRound, type LucideIcon } from "lucide-react";
@@ -26,13 +27,8 @@ const OfficeUpdateHistory = lazy(() => import("@/components/office-admin/office-
 
 function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string | null): PrimaryNavigationItem[] {
   if (workspace === "booking") {
-    return [
-      { href: "/today", label: "Today", icon: House },
-      { href: "/profiles", label: "Profiles", icon: UsersRound },
-      { href: "/email-review", label: "Email Review", icon: MailQuestion },
-      { href: "/schedule", label: "Schedule", icon: CalendarDays },
-      { href: "/assistant/workspace", label: "Assistant", icon: Bot },
-    ];
+    const icons = { home: House, profiles: UsersRound, emails: Inbox, schedule: CalendarDays };
+    return bookingNavigation().map(item => ({ ...item, icon: icons[item.icon] }));
   }
   if (workspace === "operations") {
     return [
@@ -164,7 +160,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                           {websiteInquiryCount > 99 ? "99+" : websiteInquiryCount}
                         </span>
                       ) : null}
-                      {item.href === "/email-review" && pendingEmailReviewCount > 0 ? (
+                      {item.href === "/emails" && pendingEmailReviewCount > 0 ? (
                         <span aria-label={`${pendingEmailReviewCount} pending email reviews`} className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-950">
                           {pendingEmailReviewCount > 99 ? "99+" : pendingEmailReviewCount}
                         </span>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { CalendarContent } from "./CalendarPage";
 import { RoutesContent } from "./RoutesPage";
@@ -64,9 +64,15 @@ export default function SchedulePage() {
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-3xl font-bold tracking-tight">Schedule</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Schedule & Routes</h1>
         <ScheduleViewToggle view={view} onChange={changeView} />
       </header>
+      <nav aria-label="Schedule tools" className="flex flex-wrap gap-2">
+        <Link className="button-secondary" href="/operations/legs">Leg management</Link>
+        <Link className="button-secondary" href="/settings/packages-resources">Equipment & capacity</Link>
+        <button className="button-secondary" type="button" onClick={() => changeView("map")}>Trips & routes</button>
+      </nav>
+      <p className="text-xs text-muted-foreground">Missing dates and unverified assignments are unknown capacity. Check the saved leg and resource plans before promising availability.</p>
       {params.get('bookingId') ? <BookingLegOperationsCard bookingId={params.get('bookingId')!} role="owner" client={ownerOperationsClient}/> : null}
 
       <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">

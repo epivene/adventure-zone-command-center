@@ -1,5 +1,6 @@
+import { readReviewContext, writeReviewContext, reviewSelectionUrl } from "@/features/emails/email-workspace-state";
 import { EmailAttentionControls } from "./email-attention-controls";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Search } from "lucide-react";
 
 import {
@@ -77,18 +78,56 @@ function gmailNotice(result?: GoogleProfileLabelSyncResult): GmailNotice {
 }
 
 export function GoogleValidationReview({
+  presentation = "legacy",
+  initialMessageId,
+  contextAccountId,
   checkGmailOnMount = false,
   showGmailActions = checkGmailOnMount,
   onPendingCountChange,
   showHistory = false,
 }: {
+  presentation?: "legacy" | "workspace";
+  initialMessageId?: string;
+  contextAccountId?: string;
   checkGmailOnMount?: boolean;
   showGmailActions?: boolean;
   onPendingCountChange?(count: number): void;
   showHistory?: boolean;
 } = {}) {
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(initialMessageId || null);
+  const compact = presentation === "workspace";
+  const [reviewPane, setReviewPane] = useState<"list" | "reader">(initialMessageId ? "reader" : "list");
+  const reviewScroll = useRef(0);
+  const [reviewHydrated, setReviewHydrated] = useState<string | null>(null);
+  function selectReview(id: string) {
+    reviewScroll.current=window.scrollY;
+    setSelectedReviewId(id);setReviewPane("reader");
+    window.history.replaceState(window.history.state,"",reviewSelectionUrl(window.location.search,id));
+  }
+  useEffect(() => {
+    if(!compact || !contextAccountId) return;
+    let saved: ReturnType<typeof readReviewContext> = null;
+    try {saved=readReviewContext(sessionStorage,contextAccountId);} catch {}
+    setReviewHydrated(contextAccountId);
+    const selected=initialMessageId || saved?.messageId || null;
+    setSelectedReviewId(selected);
+    setReviewPane(saved && (!initialMessageId || initialMessageId===saved.messageId) ? saved.pane : selected ? "reader" : "list");
+    reviewScroll.current=saved?.scrollY || 0;
+
+  },[compact,contextAccountId]);
+  useEffect(() => {if(compact && initialMessageId) setSelectedReviewId(initialMessageId);},[compact,initialMessageId]);
+  useEffect(() => {
+    if(!compact || !contextAccountId || reviewHydrated!==contextAccountId) return;
+    try {writeReviewContext(sessionStorage,{accountId:contextAccountId,messageId:selectedReviewId || undefined,scrollY:reviewScroll.current,pane:reviewPane});} catch {}
+  },[compact,contextAccountId,reviewHydrated,selectedReviewId,reviewPane]);
   const [items, setItems] = useState<GoogleValidationReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (compact && !loading && reviewPane === "list" && reviewHydrated === contextAccountId) {
+      const frame = requestAnimationFrame(() => window.scrollTo(0, reviewScroll.current));
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [compact, loading, reviewPane, reviewHydrated, contextAccountId]);
   const [checking, setChecking] = useState(false);
   const [busyMessageId, setBusyMessageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +160,13 @@ export function GoogleValidationReview({
     try {
       const result = await getGoogleWorkspaceValidationReview();
       setItems(result.items);
+      if (compact && initialMessageId && !result.items.some(row => row.messageId === initialMessageId && row.state === "pending")) {
+        const params = new URLSearchParams(window.location.search);
+        params.delete("reviewMessageId");
+        window.history.replaceState(window.history.state, "", `/emails?${params}`);
+        setReviewPane("list");
+      }
+      setSelectedReviewId(current => current && result.items.some(row => row.messageId === current && row.state === "pending") ? current : null);
       const pendingCount = result.items.filter((item) => item.state === "pending").length;
       onPendingCountChange?.(pendingCount);
       window.dispatchEvent(new CustomEvent("email-review-count-changed", { detail: pendingCount }));
@@ -470,6 +516,12 @@ export function GoogleValidationReview({
     }
   }
 
+  useEffect(() => {
+    if (!compact || !selectedReviewId) return;
+    const item = pending.find(row => row.messageId === selectedReviewId);
+    if (item && !threadByMessage[item.messageId]) void toggleThread(item);
+  }, [compact, selectedReviewId, pending.map(row => row.messageId).join(",")]);
+
   if (loading) {
     return (
       <p className="text-sm text-slate-500">
@@ -479,7 +531,7 @@ export function GoogleValidationReview({
   }
 
   return (
-    <section className="grid gap-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+    <section className={compact ? "grid min-w-0 gap-4" : "grid gap-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900 dark:bg-amber-950/20"}>
       {attentionSelection ? <EmailAttentionControls key={attentionSelection.messageId + attentionSelection.profileId} {...attentionSelection} onSaved={() => void load()} onCancel={() => setAttentionSelection(null)} /> : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -487,7 +539,7 @@ export function GoogleValidationReview({
             Needs Review
           </h3>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Assign uncertain business email to an existing profile, create a new profile for a new opportunity, or ignore it if it does not belong in the CRM.
+            Review an uncertain match, file it to a profile, or ignore it. Filing with an attention decision archives the conversation.
           </p>
           {resolvedCount || ignoredCount ? (
             <p className="mt-1 text-xs text-slate-500">
@@ -608,8 +660,12 @@ export function GoogleValidationReview({
           No unresolved email in this validation sample.
         </p>
       ) : (
-        <div className="grid gap-3">
-          {pending.map((item) => {
+        <div className={compact ? "grid min-w-0 gap-4 md:grid-cols-[minmax(220px,0.8fr)_minmax(0,2fr)]" : "grid gap-3"}>
+          {compact ? <div aria-label="Emails needing review" className={`min-w-0 divide-y rounded-xl border bg-card ${selectedReviewId && reviewPane==="reader" ? "hidden md:block" : ""}`}>
+            {pending.map(item => <button key={item.messageId} type="button" disabled={busyMessageId !== null} aria-pressed={selectedReviewId === item.messageId} onClick={() => selectReview(item.messageId)} className={`block min-h-11 w-full p-3 text-left hover:bg-muted ${selectedReviewId === item.messageId ? "bg-secondary" : ""}`}><p className="truncate text-sm font-semibold">{item.from || "Unknown sender"}</p><p className="mt-1 truncate text-sm">{item.subject || "(No subject)"}</p><p className="mt-1 text-xs text-muted-foreground">Needs profile review</p></button>)}
+          </div> : null}
+          {compact && !selectedReviewId ? <p className="hidden rounded-xl border bg-card p-5 text-sm text-muted-foreground md:block">Select a conversation to review it.</p> : null}
+          {(compact ? pending.filter(item => item.messageId === selectedReviewId) : pending).map((item) => {
             const searchState = searchByMessage[item.messageId] ?? {
               query: "",
               results: [],
@@ -621,7 +677,8 @@ export function GoogleValidationReview({
             const opening = openingMessageIds.has(item.messageId);
             const threadError = threadErrorByMessage[item.messageId];
             return (
-              <article className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm dark:border-amber-900 dark:bg-slate-950/40" key={item.messageId}>
+              <article className={`min-w-0 rounded-xl border bg-card p-4 ${compact && reviewPane==="list" ? "hidden md:block" : ""}`} key={item.messageId}>
+                {compact ? <div className="mb-3 md:hidden"><button type="button" className="button-secondary" onClick={() => {setReviewPane("list");requestAnimationFrame(()=>window.scrollTo(0,reviewScroll.current));}}>Back to review list</button></div> : null}
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="break-words font-semibold text-slate-900 dark:text-slate-100">
@@ -738,7 +795,7 @@ export function GoogleValidationReview({
                           onClick={() => void assign(item, candidate.id)}
                           type="button"
                         >
-                          {candidate.name}
+                          {compact ? `Review & file: ${candidate.name}` : candidate.name}
                         </button>
                       ))}
                     </div>
