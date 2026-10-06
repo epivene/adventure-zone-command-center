@@ -104,3 +104,10 @@ test('Today respects saved ordering and collapses waiting, future and completed 
  const g=groupMasterWork(queue,new Date('2026-10-06T12:00:00Z'));
  assert.deepEqual(g.booking.map(x=>x.id),['pin','manual','urgent']);assert.deepEqual(g.waiting.map(x=>x.id),['waiting']);assert.deepEqual(g.later.map(x=>x.id),['future']);assert.deepEqual(g.completed.map(x=>x.id),['done']);
 });
+
+const {mergeProfileHistory}=load(frontend+'components/profiles/profile-activity-history-model.ts',['mergeProfileHistory']);
+test('profile history merges original IDs without losing distinct same-date activities',()=>{
+ assert.equal(typeof mergeProfileHistory,'function');
+ const history=mergeProfileHistory([{id:'n',kind:'call',body:'Called',occurredAt:new Date('2026-10-06')}],[{id:'n',kind:'call',body:'Duplicate',occurredAt:new Date('2026-10-06')},{id:'mail:t',kind:'email',body:'Customer reply',occurredAt:new Date('2026-10-06'),href:'/emails?threadId=t'}]);
+ assert.equal(history.length,2);assert.equal(history.find(x=>x.id==='n').body,'Called');assert.equal(history.find(x=>x.kind==='email').href,'/emails?threadId=t');
+});
