@@ -14,7 +14,7 @@ type DrizzleDatabase = typeof database;
 type LockedPageRow = {
   id: string;
   status: string;
-  extractedAt: Date | null;
+  extractedAt: Date | string | null;
   batchStatus: string;
 };
 
@@ -29,7 +29,8 @@ function isCountRow(row: Record<string, unknown>): row is { count: number } {
 function isLockedPageRow(row: Record<string, unknown>): row is LockedPageRow {
   return typeof row.id === "string"
     && typeof row.status === "string"
-    && (row.extractedAt === null || row.extractedAt instanceof Date)
+    && (row.extractedAt === null || row.extractedAt instanceof Date
+      || (typeof row.extractedAt === "string" && Number.isFinite(Date.parse(row.extractedAt))))
     && typeof row.batchStatus === "string";
 }
 
@@ -119,25 +120,13 @@ export class PaperNoteRecoveryRepository {
     const clean = transcription.trim();
     return this.database.transaction(async (tx) => {
       const page = await this.lockOwnedPage(tx as unknown as DrizzleDatabase, createdBy, batchId, pageId);
-      if (page.status === "reviewed_empty") {
+      if (page.status !== "needs_retry" && page.status !== "extracted") {
         throw new PaperNoteRecoveryError(
           "PAGE_NOT_EDITABLE",
-          "This page was already marked as having no importable entries.",
+          "Manual entries can only be added to a failed or extracted page.",
         );
       }
-      const [protectedEntry] = await tx.select({ id: paperNoteEntries.id })
-        .from(paperNoteEntries)
-        .where(and(
-          eq(paperNoteEntries.pageId, pageId),
-          inArray(paperNoteEntries.state, ["approved", "imported"]),
-        ))
-        .limit(1);
-      if (protectedEntry) {
-        throw new PaperNoteRecoveryError(
-          "PAGE_NOT_EDITABLE",
-          "Approved or imported entries cannot be replaced by a manual entry.",
-        );
-      }
+      // Append a new source-order entry; never replace existing approved review data.
 
       const orderResult = await tx.execute(sql`
         select coalesce(max(source_order), -1)::int as value
@@ -168,7 +157,9 @@ export class PaperNoteRecoveryRepository {
         leaseExpiresAt: null,
         lastErrorCode: null,
         lastErrorMessage: null,
-        extractedAt: page.extractedAt ?? now,
+        extractedAt: typeof page.extractedAt === "string"
+          ? new Date(page.extractedAt)
+          : page.extractedAt ?? now,
         updatedAt: now,
       }).where(eq(paperNotePages.id, pageId));
       await this.refreshBatchState(tx as unknown as DrizzleDatabase, batchId, now);
