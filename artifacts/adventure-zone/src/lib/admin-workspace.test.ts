@@ -39,6 +39,8 @@ describe("admin workspace routing", () => {
     ["/quick-add", "booking"],
     ["/office-coordinator", "booking"],
     ["/email-review", "booking"],
+    ["/emails", "booking"],
+    ["/emails?folder=sent", "booking"],
     ["/operations/legs", "operations"],
     ["/trips/abc", "operations"],
     ["/manager-communications", "operations"],

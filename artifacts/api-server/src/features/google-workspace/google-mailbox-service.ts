@@ -48,7 +48,7 @@ export class GoogleMailboxService {
       nextPageToken = page.nextPageToken;
     } else {
       const page = await client.listMessagePage({
-        maxResults: 25, pageToken: input.pageToken, query: input.query,
+        maxResults: 25, pageToken: input.pageToken, query: input.query.trim() || undefined,
         labelIds: folderLabels[input.folder],
       });
       refs = page.messages;

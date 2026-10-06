@@ -5,7 +5,7 @@ const path=require('node:path');
 const {stripTypeScriptTypes}=require('node:module');
 const root=path.resolve(__dirname,'..');
 function load(file,names,deps={}) {
- let text=fs.readFileSync(path.join(root,file),'utf8').replace(/^import[\s\S]*?;\r?\n/gm,'').replace(/^export /gm,'');
+ let text=fs.readFileSync(path.join(root,file),'utf8').replace(/^import[\s\S]*?;\r?\n/gm,'').replace(/^export type \{[\s\S]*?\} from [^;]+;/gm,'').replace(/^export /gm,'');
  text=text.replace(/constructor\(([\s\S]*?)\)\s*\{\s*\}/g,(_match,args)=>{const names=[...args.matchAll(/private readonly (\w+)/g)].map(x=>x[1]);return 'constructor('+args.replace(/private readonly /g,'')+') {'+names.map(x=>'this.'+x+'='+x+';').join('')+'}';});
  const js=stripTypeScriptTypes(text,{mode:'strip'});
  return new Function(...Object.keys(deps),js+';return {'+names.join(',')+'};')(...Object.values(deps));
@@ -52,6 +52,33 @@ test('repeated linking preserves one operation and one label',async()=>{
 
 const {createHash}=require('node:crypto');
 const {GoogleMailboxService,draftRevision}=load(folder+'google-mailbox-service.ts',['GoogleMailboxService','draftRevision'],{createHash,pool:{}});
+const {createGoogleWorkspaceReadClient}=load(folder+'google-api-client.ts',['createGoogleWorkspaceReadClient']);
+const {adminWorkspaceForPath,saveBookingReturnPath,readBookingReturnPath}=load('artifacts/adventure-zone/src/lib/admin-workspace.ts',['adminWorkspaceForPath','saveBookingReturnPath','readBookingReturnPath']);
+test('native mailbox keeps Booking navigation and its return destination',()=>{
+ const values=new Map();const storage={setItem(k,v){values.set(k,v);},getItem(k){return values.get(k)??null;}};
+ assert.equal(adminWorkspaceForPath('/emails?folder=inbox'),'booking');
+ assert.equal(saveBookingReturnPath('/emails?folder=sent',storage),true);
+ assert.equal(readBookingReturnPath(storage),'/emails?folder=sent');
+ assert.equal(adminWorkspaceForPath('/emails-unknown'),'admin');
+});
+for (const folderName of ['inbox','sent','search']) {
+ test('real Gmail client loads '+folderName+' without an empty query',async()=>{
+  const client=createGoogleWorkspaceReadClient({environment:{clientId:'test',clientSecret:'test'},refreshToken:'test',fetcher:async(url)=>{
+   if(String(url).includes('oauth2.googleapis.com'))return new Response(JSON.stringify({access_token:'test',expires_in:3600}),{status:200});
+   const request=new URL(url);
+   if(request.pathname.endsWith('/messages')){
+    assert.equal(request.searchParams.has('q'),false);
+    assert.deepEqual(request.searchParams.getAll('labelIds'),folderName==='inbox'?['INBOX']:folderName==='sent'?['SENT']:[]);
+    return new Response(JSON.stringify({messages:[{id:'msg-a',threadId:'thread-a'}]}),{status:200});
+   }
+   return new Response(JSON.stringify({id:'msg-a',threadId:'thread-a',labelIds:['UNREAD'],internalDate:'1',snippet:'Question',payload:{headers:[{name:'Subject',value:'Question'}]}}),{status:200});
+  }});
+  const account={id:'account-a',email:'owner@example.com',status:'connected'};
+  const service=new GoogleMailboxService({async getCurrent(){return account;},async createReadClient(){return client;}},{async query(){return {rows:[]};}});
+  const result=await service.list({folder:folderName,query:''});
+  assert.equal(result.messages[0].headers.subject,'Question');
+ });
+}
 function mailboxFixture({sendFails=false,accountChanged=false,sendError=null,rawOverride=null}={}) {
  const account={id:'account-a',email:'owner@example.com',status:'connected'};
  let sendCount=0,ledger=null,raw=rawOverride || 'bWltZS13aXRoLWF0dGFjaG1lbnRz',sentRaw=null,modified=null;
