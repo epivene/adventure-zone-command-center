@@ -16,6 +16,10 @@ export function createEmailThreadAttentionRouter(
     next();
   });
   const actor = { ownerId: "owner", connectorId: null };
+  r.get("/list", async (req, res) => {
+    const input = z.object({gmailConnectionId:z.string().uuid(),state:z.enum(["needs_your_reply","waiting_for_their_reply"]),cursor:z.string().max(2000).optional(),limit:z.coerce.number().int().min(1).max(100).optional()}).strict().parse(req.query);
+    res.json(await service.list(actor,input));
+  });
   r.get("/context", async (req, res) => {
     const q = z
       .object({ messageId: z.string().min(1).max(200) })

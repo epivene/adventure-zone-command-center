@@ -8,7 +8,7 @@ function load(file,names,deps={}) {
  if(!fs.existsSync(path.join(root,file)))return {};
  let source=fs.readFileSync(path.join(root,file),'utf8').replace(/^import[\s\S]*?;\r?\n/gm,'').replace(/^export type \{[\s\S]*?\} from [^;]+;/gm,'').replace(/^export /gm,'');
  source=source.replace(/constructor\(([\s\S]*?)\)\s*\{/g,(_m,args)=>{const fields=[...args.matchAll(/(?:private readonly|private|public|protected) (\w+)/g)].map(x=>x[1]);return 'constructor('+args.replace(/(?:private readonly|private|public|protected) /g,'')+') {'+fields.map(x=>'this.'+x+'='+x+';').join('');});
- return new Function(...Object.keys(deps),stripTypeScriptTypes(source,{mode:'strip'})+';return {'+names.join(',')+'};')(...Object.values(deps));
+ return new Function(...Object.keys(deps),stripTypeScriptTypes(source,{mode:'strip'})+';return {'+names.map(n=>n+': typeof '+n+' === "undefined" ? undefined : '+n).join(',')+'};')(...Object.values(deps));
 }
 const base='artifacts/api-server/src/features/';
 const contracts=load(base+'chatgpt-connection/contracts.ts',['requireConnectionScope','activeConnection','ConnectionError'],{createHash});
@@ -66,4 +66,41 @@ test('email workspace URLs select all views without stale browser storage',()=>{
  assert.equal(readEmailWorkspaceState('?folder=sent&q=Fair&threadId=t').view,'sent');
  assert.equal(readEmailWorkspaceState('?view=bogus').view,'inbox');
  assert.equal(readEmailWorkspaceState('?folder=search&q=Fair').query,'Fair');
+});
+
+const {readAttentionList}=load(base+'google-workspace/email-attention-list.ts',['readAttentionList'],{Buffer});
+test('saved attention views bind paging to the active account and saved state',async()=>{
+ assert.equal(typeof readAttentionList,'function');
+ let active='account-a';const queries=[];
+ const db={async query(sql,args){queries.push({sql,args});if(sql.includes('google_workspace_connections'))return {rows:[{id:active}]};
+ return {rows:[{id:'b',thread_id:'thread-b',profile_id:'profile',state:'needs_your_reply',subject:'Reply',updated_at:'2026-10-06T12:00:00Z',reviewed_message_id:'msg-b'},{id:'a',thread_id:'thread-a',profile_id:'profile',state:'needs_your_reply',subject:'Reply',updated_at:'2026-10-06T11:00:00Z',reviewed_message_id:'msg-a'}]};}};
+ const page=await readAttentionList(db,async()=>{}, {ownerId:'owner',connectorId:null},{gmailConnectionId:'account-a',state:'needs_your_reply',limit:1});
+ assert.equal(page.items.length,1);assert.equal(page.items[0].threadId,'thread-b');assert.ok(page.nextCursor);
+ assert.deepEqual(queries[1].args.slice(0,2),['account-a','needs_your_reply']);
+ await assert.rejects(readAttentionList(db,async()=>{}, {ownerId:'owner',connectorId:null},{gmailConnectionId:'account-a',state:'waiting_for_their_reply',cursor:page.nextCursor}),/CURSOR/);
+ active='account-b';
+ await assert.rejects(readAttentionList(db,async()=>{}, {ownerId:'owner',connectorId:null},{gmailConnectionId:'account-a',state:'needs_your_reply'}),/CONNECTION_CHANGED/);
+});
+
+const {readMailboxContext,isCurrentMailboxResponse}=load(frontend+'features/emails/email-workspace-state.ts',['readMailboxContext','isCurrentMailboxResponse']);
+test('mailbox restoration is account-scoped and ignores stale responses',()=>{
+ assert.equal(typeof readMailboxContext,'function');assert.equal(typeof isCurrentMailboxResponse,'function');
+ const storage={getItem(key){return key==='az-mailbox:account-a'?JSON.stringify({accountId:'account-a',threadId:'t',scrollY:42}):null;}};
+ assert.equal(readMailboxContext(storage,'account-a').threadId,'t');assert.equal(readMailboxContext(storage,'account-b'),null);
+ assert.equal(isCurrentMailboxResponse(1,2,'a','a'),false);assert.equal(isCurrentMailboxResponse(2,2,'a','b'),false);assert.equal(isCurrentMailboxResponse(2,2,'a','a'),true);
+});
+
+const {groupMasterWork}=load(frontend+'features/today/group-master-work.ts',['groupMasterWork']);
+const work=(id,kind,overrides={})=>({id,kind,sourceId:id,sourceType:'work',eventName:'Same fair',organizationId:'profile',priority:'normal',pinned:false,manualOrder:null,dueAt:null,completedAt:null,...overrides});
+test('Today groups distinct actions and prioritizes one review over duplicate draft/reply sources',()=>{
+ assert.equal(typeof groupMasterWork,'function');
+ const queue={needsAttention:[work('r','reply',{sourceId:'mail',threadId:'t'}),work('d','draft',{sourceId:'mail',threadId:'t'}),work('v','review',{sourceId:'mail',threadId:'t'})],active:[work('call','callback'),work('paper','booking')],completedToday:[]};
+ const groups=groupMasterWork(queue,new Date('2026-10-06T12:00:00Z'));
+ assert.deepEqual(groups.replies.map(x=>x.id),['v']);assert.deepEqual(groups.calls.map(x=>x.id),['call']);assert.deepEqual(groups.booking.map(x=>x.id),['paper']);
+});
+test('Today respects saved ordering and collapses waiting, future and completed items',()=>{
+ assert.equal(typeof groupMasterWork,'function');
+ const queue={needsAttention:[],active:[work('urgent','research',{priority:'urgent'}),work('pin','research',{pinned:true}),work('manual','research',{manualOrder:0}),work('waiting','follow_up',{attentionState:'waiting_for_their_reply'}),work('future','follow_up',{dueAt:'2026-10-09T12:00:00Z'}),work('done','booking',{completedAt:'2026-10-06'})],completedToday:[]};
+ const g=groupMasterWork(queue,new Date('2026-10-06T12:00:00Z'));
+ assert.deepEqual(g.booking.map(x=>x.id),['pin','manual','urgent']);assert.deepEqual(g.waiting.map(x=>x.id),['waiting']);assert.deepEqual(g.later.map(x=>x.id),['future']);assert.deepEqual(g.completed.map(x=>x.id),['done']);
 });

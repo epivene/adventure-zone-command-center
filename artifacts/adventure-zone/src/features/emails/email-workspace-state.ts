@@ -6,11 +6,21 @@ export function readEmailWorkspaceState(search: string): EmailWorkspaceState {
   const views = ["inbox","sent","drafts","review","needs_reply","waiting"];
   const view = (views.includes(candidate) ? candidate : "inbox") as EmailWorkspaceView;
   const query = params.get("q") || "";
-  return { view, query, folder: candidate === "search" ? "search" : view === "sent" || view === "drafts" ? view : "inbox",
+  return { view, query, folder: params.get("folder") === "search" || candidate === "search" ? "search" : view === "sent" || view === "drafts" ? view : "inbox",
     threadId: params.get("threadId") || undefined, draftId: params.get("draftId") || undefined, profileId: params.get("profileId") || undefined,
     attentionMessage: params.get("attentionMessage") || undefined, reviewMessageId: params.get("reviewMessageId") || undefined, accountId: params.get("accountId") || undefined };
 }
 export function legacyReviewUrl(search: string): string {
   const params = new URLSearchParams(search); params.set("view", "review");
   return "/emails?" + params;
+}
+
+export type MailboxContext = {accountId:string;threadId?:string;draftId?:string;scrollY?:number;showProfile?:boolean};
+export function readMailboxContext(storage: Pick<Storage,"getItem">, accountId: string): MailboxContext | null {
+  try { const saved = JSON.parse(storage.getItem("az-mailbox:"+accountId) || "null");
+    return saved && saved.accountId === accountId ? saved : null;
+  } catch { return null; }
+}
+export function isCurrentMailboxResponse(version: number, currentVersion: number, accountId: string, currentAccountId: string): boolean {
+  return version === currentVersion && accountId === currentAccountId;
 }

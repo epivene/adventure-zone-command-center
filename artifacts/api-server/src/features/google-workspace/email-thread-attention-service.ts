@@ -1,3 +1,4 @@
+import { readAttentionList, type AttentionListInput } from "./email-attention-list";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
@@ -310,6 +311,9 @@ export class EmailThreadAttentionService {
       [op.id, JSON.stringify({ ...updated, committed })],
     );
     return updated;
+  }
+  async list(actor: AttentionActor, input: AttentionListInput) {
+    return readAttentionList(this.db, (a,w) => this.ports.authorize(a,w), actor, input);
   }
   async read(
     actor: AttentionActor,
