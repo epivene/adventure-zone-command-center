@@ -93,12 +93,23 @@ export class GoogleProfileLabelResolver {
   async resolve(input: {
     connectionId: string;
     organizationId: string;
+    reuseOnly?: boolean;
   }): Promise<GoogleProfileLabelResolution> {
     const organization = await this.repository.getOrganization(input);
     if (!organization || organization.consolidatedIntoId) {
       throw new Error("GOOGLE_WORKSPACE_REVIEW_TARGET_NOT_FOUND");
     }
 
+    if (input.reuseOnly) {
+      const saved = await this.repository.findByOrganization(input);
+      if (!saved) throw new Error("GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND");
+      const labels = await this.gmail.listLabels();
+      const label = labels.find((item) => item.id === saved.gmailLabelId);
+      if (!label || label.type !== "user" || !profileLabelIdentity(label.name)) throw new Error("GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND");
+      const owner = await this.repository.findByLabelId({connectionId:input.connectionId,gmailLabelId:label.id});
+      if (saved.state === "conflict" || (owner && owner.organizationId !== input.organizationId)) return this.conflict(input,[label]);
+      return {status:"resolved",mapping:saved};
+    }
     const labels = await this.ensureHierarchy(await this.gmail.listLabels());
     const saved = await this.repository.findByOrganization(input);
     if (saved) {

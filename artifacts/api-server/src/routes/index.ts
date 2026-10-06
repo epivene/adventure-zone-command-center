@@ -58,6 +58,8 @@ import googleWorkspaceMatchedCorrectionsRouter from "./google-workspace-matched-
 import googleWorkspaceGmailMutationsRouter from "./google-workspace-gmail-mutations";
 import googleWorkspaceHistoricalBackfillRouter from "./google-workspace-historical-backfill";
 import googleWorkspaceProfileEmailRouter from "./google-workspace-profile-email";
+import googleMailboxRouter from "./google-workspace-mailbox";
+import profileCallBriefRouter from "./profile-call-brief";
 import actMigrationRouter from "./act-migration";
 import actReplacementRouter from "./act-replacement";
 import actRecoveryRouter from "./act-recovery";
@@ -360,6 +362,8 @@ router.use(googleWorkspaceMatchedCorrectionsRouter);
 router.use(googleWorkspaceGmailMutationsRouter);
 router.use(googleWorkspaceHistoricalBackfillRouter);
 router.use(googleWorkspaceProfileEmailRouter);
+router.use(googleMailboxRouter);
+router.use(profileCallBriefRouter);
 router.use(actRecoveryRouter);
 router.use(actReplacementRouter);
 router.use(actMigrationRouter);

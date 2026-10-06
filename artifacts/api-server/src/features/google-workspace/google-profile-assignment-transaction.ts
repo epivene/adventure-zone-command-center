@@ -7,6 +7,7 @@ export type BaseAssignmentInput = {
   organizationId: string;
   actorId: string;
   now: Date;
+  preserveInbox?: boolean;
 };
 
 export type MatchedAssignmentInput = BaseAssignmentInput & {
@@ -90,7 +91,7 @@ function mutationRecord(row: Record<string, unknown> | undefined): GoogleGmailMu
     typeof row.message_id !== "string" ||
     typeof row.thread_id !== "string" ||
     typeof row.organization_id !== "string" ||
-    row.operation !== "assign_thread" ||
+    (row.operation !== "assign_thread" && row.operation !== "link_thread") ||
     (row.state !== "pending" &&
       row.state !== "processing" &&
       row.state !== "completed" &&
@@ -232,6 +233,7 @@ implements GoogleProfileAssignmentTransactionPort {
         organizationId: input.organizationId,
         actorId: input.actorId,
         now: input.now,
+        preserveInbox: input.preserveInbox,
         newIntent:
           previous.review_state !== "resolved" ||
           previous.resolved_organization_id !== input.organizationId,
@@ -327,6 +329,7 @@ implements GoogleProfileAssignmentTransactionPort {
         organizationId: input.organizationId,
         actorId: input.actorId,
         now: input.now,
+        preserveInbox: input.preserveInbox,
         newIntent:
           previous?.review_state !== "resolved" ||
           previous?.resolved_organization_id !== input.organizationId,
@@ -410,6 +413,7 @@ implements GoogleProfileAssignmentTransactionPort {
       actorId: string;
       now: Date;
       newIntent: boolean;
+      preserveInbox?: boolean;
     },
   ): Promise<CommittedProfileAssignment> {
     stage.set("intent_lock");
@@ -418,6 +422,7 @@ implements GoogleProfileAssignmentTransactionPort {
       [input.connectionId, input.threadId],
     );
 
+    const operation = input.preserveInbox ? "link_thread" : "assign_thread";
     const intentResult = await client.query(
       `INSERT INTO google_workspace_gmail_thread_intents (
          connection_id, thread_id, generation, intent_kind,
@@ -427,6 +432,7 @@ implements GoogleProfileAssignmentTransactionPort {
          generation = CASE
            WHEN google_workspace_gmail_thread_intents.intent_kind = 'assign'
             AND google_workspace_gmail_thread_intents.organization_id IS NOT DISTINCT FROM EXCLUDED.organization_id
+            AND COALESCE((SELECT operation FROM google_workspace_gmail_mutations WHERE id = google_workspace_gmail_thread_intents.current_mutation_id), 'assign_thread') = $5
            THEN google_workspace_gmail_thread_intents.generation
            ELSE google_workspace_gmail_thread_intents.generation + 1
          END,
@@ -435,12 +441,13 @@ implements GoogleProfileAssignmentTransactionPort {
          current_mutation_id = CASE
            WHEN google_workspace_gmail_thread_intents.intent_kind = 'assign'
             AND google_workspace_gmail_thread_intents.organization_id IS NOT DISTINCT FROM EXCLUDED.organization_id
+            AND COALESCE((SELECT operation FROM google_workspace_gmail_mutations WHERE id = google_workspace_gmail_thread_intents.current_mutation_id), 'assign_thread') = $5
            THEN google_workspace_gmail_thread_intents.current_mutation_id
            ELSE NULL
          END,
          updated_at = EXCLUDED.updated_at
        RETURNING generation, current_mutation_id::text`,
-      [input.connectionId, input.threadId, input.organizationId, input.now],
+      [input.connectionId, input.threadId, input.organizationId, input.now, operation],
     );
     const intent = intentResult.rows[0];
     const generation =
@@ -483,14 +490,14 @@ implements GoogleProfileAssignmentTransactionPort {
                 updated_at = $3
           WHERE connection_id = $1
             AND thread_id = $2
-            AND operation IN ('assign_thread','label_inbound_message')
+            AND operation IN ('assign_thread','link_thread','label_inbound_message')
             AND state IN ('pending','processing','retryable_error')`,
         [input.connectionId, input.threadId, input.now],
       );
 
       stage.set("mutation");
       const idempotencyKey =
-        `assign-thread:${input.connectionId}:${input.threadId}:${input.organizationId}`;
+        `${input.preserveInbox ? "link" : "assign"}-thread:${input.connectionId}:${input.threadId}:${input.organizationId}`;
       await client.query(
         `UPDATE google_workspace_gmail_mutations
             SET idempotency_key = idempotency_key || ':history:' || id::text,
@@ -503,7 +510,7 @@ implements GoogleProfileAssignmentTransactionPort {
            connection_id, message_id, thread_id, organization_id, operation,
            idempotency_key, actor_id, state, intent_generation,
            created_at, updated_at
-         ) VALUES ($1,$2,$3,$4,'assign_thread',$5,$6,'pending',$7,$8,$8)
+         ) VALUES ($1,$2,$3,$4,$9,$5,$6,'pending',$7,$8,$8)
          RETURNING id::text, connection_id::text, message_id, thread_id,
                    organization_id::text, operation, target_label_id,
                    remove_label_ids, idempotency_key, state, attempt_count,
@@ -517,6 +524,7 @@ implements GoogleProfileAssignmentTransactionPort {
           input.actorId,
           generation,
           input.now,
+          operation,
         ],
       );
       mutation = mutationRecord(inserted.rows[0]);
