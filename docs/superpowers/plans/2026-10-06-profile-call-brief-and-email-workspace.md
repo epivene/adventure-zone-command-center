@@ -89,7 +89,7 @@ Unqualified google/attention file names in Tasks 1–2 refer to artifacts/api-se
 ## Task 3: Shared Call Brief data, profile layout, and quick lookup
 
 **Create:** API profile-call-brief.ts; profile-call-brief-repository.ts; routes/profile-call-brief.ts; frontend profile-call-brief-client.ts; components/profiles/profile-call-brief.tsx.
-**Modify:** artifacts/adventure-zone/src/components/profiles/simple-full-profile.tsx; profile-at-a-glance.tsx; pages/BossProfilePage.tsx; pages/EventProfilePage.tsx; pages/BossProfilesPage.tsx; pages/ProfilesPage.tsx; API routes/index.ts and features/organizations/profile-search.ts where existing search coverage is insufficient.
+**Modify:** artifacts/adventure-zone/src/components/profiles/simple-full-profile.tsx; profile-at-a-glance.tsx; pages/BossProfilePage.tsx; pages/EventProfilePage.tsx; pages/BossProfilesPage.tsx; pages/OrganizationsPage.tsx; API routes/index.ts and features/organizations/profile-search.ts where existing search coverage is insufficient.
 **Tests:** profile-call-brief.test.ts (API); profile-call-brief.test.tsx; BossProfilesPage tests.
 
 **Interfaces:** buildProfileCallBrief(input: ProfileCallBriefSource): ProfileCallBrief; getProfileCallBrief(organizationId: string, year: number, signal?: AbortSignal): Promise<ProfileCallBrief>. Define ProfileCallBriefSource in profile-call-brief.ts from repository outputs; API GET /profiles/:id/call-brief?year=YYYY for owner, with authorized boss adapter limited to boss profile access.
