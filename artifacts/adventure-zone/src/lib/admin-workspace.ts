@@ -20,6 +20,7 @@ const bookingPrefixes = [
   "/quick-add",
   "/office-coordinator",
   "/website-inquiries",
+  "/emails",
   "/email-review",
 ] as const;
 

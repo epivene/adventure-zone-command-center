@@ -119,10 +119,10 @@ export function LegCallList({ followUps, followUpTotal, now, callingEnabled = tr
       {!callingEnabled ? <p className="mb-3 text-sm text-amber-800">The call workspace is unavailable. Open the event profile to review contacts and next actions.</p> : null}
       {loading ? <p role="status">Loading route prospects…</p> : null}
       {error ? <p role="alert">Route prospects could not load. Showing loaded due calls; refresh to retry.</p> : null}
-      {planner && !planner.enabled ? <p className="text-sm text-amber-800">Route prospect planning is unavailable. Showing loaded due calls.</p> : null}
+      {planner && !planner.enabled ? <p className="text-sm text-amber-800">Route prospect suggestions are turned off. Scheduled calls still appear here. Email and general follow-ups are under Calls &amp; follow-ups.</p> : null}
       {(followUpTotal ?? followUps.length) > followUps.length ? <p className="text-sm text-amber-800">This list uses {followUps.length} loaded reminders of {followUpTotal}. Other pages may contain calls or scheduled callbacks. Review the complete follow-up list before outreach.</p> : null}
       {filter.season !== "all" ? <p className="mb-3 text-sm text-slate-600">Callbacks with an unconfirmed season remain visible for review.</p> : null}
-      {rows.length ? <ol className="grid gap-3">{rows.map((row) => <CallRow key={row.id + ":" + row.legId} row={row} callingEnabled={callingEnabled} />)}</ol> : !loading ? <p>No calls or prospect reviews match these filters.</p> : null}
+      {rows.length ? <ol className="grid gap-3">{rows.map((row) => <CallRow key={row.id + ":" + row.legId} row={row} callingEnabled={callingEnabled} />)}</ol> : !loading ? <div className="grid gap-2"><p>{planner && !planner.enabled ? "No scheduled calls match these filters." : "No calls or prospect reviews match these filters."}</p><a className="text-sm font-semibold text-primary underline" href="#my-work-calls">View all calls &amp; follow-ups</a></div> : null}
     </section>
   );
 }
