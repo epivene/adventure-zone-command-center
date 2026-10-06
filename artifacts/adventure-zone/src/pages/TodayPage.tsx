@@ -1,3 +1,5 @@
+import { MasterWorkQueue } from "@/components/today/master-work-queue";
+import { coerceMasterTodayQueue } from "@/features/today/master-work-types";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { apiGet, apiPost } from "@/lib/auth-token";
@@ -198,23 +200,8 @@ export default function TodayPage() {
         <p className="mt-1 text-sm font-medium text-slate-500">{formatToday(now)}</p>
       </header>
 
-      <section className="rounded-2xl border border-orange-200 bg-orange-50/70 p-5 shadow-sm" aria-labelledby="start-here-title">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-orange-700">Start here</p>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="text-2xl font-bold" id="start-here-title">{focus.headline}</h2>
-            <p className="mt-1 text-sm font-medium text-slate-600">{focus.detail}</p>
-          </div>
-          <FocusPrimaryAction href={focus.primaryHref} label={focus.primaryLabel} />
-        </div>
-        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm font-semibold">
-          {actionableFollowUps.length ? <a className="text-orange-700 hover:underline" href="#my-work-calls">Calls & follow-ups</a> : laterCount ? <a className="text-orange-700 hover:underline" href="#later-work">Calls & follow-ups</a> : null}
-          <Link className="text-orange-700 hover:underline" href="/profiles">Booking work</Link>
-          <Link className="text-orange-700 hover:underline" href="/research-sources">Find opportunities</Link>
-          <Link className="text-orange-700 hover:underline" href="/schedule">View schedule</Link>
-        </div>
-      </section>
-
+      <MasterWorkQueue queue={coerceMasterTodayQueue(dashboard.masterQueue)} onChanged={async()=>{setDashboard(await apiGet<any>("/today"));}}/>
+      <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Booking tools and decisions</summary><div className="mt-3 grid gap-4">
       {documentReviewCount > 0 ? (
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4" aria-label="Document attention">
           <div>
@@ -283,8 +270,12 @@ export default function TodayPage() {
         ) : null}
       </section>
 
+      </div></details>
+
+      <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Route outreach and scheduled calls</summary><div className="mt-3">
       <LegCallList callingEnabled={callingConfig.assistedCallingEnabled} followUps={followUps} followUpTotal={dashboard.followUpTotal} now={now} />
       <OutreachPlanner />
+      </div></details>
 
       {visibleRouteWarningCount > 0 ? (
         <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-sm" aria-label="Needs attention">

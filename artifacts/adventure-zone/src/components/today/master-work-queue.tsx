@@ -1,3 +1,5 @@
+import { groupMasterWork } from "@/features/today/group-master-work";
+import { GroupedWorkSection } from "./grouped-work-section";
 import { useEffect, useRef, useState } from "react";
 
 import { apiPost } from "@/lib/auth-token";
@@ -65,10 +67,15 @@ export function MasterWorkQueue({
     }
   }
 
+  const groups = groupMasterWork(queue);
   return (
     <div className="grid gap-4" aria-label="Booking master work queue">
-      <NeedsAttentionSection items={queue.needsAttention} onOpen={onOpen} />
-      <ReadyToSendSection />
+      <GroupedWorkSection title="Replies" items={groups.replies} onOpen={onOpen}/>
+      <GroupedWorkSection title="Calls & Follow-ups" items={groups.calls} onOpen={onOpen}/>
+      <GroupedWorkSection title="Booking Work" items={groups.booking} onOpen={onOpen}/>
+      <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Waiting ({groups.waiting.length})</summary><div className="mt-3"><GroupedWorkSection title="Waiting for a reply" items={groups.waiting} onOpen={onOpen}/></div></details>
+      <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Later ({groups.later.length})</summary><div className="mt-3"><GroupedWorkSection title="Scheduled work" items={groups.later} onOpen={onOpen}/></div></details>
+      <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Manage work and reviewed drafts</summary><div className="mt-3 grid gap-3"><ReadyToSendSection/>
       <ActiveWorkQueue
         items={queue.active}
         busy={busy}
@@ -79,7 +86,8 @@ export function MasterWorkQueue({
         onReorder={(opportunityIds) => mutate(() => apiPost("/today/work/reorder", { businessDate: businessDate(), opportunityIds }))}
         onReset={() => mutate(() => apiPost("/today/work/reset-order", { businessDate: businessDate() }))}
       />
-      <CompletedTodaySection items={queue.completedToday} />
+      </div></details>
+      <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Completed today ({groups.completed.length})</summary><div className="mt-3"><CompletedTodaySection items={groups.completed}/></div></details>
     </div>
   );
 }
