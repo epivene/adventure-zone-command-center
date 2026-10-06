@@ -1,20 +1,20 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { createIncomingCallAlerts } from './incoming-call-alerts.ts';
+import { createIncomingCallAlerts } from './incoming-call-alerts';
 
-function fixture(permission = 'granted', soundFails = false) {
-  const events = [];
-  const notices = [];
-  let click;
+function fixture(permission: NotificationPermission = 'granted', soundFails = false) {
+  const events: string[] = [];
+  const notices: string[] = [];
+  let click: (() => void) | undefined;
   const alerts = createIncomingCallAlerts({
     prepareSound: async () => { if (soundFails) throw new Error('blocked'); },
     permission: () => permission,
     requestPermission: async () => permission,
     ring: () => { events.push('ring'); return () => events.push('silenced'); },
-    notify: (id, onClick) => { notices.push(id); click = onClick; return () => events.push('closed'); },
+    notify: (id: string, onClick: () => void) => { notices.push(id); click = onClick; return () => events.push('closed'); },
     reveal: () => events.push('revealed'),
   });
-  return { alerts, events, notices, click: () => click() };
+  return { alerts, events, notices, click: () => click?.() };
 }
 test('an incoming call rings and opens a desktop alert; repeat renders do not duplicate it', async () => {
   const f = fixture(); await f.alerts.prepare();
@@ -58,9 +58,9 @@ test('notification failure does not stop the audible alert', async () => {
 });
 
 test('sound becomes ready while the desktop permission prompt is still pending', async () => {
-  const events = [];
-  let grant;
-  const permission = new Promise(resolve => { grant = resolve; });
+  const events: string[] = [];
+  let grant!: (permission: NotificationPermission) => void;
+  const permission = new Promise<NotificationPermission>(resolve => { grant = resolve; });
   const alerts = createIncomingCallAlerts({
     prepareSound: async () => {}, permission: () => 'default',
     requestPermission: () => permission,

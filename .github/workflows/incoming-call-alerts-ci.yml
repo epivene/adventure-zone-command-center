@@ -23,6 +23,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Alert lifecycle regression tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calls/incoming-call-alerts.test.mjs
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calls/incoming-call-alerts.test.ts
       - name: Full frontend suite
         run: pnpm --filter @workspace/adventure-zone test
