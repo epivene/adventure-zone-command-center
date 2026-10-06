@@ -411,3 +411,29 @@ it("participates in an outer transaction without committing it and binds the acc
  expect((await f.db.query("SELECT * FROM google_workspace_validation_mappings")).rows).toHaveLength(0);
  } finally {await f.db.close();}
 });
+
+describe("inbox-preserving mailbox links", () => {
+  it("persists link-only behavior and reuses the same mutation", async () => {
+    const {db, repository} = await fixture();
+    try {
+      const input = {...assignment(organizationA, "2026-10-06T12:00:00Z"), threadId:"thread-1", subject:"Subject", from:"sender@example.com", to:"theadventurezone12@gmail.com", internalDateMs:null, hasAttachments:false, preserveInbox:true};
+      const first = await repository.assignMatched(input);
+      const again = await repository.assignMatched(input);
+      expect(first.mutation.operation).toBe("link_thread");
+      expect(again.mutation.id).toBe(first.mutation.id);
+      expect((await db.query("SELECT * FROM google_workspace_gmail_mutations")).rows).toHaveLength(1);
+    } finally { await db.close(); }
+  });
+  it("supersedes archive behavior when the same profile is explicitly linked", async () => {
+    const {db, repository} = await fixture();
+    try {
+      const archived = await repository.resolveReview(assignment(organizationA, "2026-10-06T12:00:00Z"));
+      const linked = await repository.assignMatched({...assignment(organizationA, "2026-10-06T12:01:00Z"), threadId:"thread-1", subject:"Subject", from:"sender@example.com", to:"theadventurezone12@gmail.com", internalDateMs:null, hasAttachments:false, preserveInbox:true});
+      expect(linked.mutation.operation).toBe("link_thread");
+      expect(linked.mutation.id).not.toBe(archived.mutation.id);
+      expect(linked.mutation.intentGeneration).toBe(2);
+      const old = await db.query<{state:string;last_error_code:string}>("SELECT state,last_error_code FROM google_workspace_gmail_mutations WHERE id=$1",[archived.mutation.id]);
+      expect(old.rows[0]).toMatchObject({state:"permanent_error",last_error_code:"GOOGLE_WORKSPACE_ASSIGNMENT_SUPERSEDED"});
+    } finally { await db.close(); }
+  });
+});

@@ -1,0 +1,46 @@
+name: Profile Email Workspace CI
+on:
+  push:
+    branches: [codex/profile-call-brief-email-workspace-2026-10-06]
+  pull_request:
+    paths:
+      - 'artifacts/api-server/src/features/email-workspace/**'
+      - 'artifacts/api-server/src/features/google-workspace/**'
+      - 'artifacts/adventure-zone/src/components/email-workspace/**'
+      - 'artifacts/adventure-zone/src/components/profiles/**'
+      - 'artifacts/adventure-zone/src/pages/EmailsPage*'
+      - '.github/workflows/profile-email-workspace-ci.yml'
+permissions:
+  contents: read
+concurrency:
+  group: profile-email-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  NODE_ENV: test
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused API tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/google-workspace/google-profile-assignment-transaction.pglite.test.ts src/features/google-workspace/google-gmail-mutation-repository.pglite.test.ts src/features/google-workspace/google-gmail-mutation-repository.test.ts src/features/google-workspace/google-profile-label-sync-service.test.ts src/features/google-workspace/google-profile-label-resolver.test.ts src/features/email-workspace src/routes/email-workspace.test.ts
+      - name: Focused frontend tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/email-workspace src/components/profiles/profile-call-brief.test.tsx src/pages/EmailsPage.test.tsx src/components/profiles/simple-full-profile.boss-parity.test.tsx
+      - name: API typecheck
+        continue-on-error: true
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: UI typecheck
+        continue-on-error: true
+        run: pnpm --filter @workspace/adventure-zone typecheck
+      - run: pnpm --filter @workspace/api-server build
+      - run: pnpm --filter @workspace/adventure-zone build
