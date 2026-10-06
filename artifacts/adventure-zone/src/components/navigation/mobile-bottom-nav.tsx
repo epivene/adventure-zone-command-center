@@ -1,5 +1,6 @@
+import { bookingNavigation } from "@/features/navigation/booking-navigation";
 import { Link, useLocation } from "wouter";
-import { Bot, ArrowLeft, CalendarDays, ContactRound, House, LayoutGrid, MapPinned, Megaphone, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
+import { Bot, ArrowLeft, CalendarDays, ContactRound, House, Inbox, LayoutGrid, MapPinned, Megaphone, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import { AppMenu } from "./app-menu";
 import { readBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
@@ -8,12 +9,8 @@ type MobileItem = { href: string; label: string; icon: LucideIcon };
 
 function itemsForWorkspace(workspace: AdminWorkspace): MobileItem[] {
   if (workspace === "booking") {
-    return [
-      { href: "/assistant/workspace", label: "Assistant", icon: Bot },
-      { href: "/today", label: "Today", icon: House },
-      { href: "/profiles", label: "Profiles", icon: ContactRound },
-      { href: "/schedule", label: "Schedule", icon: CalendarDays },
-    ];
+    const icons = { home: House, profiles: ContactRound, emails: Inbox, schedule: CalendarDays };
+    return bookingNavigation(true).map(item => ({ ...item, icon: icons[item.icon] }));
   }
   if (workspace === "operations") {
     return [

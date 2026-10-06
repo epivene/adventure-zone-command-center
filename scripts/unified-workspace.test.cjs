@@ -45,3 +45,25 @@ test('inquiry reads reject malformed cursors, IDs, statuses and limits',async()=
  await assert.rejects(s.detail(principal,{inquiryId:'not-id'}));assert.equal(h.calls(),0);
 });
 module.exports={load};
+
+const frontend='artifacts/adventure-zone/src/';
+const {bookingNavigation}=load(frontend+'features/navigation/booking-navigation.ts',['bookingNavigation']);
+const {readEmailWorkspaceState,legacyReviewUrl}=load(frontend+'features/emails/email-workspace-state.ts',['readEmailWorkspaceState','legacyReviewUrl']);
+test('primary booking navigation leads to Emails rather than a separate review destination',()=>{
+ assert.equal(typeof bookingNavigation,'function');
+ assert.deepEqual(bookingNavigation(true).map(x=>[x.href,x.label]),[['/today','Today'],['/profiles','Profiles'],['/emails','Emails'],['/schedule','Schedule']]);
+ assert.equal(bookingNavigation(false)[3].label,'Schedule & Routes');
+});
+test('legacy review links retain exact identifiers and return context',()=>{
+ assert.equal(typeof legacyReviewUrl,'function');
+ const url=legacyReviewUrl('?attentionMessage=message-a&profileId=profile-a&returnTo=%2Ftoday');
+ assert.equal(url,'/emails?attentionMessage=message-a&profileId=profile-a&returnTo=%2Ftoday&view=review');
+ assert.equal(readEmailWorkspaceState(url.split('?')[1]).attentionMessage,'message-a');
+});
+test('email workspace URLs select all views without stale browser storage',()=>{
+ assert.equal(typeof readEmailWorkspaceState,'function');
+ for(const view of ['inbox','sent','drafts','review','needs_reply','waiting'])assert.equal(readEmailWorkspaceState('?view='+view).view,view);
+ assert.equal(readEmailWorkspaceState('?folder=sent&q=Fair&threadId=t').view,'sent');
+ assert.equal(readEmailWorkspaceState('?view=bogus').view,'inbox');
+ assert.equal(readEmailWorkspaceState('?folder=search&q=Fair').query,'Fair');
+});
