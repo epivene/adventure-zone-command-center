@@ -69,8 +69,8 @@ export default function SchedulePage() {
       </header>
       <nav aria-label="Schedule tools" className="flex flex-wrap gap-2">
         <Link className="button-secondary" href="/operations/legs">Leg management</Link>
-        <Link className="button-secondary" href={`/resources?season=${encodeURIComponent(season)}`}>Equipment & capacity</Link>
-        <Link className="button-secondary" href="/trips">Trips</Link>
+        <Link className="button-secondary" href="/settings/packages-resources">Equipment & capacity</Link>
+        <button className="button-secondary" type="button" onClick={() => changeView("map")}>Trips & routes</button>
       </nav>
       <p className="text-xs text-muted-foreground">Missing dates and unverified assignments are unknown capacity. Check the saved leg and resource plans before promising availability.</p>
       {params.get('bookingId') ? <BookingLegOperationsCard bookingId={params.get('bookingId')!} role="owner" client={ownerOperationsClient}/> : null}

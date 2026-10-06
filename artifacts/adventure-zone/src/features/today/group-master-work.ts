@@ -6,7 +6,7 @@ export function groupMasterWork(queue: MasterTodayQueue, now = new Date()) {
   for(const item of [...queue.needsAttention,...queue.active,...queue.completedToday]) {
     const family = ["reply","draft","review"].includes(item.kind) ? "mail-action" : item.kind;
     const source = family === "mail-action" && item.threadId ? [item.gmailConnectionId || "",item.organizationId || "",item.threadId].join(":") : item.sourceType+":"+item.sourceId;
-    const key = source+":"+family;
+    const key = source+":"+item.sourceType+":"+item.sourceId+":"+family;
     const old=unique.get(key);
     if(!old || (rank[item.kind] || 0) > (rank[old.kind] || 0)) unique.set(key,item);
   }

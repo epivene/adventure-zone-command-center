@@ -121,3 +121,11 @@ Confirm:
 If the hosted script or Wix integration fails, restore the previous Wix custom-element source and tag settings, then republish only with explicit approval. Do not delete the website inquiries table or its saved records; rollback of the page source must leave already received inquiries intact for review.
 
 Keep Replit running during rollback and throughout verification. Stop the paid Replit deployment only after Render, the published Wix page, the production smoke inquiry, both authorized inbox views, notification delivery, and smoke-inquiry archival are confirmed—and only after a separate explicit approval.
+
+## COM read access
+After deploying the connector changes, refresh its tools. Under the existing crm:read grant:
+- list_website_inquiries lists saved inquiries (25 by default, maximum 100) with status, profile/link information and nextCursor.
+- read_website_inquiry opens the original customer message and audit history by inquiryId.
+Follow every list cursor. Reading does not mark an inquiry reviewed, convert it, archive it, create a draft, or send anything.
+The browser continues to enforce owner/office session permissions; a COM token is not a browser-session substitute.
+Verify with one real list/detail read after deployment, checking the record ID and original message without changing its status.

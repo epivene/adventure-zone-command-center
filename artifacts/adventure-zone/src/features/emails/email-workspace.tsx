@@ -2,7 +2,7 @@ import { EmailList } from "./email-list";
 import { EmailReader } from "./email-reader";
 import { EmailReviewPane } from "./email-review-pane";
 import { EmailAttentionControls } from "@/components/google-workspace/email-attention-controls";
-import { readEmailWorkspaceState, readMailboxContext, isCurrentMailboxResponse, type EmailWorkspaceView } from "./email-workspace-state";
+import { readEmailWorkspaceState, readMailboxContext, writeMailboxContext, mailboxRestoreTarget, attentionContextKey, isCurrentMailboxResponse, type EmailWorkspaceView } from "./email-workspace-state";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { apiGet, apiPost } from "@/lib/auth-token";
@@ -39,6 +39,7 @@ export function EmailWorkspace() {
   const [templateId, setTemplateId] = useState("");
   const [templateValues, setTemplateValues] = useState<Record<string, string>>({});
   const [confirmChange, setConfirmChange] = useState(false);
+  const [showList, setShowList] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const listScroll = useRef(0);
   const listVersion = useRef(0);
@@ -79,7 +80,7 @@ export function EmailWorkspace() {
   useEffect(() => {
     setSelected(null); setThread(null); setDraft(null); setConfirmSend(false); setMessages([]);
     detailVersion.current++;
-    if (view !== "review") void loadPage();
+    void loadPage();
     return () => { listVersion.current++; };
   }, [folder, query, view]);
   useEffect(() => {
@@ -109,29 +110,33 @@ export function EmailWorkspace() {
     params.set("view",view); params.set("folder",folder);
     if(query) params.set("q",query); else params.delete("q");
     if(selected?.threadId) params.set("threadId",selected.threadId); else if(restoredThread.current) params.delete("threadId");
-    if(selected?.draftId) params.set("draftId",selected.draftId); else if(restoredThread.current) params.delete("draftId");
+    if(draft?.draftId || selected?.draftId) params.set("draftId",draft?.draftId || selected!.draftId!); else if(restoredThread.current) params.delete("draftId");
     if(accountId) params.set("accountId",accountId);
     window.history.replaceState(window.history.state,"",window.location.pathname+"?"+params);
-    if(accountId && hydratedAccount.current === accountId) try { sessionStorage.setItem("az-mailbox:"+accountId,JSON.stringify({accountId,threadId:selected?.threadId,draftId:selected?.draftId,scrollY:listScroll.current,showProfile})); } catch {}
-  },[view,folder,query,selected?.threadId,selected?.draftId,accountId,showProfile]);
+    if(accountId && hydratedAccount.current === accountId) try { writeMailboxContext(sessionStorage,{accountId,threadId:thread?.id || selected?.threadId,draftId:draft?.draftId || selected?.draftId || undefined,scrollY:listScroll.current,showProfile,showList,profileId:profileId || undefined}); } catch {}
+  },[view,folder,query,selected?.threadId,selected?.draftId,draft?.draftId,accountId,showProfile,showList,profileId]);
   useEffect(() => {
-    if(restoredThread.current || !accountId || !messages.length) return;
-    const fromUrl=initialView.current;
+    if(restoredThread.current || !accountId || loading || view==="review") return;
     let saved: ReturnType<typeof readMailboxContext> = null;
     try { saved=readMailboxContext(sessionStorage,accountId); } catch {}
     hydratedAccount.current=accountId;
-    if(saved?.showProfile) setShowProfile(true);
-    const context = fromUrl.threadId || fromUrl.draftId ? (fromUrl.accountId && fromUrl.accountId !== accountId ? null : fromUrl) : saved;
-    if(!context) return;
+    restoredThread.current=true;
+    const fromUrl=initialView.current;
+    const context = fromUrl.threadId || fromUrl.draftId ? fromUrl : saved;
     if(saved?.scrollY && Number.isFinite(saved.scrollY)) listScroll.current=saved.scrollY;
-    const row=messages.find(item=>context.draftId ? item.draftId===context.draftId : item.threadId===context.threadId);
-    if(row) { restoredThread.current=true; void openMessage(row,true); }
-  },[accountId,messages]);
+    if(saved?.showProfile) setShowProfile(true);
+    const row=context ? mailboxRestoreTarget(context,messages,accountId) : null;
+    if(row) void openMessage(row,true,saved?.showList ?? false);
+    else if(saved?.scrollY) requestAnimationFrame(()=>window.scrollTo(0,saved!.scrollY!));
+  },[accountId,messages,loading,view]);
 
-  async function openMessage(row: MailboxMessage, restoring = false) {
+  async function openMessage(row: MailboxMessage, restoring = false, restoreList = false) {
     if (!accountId || actionBusy.current) return;
     const version = ++detailVersion.current;
     restoredThread.current = true;
+    hydratedAccount.current=accountId;
+    setShowList(restoring ? restoreList : false);
+    if (restoring && restoreList) requestAnimationFrame(()=>window.scrollTo(0,listScroll.current));
     if (!restoring) listScroll.current = window.scrollY;
     setSelected(row); setThread(null); setDraft(null); setComposer(null); setConfirmSend(false); setError(""); setNotice("");
     setProfileId(row.profiles.length === 1 ? row.profiles[0].id : initialProfile);
@@ -142,7 +147,12 @@ export function EmailWorkspace() {
         if (isCurrentMailboxResponse(version,detailVersion.current,accountId,currentAccount.current || "")) setDraft(result);
       } else {
         const result = await mailboxRequest<MailboxThread>(`/threads/${encodeURIComponent(row.threadId)}?connectionId=${accountId}`);
-        if (isCurrentMailboxResponse(version,detailVersion.current,accountId,currentAccount.current || "")) setThread(result);
+        if (isCurrentMailboxResponse(version,detailVersion.current,accountId,currentAccount.current || "")) {
+          setThread(result);
+          const latest=result.messages.at(-1);
+          setSelected(current=>current && current.threadId===row.threadId?{...current,id:latest?.id || current.id,profiles:result.profiles,headers:{...current.headers,subject:result.subject,from:latest?.from || current.headers.from,to:latest?.to || current.headers.to}}:current);
+          if(result.profiles.length===1) setProfileId(result.profiles[0].id);
+        }
       }
     } catch (caught) { if (version === detailVersion.current) setError(mailboxError(caught)); }
   }
@@ -183,7 +193,7 @@ export function EmailWorkspace() {
       }
       const review = await mailboxRequest<MailboxDraft>(`/drafts/${pendingDraft.current}?connectionId=${accountId}`);
       pendingDraft.current = null;
-      setDraft(review); setComposer(null); setThread(null); setConfirmSend(false); setNotice("Draft saved. Review before sending.");
+      setDraft(review); setShowList(false); setComposer(null); setThread(null); setConfirmSend(false); setNotice("Draft saved. Review before sending.");
     });
   }
   async function send() {
@@ -201,7 +211,7 @@ export function EmailWorkspace() {
   return <main className="mx-auto min-w-0 max-w-[1600px]">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="text-2xl font-bold">Emails</h1><p className="text-sm text-muted-foreground">{page?.email || "Your connected Google account"}</p></div>
-      <div className="flex flex-wrap gap-2"><a className="button-secondary" href={`https://mail.google.com/mail/?authuser=${encodeURIComponent(page?.email || "")}`} target="_blank" rel="noopener noreferrer">Open Gmail</a><Link className="button-secondary" href="/settings/google-workspace">Email connection</Link><button className="button-primary" disabled={!accountId || busy} onClick={() => { detailVersion.current++; setThread(null); setDraft(null); setSelected(null); pendingDraft.current = null; setComposer({ to: "", subject: "", body: "" }); setConfirmSend(false); }} type="button">Compose</button></div>
+      <div className="flex flex-wrap gap-2"><a className="button-secondary" href={`https://mail.google.com/mail/?authuser=${encodeURIComponent(page?.email || "")}`} target="_blank" rel="noopener noreferrer">Open Gmail</a><Link className="button-secondary" href="/settings/google-workspace">Email connection</Link><button className="button-primary" disabled={!accountId || busy} onClick={() => { detailVersion.current++; setShowList(false); if(view==="review") {setView("inbox");setFolder("inbox");} setThread(null); setDraft(null); setSelected(null); pendingDraft.current = null; setComposer({ to: "", subject: "", body: "" }); setConfirmSend(false); }} type="button">Compose</button></div>
     </div>
     <nav aria-label="Email views" className="mt-4 flex gap-1 overflow-x-auto border-b pb-2">
       {([{id:"inbox",label:"Inbox"},{id:"sent",label:"Sent"},{id:"drafts",label:"Drafts"},{id:"review",label:"Needs review"},{id:"needs_reply",label:"Needs your reply"},{id:"waiting",label:"Waiting"}] as const).map(item=><button key={item.id} type="button" aria-current={view===item.id?"page":undefined} disabled={busy} onClick={()=>changeView(item.id)} className={`min-h-11 shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${view===item.id?"bg-secondary text-secondary-foreground":"text-muted-foreground hover:bg-muted"}`}>{item.label}</button>)}
@@ -213,16 +223,16 @@ export function EmailWorkspace() {
     </form> : null}
     {error ? <p role="alert" className="my-3 rounded border border-red-300 p-3 text-sm">{error}</p> : null}
     {notice ? <p role="status" className="my-3 rounded border p-3 text-sm">{notice}</p> : null}
-    {view === "review" ? <EmailReviewPane selectedMessageId={initialView.current.attentionMessage || initialView.current.reviewMessageId} profileId={initialProfile || undefined}/> : <div className={`mt-4 grid min-w-0 items-start gap-4 md:grid-cols-[minmax(220px,0.75fr)_minmax(0,2fr)] ${showProfile ? "xl:grid-cols-[minmax(240px,0.8fr)_minmax(0,2fr)_minmax(260px,0.9fr)]" : ""}`}>
-      <section aria-label="Email list" className={`min-w-0 rounded-xl border bg-card ${showProfile ? "hidden md:block" : selected || composer || draft ? "hidden md:block" : ""}`}>
+    {view === "review" ? <EmailReviewPane accountId={accountId} selectedMessageId={readEmailWorkspaceState(search).reviewMessageId || readEmailWorkspaceState(search).attentionMessage} attentionMessageId={readEmailWorkspaceState(search).attentionMessage} profileId={initialProfile || undefined}/> : <div className={`mt-4 grid min-w-0 items-start gap-4 md:grid-cols-[minmax(220px,0.75fr)_minmax(0,2fr)] ${showProfile ? "xl:grid-cols-[minmax(240px,0.8fr)_minmax(0,2fr)_minmax(260px,0.9fr)]" : ""}`}>
+      <section aria-label="Email list" className={`min-w-0 rounded-xl border bg-card ${showProfile ? "hidden md:block" : !showList && (selected || composer || draft) ? "hidden md:block" : ""}`}>
         {loading ? <p role="status" className="p-3 text-sm">Loading email…</p> : null}
         {!loading && !messages.length ? <p className="p-3 text-sm text-muted-foreground">{error ? "Unable to load email." : "No email in this view."}</p> : null}
         <EmailList items={messages} selectedId={selected?.id} busy={busy} onSelect={row => void openMessage(row)}/>
         {page?.unavailableCount ? <p className="p-3 text-xs">Some deleted messages were skipped.</p> : null}
         {page?.nextPageToken ? <button className="button-secondary m-3" disabled={loading || busy} onClick={() => void loadPage(page.nextPageToken!)} type="button">Load more</button> : null}
       </section>
-      <div className={showProfile ? "hidden md:block" : ""}><EmailReader hiddenOnPhone={!selected && !composer && !draft}>
-        <div className="mb-3 flex flex-wrap gap-2"><button className="button-secondary" disabled={busy} type="button" onClick={() => { detailVersion.current++; restoredThread.current=true; setSelected(null); setThread(null); setDraft(null); setComposer(null); setShowProfile(false); requestAnimationFrame(() => window.scrollTo(0, listScroll.current)); }}>Back to emails</button><button className="button-secondary" type="button" onClick={() => setShowProfile(value => !value)}>Profile context</button></div>
+      <div className={showProfile ? "hidden md:block" : ""}><EmailReader hiddenOnPhone={showList || (!selected && !composer && !draft)}>
+        <div className="mb-3 flex flex-wrap gap-2"><button className="button-secondary" disabled={busy} type="button" onClick={() => { restoredThread.current=true; setShowList(true); setComposer(null); setShowProfile(false); requestAnimationFrame(() => window.scrollTo(0, listScroll.current)); }}>Back to emails</button><button className="button-secondary" type="button" onClick={() => setShowProfile(value => !value)}>Profile context</button></div>
         {composer ? <form onSubmit={event => { event.preventDefault(); void saveDraft(); }} className="grid gap-3">
           <h2 className="text-lg font-bold">{composer.threadId ? "Reply" : "New email"}</h2>
           {templates.length ? <details className="rounded border p-3"><summary className="cursor-pointer text-sm font-semibold">Use approved email template</summary>
@@ -252,7 +262,7 @@ export function EmailWorkspace() {
               <button className="button-secondary" disabled={busy} onClick={() => void action(async () => { await mailboxRequest(`/threads/${detail.id}/read`, { connectionId: accountId, read: !!selected?.labelIds.includes("UNREAD") }); setSelected(current => current ? { ...current, labelIds: current.labelIds.includes("UNREAD") ? current.labelIds.filter(item => item !== "UNREAD") : [...current.labelIds, "UNREAD"] } : current); await loadPage(); })} type="button">{selected?.labelIds.includes("UNREAD") ? "Mark read" : "Mark unread"}</button>
               <button className="button-secondary" disabled={busy} onClick={() => void action(async () => { await mailboxRequest(`/threads/${detail.id}/archive`, { connectionId: accountId }); setNotice("Archived in Gmail."); await loadPage(); })} type="button">Archive</button>
             </div>}
-            {!draft && selected && profileId ? <details className="my-3 rounded border p-3"><summary className="cursor-pointer text-sm font-semibold">Reply and follow-up status</summary><EmailAttentionControls messageId={selected.id} profileId={profileId}/><p className="mt-2 text-xs text-muted-foreground">Saving an attention decision files and archives this conversation.</p></details> : null}
+            {!draft && selected && profileId ? <details className="my-3 rounded border p-3"><summary className="cursor-pointer text-sm font-semibold">Reply and follow-up status</summary><EmailAttentionControls key={attentionContextKey(accountId || "",selected.id,profileId)} messageId={selected.id} profileId={profileId} onSaved={() => void loadPage()}/><p className="mt-2 text-xs text-muted-foreground">Saving an attention decision files and archives this conversation.</p></details> : null}
             <div className="grid gap-4">{detail.messages.map(message => <article key={message.id} className="min-w-0 rounded border p-3">
               <p className="break-all text-xs font-semibold">From {message.from} · To {message.to}</p><p className="text-xs text-muted-foreground">{message.date}</p>
               <MessageBody body={message.bodyText} />

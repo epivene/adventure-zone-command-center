@@ -111,3 +111,45 @@ test('profile history merges original IDs without losing distinct same-date acti
  const history=mergeProfileHistory([{id:'n',kind:'call',body:'Called',occurredAt:new Date('2026-10-06')}],[{id:'n',kind:'call',body:'Duplicate',occurredAt:new Date('2026-10-06')},{id:'mail:t',kind:'email',body:'Customer reply',occurredAt:new Date('2026-10-06'),href:'/emails?threadId=t'}]);
  assert.equal(history.length,2);assert.equal(history.find(x=>x.id==='n').body,'Called');assert.equal(history.find(x=>x.kind==='email').href,'/emails?threadId=t');
 });
+
+const zodRequire=require('node:module').createRequire(path.join(root,'artifacts/api-server/package.json'));
+let z;try { z=(process.env.AZ_ZOD_PATH?require(process.env.AZ_ZOD_PATH):zodRequire('zod')).z; } catch {}
+if(z) test('COM inquiry catalog exposes strict read-only schemas and routes calls to the authorized reader',async()=>{
+ const schema=z.object({});
+ const {connectionTools}=load(base+'chatgpt-connection/tool-registry.ts',['connectionTools'],{z,mergeInputSchema:schema,operationalInput:schema,scheduleSections:['bookings'],routeSections:['stops'],resourceSections:['resources'],eventDatesSchema:schema,sourceSchema:schema,draftContentSchema:schema,closeFollowupSchema:z.object({action:z.enum(['complete','dismiss'])}),bookingWorkTools:()=>[],emailAttentionTools:()=>[],todayReadInput:schema,emailReviewToolReminder:'',operationalReviewToolReminder:''});
+ const h=fixture(),inquiries=new WebsiteInquiryReads(h.db,h.review,'https://app.example');
+ const tools=connectionTools({inquiries},principal),list=tools.find(x=>x.name==='list_website_inquiries'),detail=tools.find(x=>x.name==='read_website_inquiry');
+ assert.equal(list.scope,'crm:read');assert.equal(list.readOnly,true);assert.equal(detail.readOnly,true);
+ assert.equal(list.schema.safeParse({limit:101}).success,false);assert.equal(list.schema.safeParse({archive:true}).success,false);assert.equal(detail.schema.safeParse({inquiryId:'bad'}).success,false);
+ assert.equal((await detail.call({inquiryId})).inquiry.message,'Original full customer question');
+});
+
+const {mailboxRestoreTarget,writeMailboxContext,writeReviewContext,readReviewContext,reviewSelectionUrl,attentionContextKey}=load(frontend+'features/emails/email-workspace-state.ts',['mailboxRestoreTarget','writeMailboxContext','writeReviewContext','readReviewContext','reviewSelectionUrl','attentionContextKey']);
+test('thread and draft deep links restore identities outside the current mailbox page',()=>{
+ assert.equal(typeof mailboxRestoreTarget,'function');
+ const target=mailboxRestoreTarget({accountId:'a',threadId:'archived',profileId:'p'},[],'a');
+ assert.equal(target.threadId,'archived');assert.equal(target.profiles[0].id,'p');
+ assert.equal(mailboxRestoreTarget({accountId:'b',threadId:'old'},[],'a'),null);
+ assert.equal(mailboxRestoreTarget({draftId:'draft-old'},[],'a').draftId,'draft-old');
+});
+test('Back preserves selected identity and list scroll independently of pane visibility',()=>{
+ assert.equal(typeof writeMailboxContext,'function');
+ const values=new Map(),storage={setItem:(k,v)=>values.set(k,v),getItem:k=>values.get(k)||null};
+ writeMailboxContext(storage,{accountId:'a',threadId:'older',scrollY:420,showList:true});
+ assert.deepEqual(readMailboxContext(storage,'a'),{accountId:'a',threadId:'older',scrollY:420,showList:true});
+});
+test('review selection and return pane persist per account without stale filing context',()=>{
+ assert.equal(typeof writeReviewContext,'function');
+ const values=new Map(),storage={setItem:(k,v)=>values.set(k,v),getItem:k=>values.get(k)||null};
+ writeReviewContext(storage,{accountId:'a',messageId:'review-2',scrollY:300,pane:'list'});
+ assert.equal(readReviewContext(storage,'a').messageId,'review-2');assert.equal(readReviewContext(storage,'b'),null);
+ const url=reviewSelectionUrl('?view=review&attentionMessage=old&profileId=p','new');
+ assert.equal(new URLSearchParams(url.split('?')[1]).get('reviewMessageId'),'new');
+ assert.equal(new URLSearchParams(url.split('?')[1]).has('attentionMessage'),false);
+ assert.notEqual(attentionContextKey('a','m','profile-a'),attentionContextKey('a','m','profile-b'));
+});
+test('Today retains separate review actions and drafts in the same thread',()=>{
+ const a=work('v1','review',{threadId:'t',messageId:'m1',sourceId:'source-1'});
+ const b=work('v2','review',{threadId:'t',messageId:'m2',sourceId:'source-2'});
+ assert.equal(groupMasterWork({needsAttention:[a,b],active:[],completedToday:[]}).replies.length,2);
+});
