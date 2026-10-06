@@ -1,6 +1,6 @@
 # Unified booking workspace design
 Date: 2026-10-06
-Status: Draft for user review
+Status: Redesign approved in chat on 2026-10-06; implementation plan awaiting review
 Baseline: merged PR #1006, main d376f2152700bab3c59d118ae7e4da394fbd1fea
 
 ## Purpose and agreed direction
