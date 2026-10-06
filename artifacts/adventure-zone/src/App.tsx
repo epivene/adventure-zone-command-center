@@ -100,6 +100,7 @@ const OwnerInvoicesContractsPage = lazy(() => import("@/pages/OwnerInvoicesContr
 const OfficeInvoicesContractsPage = lazy(() => import("@/pages/OfficeInvoicesContractsPage"));
 const BossInvoicesContractsPage = lazy(() => import("@/pages/BossInvoicesContractsPage"));
 const BusinessDocumentImportPage = lazy(() => import("@/pages/BusinessDocumentImportPage"));
+const EmailsPage = lazy(() => import("@/pages/EmailsPage"));
 const EmailReviewPage = lazy(() => import("@/pages/EmailReviewPage"));
 const ActMigrationPage = lazy(() => import("@/pages/ActMigrationPage"));
 const ActRecoveryPage = lazy(() => import("@/pages/ActRecoveryPage"));
@@ -379,6 +380,7 @@ function AdminProtectedApp() {
           <Route path="/design-studio" component={DesignStudioPage} />
           <Route path="/today" component={TodayPage} />
           <Route path="/website-inquiries" component={WebsiteInquiriesPage} />
+          <Route path="/emails" component={EmailsPage} />
           <Route path="/email-review" component={EmailReviewPage} />
           <Route path="/dave-requests" component={DaveRequestsPage} />
           <Route path="/conventions" component={ConventionOutreachPage} />

@@ -279,6 +279,7 @@ export type GoogleWorkspaceGmailMutationState =
 
 export const googleWorkspaceGmailMutationOperationValues = [
   "assign_thread",
+  "link_thread",
   "label_inbound_message",
 ] as const;
 export type GoogleWorkspaceGmailMutationOperation =
@@ -382,7 +383,7 @@ export const googleWorkspaceGmailMutations = pgTable(
     ),
     check(
       "google_workspace_gmail_mutations_operation_valid",
-      sql`${table.operation} in ('assign_thread', 'label_inbound_message')`,
+      sql`${table.operation} in ('assign_thread', 'link_thread', 'label_inbound_message')`,
     ),
     check(
       "google_workspace_gmail_mutations_state_valid",
@@ -455,3 +456,17 @@ export const googleWorkspaceGmailThreadIntents = pgTable(
     ),
   ],
 );
+
+export const googleWorkspaceMailboxSends = pgTable("google_workspace_mailbox_sends", {
+  connectionId: uuid("connection_id").notNull().references(() => googleWorkspaceConnections.id, { onDelete: "cascade" }),
+  draftId: text("draft_id").notNull(),
+  revision: text("revision").notNull(),
+  state: text("state").$type<"sending" | "sent" | "uncertain">().notNull(),
+  messageId: text("message_id"),
+  threadId: text("thread_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, table => [
+  unique("google_workspace_mailbox_sends_account_draft_unique").on(table.connectionId, table.draftId),
+  check("google_workspace_mailbox_sends_state_valid", sql`${table.state} in ('sending','sent','uncertain')`),
+]);

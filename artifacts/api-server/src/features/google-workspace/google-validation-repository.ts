@@ -105,7 +105,7 @@ export class PostgresGoogleValidationRepository {
     const result = await this.pool.query(
       `SELECT id
          FROM google_workspace_connections
-        WHERE status IN ('connected', 'reauthorization_required')
+        WHERE status IN ('connected', 'reauthorization_required') AND (role = 'workspace' OR role IS NULL)
         ORDER BY updated_at DESC
         LIMIT 1`,
     );
@@ -183,13 +183,33 @@ export class PostgresGoogleValidationRepository {
            evidence_codes,
            created_at,
            updated_at
-         ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, now(), now())
+         )
+         SELECT $1, $2, $3,
+           COALESCE((
+             SELECT intent.organization_id FROM google_workspace_gmail_thread_intents intent
+             JOIN google_workspace_gmail_mutations mutation ON mutation.id=intent.current_mutation_id
+             WHERE intent.connection_id=$1 AND intent.thread_id=$3 AND intent.intent_kind='assign'
+               AND mutation.operation='link_thread'
+           ), $4::uuid),
+           CASE WHEN EXISTS (
+             SELECT 1 FROM google_workspace_gmail_thread_intents intent
+             JOIN google_workspace_gmail_mutations mutation ON mutation.id=intent.current_mutation_id
+             WHERE intent.connection_id=$1 AND intent.thread_id=$3 AND intent.intent_kind='assign'
+               AND mutation.operation='link_thread'
+           ) THEN NULL ELSE $5::uuid END,
+           $6::jsonb, now(), now()
+         WHERE NOT EXISTS (
+           SELECT 1 FROM google_workspace_gmail_thread_intents intent
+           WHERE intent.connection_id=$1 AND intent.thread_id=$3 AND intent.intent_kind='ignore'
+         )
          ON CONFLICT (connection_id, message_id) DO UPDATE SET
            thread_id = EXCLUDED.thread_id,
            organization_id = EXCLUDED.organization_id,
            contact_id = EXCLUDED.contact_id,
-           evidence_codes = EXCLUDED.evidence_codes,
-           updated_at = now()`,
+           evidence_codes = CASE WHEN google_workspace_validation_mappings.evidence_codes ? 'manual_profile_assignment' THEN google_workspace_validation_mappings.evidence_codes ELSE EXCLUDED.evidence_codes END,
+           updated_at = now()
+         WHERE NOT (google_workspace_validation_mappings.evidence_codes ? 'manual_profile_assignment')
+            OR google_workspace_validation_mappings.organization_id = EXCLUDED.organization_id`,
         [
           connectionId,
           row.messageId,

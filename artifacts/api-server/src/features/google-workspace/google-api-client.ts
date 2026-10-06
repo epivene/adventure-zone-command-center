@@ -84,6 +84,8 @@ export function buildGmailRawMessage(input: {
   subject: string;
   body: string;
   bodyFormat?: "plain_text" | "html";
+  inReplyTo?: string;
+  references?: string;
 }): string {
   const to = gmailHeader(input.to).toLowerCase();
   const subject = gmailHeader(input.subject);
@@ -92,6 +94,8 @@ export function buildGmailRawMessage(input: {
   const mimeType = input.bodyFormat === "html" ? "text/html" : "text/plain";
   const mime = [
     "MIME-Version: 1.0", `To: ${to}`, `Subject: ${encodedSubject}`,
+    ...(input.inReplyTo ? [`In-Reply-To: ${gmailHeader(input.inReplyTo)}`] : []),
+    ...(input.references ? [`References: ${gmailHeader(input.references)}`] : []),
     `Content-Type: ${mimeType}; charset=UTF-8`, "Content-Transfer-Encoding: base64", "",
     wrapBase64(Buffer.from(input.body, "utf8").toString("base64")),
   ].join("\r\n");
@@ -859,8 +863,8 @@ export function createGoogleWorkspaceReadClient(input: {
       if(typeof payload.id!=="string"||typeof payload.threadId!=="string"||typeof payload.raw!=="string")throw clientError("GOOGLE_WORKSPACE_GMAIL_MESSAGE_RESPONSE_INVALID");
       return {messageId:payload.id,threadId:payload.threadId,raw:payload.raw,labelIds:Array.isArray(payload.labelIds)?payload.labelIds.filter((v):v is string=>typeof v==="string"):[]};
     },
-    async listGmailDrafts(query) {
-      const payload=await authorizedJson(`${draftsEndpoint}?maxResults=100&q=${encodeURIComponent(query)}`);
+    async listGmailDrafts(query, pageToken) {
+      const payload=await authorizedJson(`${draftsEndpoint}?maxResults=25&q=${encodeURIComponent(query)}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`);
       return {drafts:Array.isArray(payload.drafts)?payload.drafts as {id:string;message:{id:string;threadId:string}}[]:[],nextPageToken:typeof payload.nextPageToken==="string"?payload.nextPageToken:null};
     },
     async createGmailDraft(input): Promise<GoogleGmailDraft> {

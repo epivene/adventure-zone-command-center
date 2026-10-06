@@ -206,7 +206,7 @@ export interface GoogleWorkspaceReadClient {
   getThreadDetail?(threadId: string): Promise<GoogleThreadDetail>;
   getGmailDraftRaw?(draftId:string):Promise<GoogleGmailDraftRaw>;
   getGmailMessageRaw?(messageId:string):Promise<{messageId:string;threadId:string;raw:string;labelIds:string[]}>;
-  listGmailDrafts?(query:string):Promise<{drafts:{id:string;message:{id:string;threadId:string}}[];nextPageToken:string|null}>;
+  listGmailDrafts?(query:string, pageToken?:string | null):Promise<{drafts:{id:string;message:{id:string;threadId:string}}[];nextPageToken:string|null}>;
   getThreadLabelIds?(threadId: string): Promise<string[]>;
   getAttachment?(input: { messageId: string; attachmentId: string }): Promise<Uint8Array>;
   createGmailDraft?(input: { raw: string; threadId?: string | null }): Promise<GoogleGmailDraft>;

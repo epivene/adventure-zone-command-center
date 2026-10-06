@@ -9,7 +9,7 @@ export type GoogleGmailMutationRecord = {
   messageId: string;
   threadId: string;
   organizationId: string;
-  operation: "assign_thread" | "label_inbound_message";
+  operation: "assign_thread" | "link_thread" | "label_inbound_message";
   targetLabelId: string | null;
   removeLabelIds: string[];
   idempotencyKey: string;
@@ -30,7 +30,7 @@ export type GoogleGmailMutationIntent = {
   messageId: string;
   threadId: string;
   organizationId: string;
-  operation: "assign_thread" | "label_inbound_message";
+  operation: "assign_thread" | "link_thread" | "label_inbound_message";
   idempotencyKey: string;
   actorId: string | null;
 };
@@ -59,7 +59,7 @@ function record(row: Record<string, unknown> | undefined): GoogleGmailMutationRe
     typeof row.message_id !== "string" ||
     typeof row.thread_id !== "string" ||
     typeof row.organization_id !== "string" ||
-    (row.operation !== "assign_thread" && row.operation !== "label_inbound_message") ||
+    (row.operation !== "assign_thread" && row.operation !== "link_thread" && row.operation !== "label_inbound_message") ||
     (row.state !== "pending" &&
       row.state !== "processing" &&
       row.state !== "completed" &&
@@ -160,6 +160,23 @@ export class PostgresGoogleGmailMutationRepository {
     }
   }
 
+  async threadPolicy(mutation: GoogleGmailMutationRecord): Promise<{ current: boolean; reuseOnly: boolean }> {
+    const result = await this.pool.query(
+      `SELECT intent.intent_kind, intent.organization_id::text, intent.generation,
+              intent.current_mutation_id::text, current_mutation.operation
+         FROM google_workspace_gmail_thread_intents intent
+         LEFT JOIN google_workspace_gmail_mutations current_mutation ON current_mutation.id=intent.current_mutation_id
+        WHERE intent.connection_id=$1 AND intent.thread_id=$2`,
+      [mutation.connectionId, mutation.threadId],
+    );
+    const intent = result.rows[0];
+    if (!intent) return { current: mutation.operation === "label_inbound_message" && mutation.intentGeneration === null, reuseOnly: mutation.operation === "link_thread" };
+    const current = intent.intent_kind === "assign" && intent.organization_id === mutation.organizationId
+      && Number(intent.generation) === mutation.intentGeneration
+      && (mutation.operation === "label_inbound_message" || intent.current_mutation_id === mutation.id);
+    return { current, reuseOnly: mutation.operation === "link_thread" || intent.operation === "link_thread" };
+  }
+
   async createOrLoad(
     input: GoogleGmailMutationIntent,
   ): Promise<GoogleGmailMutationRecord> {
@@ -233,13 +250,13 @@ export class PostgresGoogleGmailMutationRepository {
         WHERE mutation.connection_id = (
           SELECT connection.id
             FROM google_workspace_connections connection
-           WHERE connection.status = 'connected'
+           WHERE connection.status = 'connected' AND (connection.role = 'workspace' OR connection.role IS NULL)
            ORDER BY connection.updated_at DESC
            LIMIT 1
         )
           AND (
             (
-              mutation.operation = 'assign_thread'
+              mutation.operation IN ('assign_thread','link_thread')
               AND EXISTS (
                 SELECT 1
                   FROM google_workspace_gmail_thread_intents intent
@@ -314,7 +331,7 @@ export class PostgresGoogleGmailMutationRepository {
         WHERE connection_id = $1
           AND (
             (
-              google_workspace_gmail_mutations.operation = 'assign_thread'
+              google_workspace_gmail_mutations.operation IN ('assign_thread','link_thread')
               AND EXISTS (
                 SELECT 1
                   FROM google_workspace_gmail_thread_intents intent
@@ -388,7 +405,7 @@ export class PostgresGoogleGmailMutationRepository {
           AND state = 'retryable_error'
           AND (
             (
-              google_workspace_gmail_mutations.operation = 'assign_thread'
+              google_workspace_gmail_mutations.operation IN ('assign_thread','link_thread')
               AND EXISTS (
                 SELECT 1
                   FROM google_workspace_gmail_thread_intents intent
@@ -454,7 +471,7 @@ export class PostgresGoogleGmailMutationRepository {
             )
             AND (
               (
-                candidate_mutation.operation = 'assign_thread'
+                candidate_mutation.operation IN ('assign_thread','link_thread')
                 AND EXISTS (
                   SELECT 1
                     FROM google_workspace_gmail_thread_intents intent

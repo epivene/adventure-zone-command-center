@@ -25,6 +25,7 @@ type MenuGroup = { label: string; items: MenuItem[] };
 const bookingItems: MenuItem[] = [
   { href: "/profiles", label: "Profiles" },
   { href: "/dave-requests", label: "Dave Requests" },
+  { href: "/emails", label: "Emails" },
   { href: "/email-review", label: "Email Review" },
   { href: "/calls/workspace", label: "Calls" },
   { href: "/calls/voicemail", label: "Voicemail" },
@@ -66,7 +67,8 @@ const adminToolsGroups: MenuGroup[] = [
   {
     label: "Review queues",
     items: [
-      { href: "/email-review", label: "Email Review" },
+      { href: "/emails", label: "Emails" },
+  { href: "/email-review", label: "Email Review" },
     ],
   },
   {

@@ -24,6 +24,7 @@ export type GoogleProfileLabelSyncServicePort = {
     organizationId: string;
     actorId: string;
     decisionRevision: string;
+    preserveInbox?: boolean;
   }): Promise<GoogleProfileLabelSyncResult>;
   labelInboundMessage(input: {
     connectionId: string;
@@ -43,7 +44,7 @@ type MutationRepository = Pick<
   | "complete"
   | "fail"
   | "withThreadLock"
->;
+> & { threadPolicy?: (mutation: GoogleGmailMutationRecord) => Promise<{ current: boolean; reuseOnly: boolean }> };
 
 function safeCode(error: unknown): string {
   if (
@@ -63,7 +64,7 @@ function failureState(code: string): "retryable_error" | "permanent_error" | "co
       code === "GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT") return "conflict";
   if (code === "GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND" ||
       code === "GOOGLE_WORKSPACE_REVIEW_TARGET_NOT_FOUND" ||
-      code === "GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND") return "permanent_error";
+      code === "GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND" || code === "GOOGLE_WORKSPACE_ASSIGNMENT_SUPERSEDED") return "permanent_error";
   return "retryable_error";
 }
 
@@ -96,15 +97,16 @@ implements GoogleProfileLabelSyncServicePort {
     organizationId: string;
     actorId: string;
     decisionRevision: string;
+    preserveInbox?: boolean;
   }): Promise<GoogleProfileLabelSyncResult> {
     const intent: GoogleGmailMutationIntent = {
       connectionId: input.connectionId,
       messageId: input.messageId,
       threadId: input.threadId,
       organizationId: input.organizationId,
-      operation: "assign_thread",
+      operation: input.preserveInbox ? "link_thread" : "assign_thread",
       idempotencyKey:
-        `assign-thread:${input.connectionId}:${input.threadId}:${input.organizationId}`,
+        `${input.preserveInbox ? "link" : "assign"}-thread:${input.connectionId}:${input.threadId}:${input.organizationId}`,
       actorId: input.actorId,
     };
     return this.start(intent);
@@ -179,9 +181,13 @@ implements GoogleProfileLabelSyncServicePort {
     }
 
     try {
+      const policy = await this.dependencies.mutations.threadPolicy?.(claimed);
+      if (policy && !policy.current) throw new Error("GOOGLE_WORKSPACE_ASSIGNMENT_SUPERSEDED");
+      const reuseOnly = claimed.operation === "link_thread" || policy?.reuseOnly === true;
       const resolution = await this.dependencies.resolver.resolve({
         connectionId: claimed.connectionId,
         organizationId: claimed.organizationId,
+        reuseOnly,
       });
       if (resolution.status === "conflict") {
         const winner = await this.dependencies.mutations.fail({
@@ -207,6 +213,7 @@ implements GoogleProfileLabelSyncServicePort {
         mutation: claimed,
         targetLabelId: target.gmailLabelId,
         onlyWhenChanged: false,
+        reuseOnly,
       });
 
       const winner = await this.dependencies.mutations.complete({
@@ -261,9 +268,16 @@ implements GoogleProfileLabelSyncServicePort {
         threadId: mutation.threadId,
       },
       async () => {
+        const policy = await this.dependencies.mutations.threadPolicy?.(mutation);
+        if (policy && !policy.current) return {
+          ...this.view(mutation), state: "permanent_error" as const,
+          errorCode: "GOOGLE_WORKSPACE_ASSIGNMENT_SUPERSEDED",
+        };
+        const reuseOnly = mutation.operation === "link_thread" || policy?.reuseOnly === true;
         const resolution = await this.dependencies.resolver.resolve({
           connectionId: mutation.connectionId,
           organizationId: mutation.organizationId,
+          reuseOnly,
         });
         if (resolution.status === "conflict") {
           return {
@@ -278,6 +292,7 @@ implements GoogleProfileLabelSyncServicePort {
           mutation,
           targetLabelId: resolution.mapping.gmailLabelId,
           onlyWhenChanged: true,
+          reuseOnly,
         });
         return {
           ...this.view(mutation),
@@ -292,6 +307,7 @@ implements GoogleProfileLabelSyncServicePort {
     mutation: GoogleGmailMutationRecord;
     targetLabelId: string;
     onlyWhenChanged: boolean;
+    reuseOnly?: boolean;
   }): Promise<string[]> {
     const [managedLabelIds, gmailLabels, attachedLabelIds] = await Promise.all([
       this.dependencies.labels.listManagedLabelIds(input.mutation.connectionId),
@@ -307,7 +323,7 @@ implements GoogleProfileLabelSyncServicePort {
         )
         .map((label) => label.id),
     ]);
-    const attentionResult = await this.dependencies.attention?.(input.mutation, input.targetLabelId, [...profileLabelIds]);
+    const attentionResult = input.reuseOnly || input.mutation.operation === "link_thread" ? null : await this.dependencies.attention?.(input.mutation, input.targetLabelId, [...profileLabelIds]);
     if (attentionResult != null) return attentionResult;
     const removeLabelIds = [...profileLabelIds]
       .filter((labelId) =>

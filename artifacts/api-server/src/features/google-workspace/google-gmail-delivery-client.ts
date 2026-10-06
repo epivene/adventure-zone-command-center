@@ -121,6 +121,7 @@ export function createGoogleGmailDeliveryClient(input: {
   ): Promise<T> {
     const controller = new AbortController();
     let timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let operationStarted = false;
     try {
       const token = await currentAccessToken(controller.signal);
       if (beforeOperation) {
@@ -129,11 +130,14 @@ export function createGoogleGmailDeliveryClient(input: {
         clearTimeout(timeout);
         try {
           await beforeOperation();
-        } catch {
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith("GOOGLE_WORKSPACE_")) throw clientError(error.message);
           throw clientError("OUTREACH_SEND_RECHECK_FAILED");
         }
         timeout = setTimeout(() => controller.abort(), timeoutMs);
       }
+      if (controller.signal.aborted) throw clientError("GOOGLE_WORKSPACE_GMAIL_SEND_NOT_ATTEMPTED");
+      operationStarted = true;
       return await operation(token, controller.signal);
     } catch (error) {
       if (
@@ -145,7 +149,7 @@ export function createGoogleGmailDeliveryClient(input: {
       ) {
         throw error;
       }
-      throw clientError(uncertainCode);
+      throw clientError(operationStarted ? uncertainCode : "GOOGLE_WORKSPACE_GMAIL_SEND_NOT_ATTEMPTED");
     } finally {
       clearTimeout(timeout);
     }

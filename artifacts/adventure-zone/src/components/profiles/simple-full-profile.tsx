@@ -34,6 +34,7 @@ import { ProfileEmailComposer, ProfileEmailDrafts, type ProfileEmailDraft } from
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
 import { ProfileInlineEditor } from "@/components/profiles/profile-inline-editor";
 import { ProfileAtAGlance } from "@/components/profiles/profile-at-a-glance";
+import { ProfileCallBrief } from "./profile-call-brief";
 import { ProfileEmailSummary } from "@/components/profiles/profile-email-summary";
 import { ProfileDesignDocuments } from "@/components/profiles/ProfileDesignDocuments";
 import { historyCategory, simplifyHistoryText } from "@/components/profiles/history-summary";
@@ -548,6 +549,8 @@ export function SimpleFullProfile({
           </div>
         </div>
 
+        <details>
+          <summary className="cursor-pointer border-t px-4 py-3 text-sm font-semibold">Organization details</summary>
         {profile.place.description?.trim() ? (
           <div className="border-t border-[#e1e8e3] px-4 py-4 sm:px-7">
             <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#75908b]">About</h2>
@@ -582,13 +585,16 @@ export function SimpleFullProfile({
             Central Time (CT)
           </span>
         </div>
+        </details>
       </section>
 
-      <ProfileAtAGlance profile={profile} allowDateManagement={!boss} />
+      <ProfileCallBrief profile={profile} emails={emailConversations} readOnly={boss} onEmails={() => setOpenSection("emails")} onHistory={() => setOpenSection("notes")} onDocuments={() => setOpenSection("documents")} onAddNote={openNoteComposer} />
+      <details><summary className="cursor-pointer text-sm font-semibold">More profile facts</summary><ProfileAtAGlance profile={profile} allowDateManagement={!boss} /></details>
 
       <nav aria-label="Profile sections" className="flex flex-wrap gap-2 border-b pb-3">
-        {([[null,"Overview"],["contacts","Contacts"],["events","Bookings"],["notes","History"],["documents","Documents"]] as const).filter(([section]) => !boss || section !== "documents").map(([section,label]) => <button key={label} type="button" aria-current={openSection === section ? "page" : undefined} className={openSection === section ? "button-primary" : "button-secondary"} onClick={() => setOpenSection(section)}>{label}</button>)}
+        {([[null,"Overview"],["contacts","Contacts"],["events","Bookings"],["notes","History"],["emails","Emails"],["documents","Documents"]] as const).filter(([section]) => !boss || section !== "documents").map(([section,label]) => <button key={label} type="button" aria-current={openSection === section ? "page" : undefined} className={openSection === section ? "button-primary" : "button-secondary"} onClick={() => setOpenSection(section)}>{label}</button>)}
       </nav>
+      {!boss && openSection === "emails" ? <Link className="button-secondary w-fit" href={`/emails?profileId=${encodeURIComponent(profile.id)}`}>Open email account</Link> : null}
       <div id="profile-section-content" className="scroll-mt-4" />
       {!boss && openSection === "documents" ? <ProfileDesignDocuments organizationId={profile.id} contactId={primaryContact?.id ?? null} bookingId={currentBooking?.id ?? null} documentYear={profileDocumentYear} /> : null}
 

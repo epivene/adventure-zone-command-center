@@ -99,9 +99,11 @@ export class PostgresGoogleProfileEmailArchiveRepository
 {
   constructor(
     private readonly pool: SqlPool = defaultPool as unknown as SqlPool,
+    private readonly pinnedConnectionId?: string,
   ) {}
 
   private async currentConnectionId(): Promise<string> {
+    if (this.pinnedConnectionId) return this.pinnedConnectionId;
     const result = await this.pool.query(
       `SELECT id FROM google_workspace_connections
         WHERE status IN ('connected', 'reauthorization_required')
