@@ -228,6 +228,8 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
             const manualValue = manualByPage[page.id] ?? "";
             const rereadable = !["imported", "archived", "importing"].includes(data.status)
               && ["extracted", "needs_retry", "reviewed_empty"].includes(page.status);
+            const manualEditable = (data.status === "review" || data.status === "failed")
+              && (page.status === "needs_retry" || page.status === "extracted");
             return (
               <article className="rounded-xl border border-slate-200 bg-white p-4" key={page.id}>
                 <div className="flex flex-wrap items-center gap-3">
@@ -298,7 +300,11 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
                         No importable entries
                       </button>
                     </div>
-                    <div className="mt-4 border-t border-amber-200 pt-4">
+                  </div>
+                ) : null}
+
+                {manualEditable ? (
+                    <div className="mt-4 border-t border-slate-200 pt-4">
                       <label className="grid gap-2 text-sm font-semibold text-slate-800" htmlFor={`manual-${page.id}`}>
                         Add an entry manually
                         <textarea
@@ -319,7 +325,6 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
                         <FilePenLine className="h-4 w-4" /> {busy === `manual:${page.id}` ? "Saving…" : "Save manual entry"}
                       </button>
                     </div>
-                  </div>
                 ) : null}
               </article>
             );

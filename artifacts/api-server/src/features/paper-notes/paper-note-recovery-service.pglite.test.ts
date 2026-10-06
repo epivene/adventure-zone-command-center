@@ -97,4 +97,34 @@ describe("PaperNoteRecoveryRepository", () => {
     expect((await client.query(`select count(*)::int as count from paper_note_entries`)).rows)
       .toEqual([{ count: 0 }]);
   });
+  it("appends another manual entry while preserving an approved entry on the same photo", async () => {
+    const { client, repository } = await setup();
+    clients.push(client);
+    const now = new Date("2026-10-06T15:00:00Z");
+    const firstId = await repository.addManualEntry("owner", batchId, pageId, "First Fair", now);
+    await client.query(`update paper_note_entries set state='approved', review_payload='{"event":{"name":"First Fair"}}'::jsonb, review_version=3 where id=$1`, [firstId]);
+    const secondId = await repository.addManualEntry("owner", batchId, pageId, "Second Fair", now);
+    expect(secondId).not.toBe(firstId);
+    const rows = (await client.query(`select source_order, state, review_payload, review_version, extraction_payload->>'transcription' as transcription from paper_note_entries order by source_order`)).rows;
+    expect(rows).toEqual([
+      { source_order: 0, state: "approved", review_payload: { event: { name: "First Fair" } }, review_version: 3, transcription: "First Fair" },
+      { source_order: 1, state: "needs_review", review_payload: {}, review_version: 0, transcription: "Second Fair" },
+    ]);
+  });
+
+  it.each(["queued", "extracting", "uploaded", "reviewed_empty"])("rejects manual append to a %s page", async (status) => {
+    const { client, repository } = await setup();
+    clients.push(client);
+    await client.query(`update paper_note_pages set status=$1 where id=$2`, [status, pageId]);
+    await expect(repository.addManualEntry("owner", batchId, pageId, "Fair", new Date())).rejects.toMatchObject({ code: "PAGE_NOT_EDITABLE" });
+    expect((await client.query("select count(*)::int as count from paper_note_entries")).rows).toEqual([{ count: 0 }]);
+  });
+
+  it.each(["importing", "imported", "archived"])("keeps %s batches immutable", async (status) => {
+    const { client, repository } = await setup();
+    clients.push(client);
+    await client.query(`update paper_note_batches set status=$1 where id=$2`, [status, batchId]);
+    await expect(repository.addManualEntry("owner", batchId, pageId, "Fair", new Date())).rejects.toMatchObject({ code: "PAGE_NOT_EDITABLE" });
+  });
+
 });
