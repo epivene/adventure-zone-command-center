@@ -56,9 +56,11 @@ ProfileCallBrief = { organizationId: string; selectedYear: number; contact: { na
 
 Task names below define new interfaces; existing interfaces remain compatible.
 
+Unqualified google/attention file names in Tasks 1–2 refer to artifacts/api-server/src/features/google-workspace/. Add all new route mounts behind the existing owner authentication middleware. Existing boss profile adapters retain their current access boundaries; do not expose the full mailbox to boss, office, manager, or connector sessions.
+
 ## Task 1: Persist link behavior through assignment and retries
 
-**Modify:** lib/db/src/google-workspace-schema.ts; artifacts/api-server/src/features/google-workspace/google-profile-assignment-transaction.ts; google-gmail-mutation-repository.ts; google-workspace-startup migration wiring.
+**Modify:** lib/db/src/google-workspace-schema.ts; artifacts/api-server/src/features/google-workspace/google-profile-assignment-transaction.ts; google-gmail-mutation-repository.ts; artifacts/api-server/src/db/google-workspace-startup-migration.ts; artifacts/api-server/src/db/google-workspace-required-startup.ts.
 **Create:** lib/db/migrations/20261006_email_link_policy.sql.
 **Tests:** artifacts/api-server/src/features/google-workspace/google-profile-assignment-transaction.test.ts; artifacts/api-server/src/db/email-link-policy.test.ts.
 
@@ -87,7 +89,7 @@ Task names below define new interfaces; existing interfaces remain compatible.
 ## Task 3: Shared Call Brief data, profile layout, and quick lookup
 
 **Create:** API profile-call-brief.ts; profile-call-brief-repository.ts; routes/profile-call-brief.ts; frontend profile-call-brief-client.ts; components/profiles/profile-call-brief.tsx.
-**Modify:** artifacts/adventure-zone/src/components/profiles/simple-full-profile.tsx; profile-at-a-glance.tsx; pages/BossProfilePage.tsx; pages/BossProfilesPage.tsx; API routes/index.ts and features/organizations/profile-search.ts where existing search coverage is insufficient.
+**Modify:** artifacts/adventure-zone/src/components/profiles/simple-full-profile.tsx; profile-at-a-glance.tsx; pages/BossProfilePage.tsx; pages/EventProfilePage.tsx; pages/BossProfilesPage.tsx; pages/ProfilesPage.tsx; API routes/index.ts and features/organizations/profile-search.ts where existing search coverage is insufficient.
 **Tests:** profile-call-brief.test.ts (API); profile-call-brief.test.tsx; BossProfilesPage tests.
 
 **Interfaces:** buildProfileCallBrief(input: ProfileCallBriefSource): ProfileCallBrief; getProfileCallBrief(organizationId: string, year: number, signal?: AbortSignal): Promise<ProfileCallBrief>. Define ProfileCallBriefSource in profile-call-brief.ts from repository outputs; API GET /profiles/:id/call-brief?year=YYYY for owner, with authorized boss adapter limited to boss profile access.
@@ -132,7 +134,7 @@ Task names below define new interfaces; existing interfaces remain compatible.
 **Modify:** src/App.tsx; components/navigation/app-menu.tsx; app-shell.tsx as needed for navigation.
 **Tests:** EmailsPage.test.tsx; App routing tests.
 
-**Interfaces:** /emails?folder=inbox|sent|drafts|search&q=...&thread=...; uses Tasks 3–5 and frontend getMailboxPage/getMailboxThread/linkMailboxThread wrappers matching Task 4. Open profile passes a safe returnTo=/emails query; owner profile return-path allowlist must accept it.
+**Interfaces:** /emails?folder=inbox|sent|drafts|search&q=...&thread=...; uses Tasks 3–5 and frontend getMailboxPage/getMailboxThread/linkMailboxThread wrappers matching Task 4. Open profile passes a safe returnTo=/emails query; owner EventProfilePage return-path handling must accept it using the existing safe local-route validation pattern. BossProfilePage does not gain owner mailbox access.
 
 - [ ] Test Inbox/Sent/Drafts/Search navigation, unlinked rows, profile sidebar, loading/error/reconnect states, and preserved query/list position when returning.
 - [ ] Run targeted page/routing tests to establish failure.
