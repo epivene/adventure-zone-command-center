@@ -1,0 +1,28 @@
+name: Incoming Call Alerts
+on:
+  pull_request:
+    paths:
+      - "artifacts/adventure-zone/src/features/calls/**"
+      - "artifacts/adventure-zone/src/components/calls/**"
+      - "artifacts/adventure-zone/src/hooks/use-incoming-call*"
+      - ".github/workflows/incoming-call-alerts-ci.yml"
+permissions:
+  contents: read
+jobs:
+  frontend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Alert lifecycle regression tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calls/incoming-call-alerts.test.mjs
+      - name: Full frontend suite
+        run: pnpm --filter @workspace/adventure-zone test
