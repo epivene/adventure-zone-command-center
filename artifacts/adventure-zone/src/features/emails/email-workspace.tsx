@@ -1,3 +1,4 @@
+import "./email-workspace.css";
 import { EmailMessageBody } from "./email-message-body";
 import { formatEmailDate, newestEmails } from "./email-presentation";
 import { EmailList } from "./email-list";
@@ -211,7 +212,7 @@ export function EmailWorkspace() {
   const replyMessage = thread?.messages.at(-1);
   const recipient = replyMessage ? (replyMessage.direction === "outgoing" ? replyMessage.to : replyMessage.from) : "";
   const emailAddress = recipient.match(/<([^<>]+)>/)?.[1] || recipient;
-  return <main className="mx-auto min-w-0 max-w-[1600px]">
+  return <main className="email-workspace mx-auto min-w-0 max-w-[1600px]">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="text-2xl font-bold">Emails</h1><p className="max-w-[60vw] truncate text-xs text-muted-foreground">{page?.email || "Your connected Google account"}</p></div>
       <div className="flex shrink-0 items-center gap-2"><details className="relative"><summary className="cursor-pointer min-h-11 rounded-lg px-3 py-3 text-sm">More</summary><div className="absolute right-0 top-full z-30 grid w-52 gap-2 rounded-xl border bg-card p-3 shadow-lg"><a className="button-secondary" href={`https://mail.google.com/mail/?authuser=${encodeURIComponent(page?.email || "")}`} target="_blank" rel="noopener noreferrer">Open Gmail</a><Link className="button-secondary" href="/settings/google-workspace">Email connection</Link></div></details><button className="button-primary" disabled={!accountId || busy} onClick={() => { detailVersion.current++; setShowList(false); if(view==="review") {setView("inbox");setFolder("inbox");} setThread(null); setDraft(null); setSelected(null); pendingDraft.current = null; setComposer({ to: "", subject: "", body: "" }); setConfirmSend(false); }} type="button">Compose</button></div>

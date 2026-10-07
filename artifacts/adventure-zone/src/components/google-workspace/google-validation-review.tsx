@@ -1,3 +1,4 @@
+import { EmailSenderAvatar, emailSenderName } from "@/features/emails/email-list";
 import { EmailMessageBody } from "@/features/emails/email-message-body";
 import { formatEmailDate, newestEmails } from "@/features/emails/email-presentation";
 import { readReviewContext, writeReviewContext, reviewSelectionUrl } from "@/features/emails/email-workspace-state";
@@ -667,7 +668,7 @@ export function GoogleValidationReview({
       ) : (
         <div className={compact ? "grid min-w-0 gap-4 md:grid-cols-[minmax(220px,0.8fr)_minmax(0,2fr)]" : "grid gap-3"}>
           {compact ? <div aria-label="Emails needing review" className={`min-w-0 divide-y rounded-xl border bg-card ${selectedReviewId && reviewPane==="reader" ? "hidden md:block" : ""}`}>
-            {pending.map(item => <button key={item.messageId} type="button" disabled={busyMessageId !== null} aria-pressed={selectedReviewId === item.messageId} onClick={() => selectReview(item.messageId)} className={`block min-h-20 w-full px-4 py-3 text-left normal-case hover:bg-muted ${selectedReviewId === item.messageId ? "bg-secondary" : ""}`}><div className="flex items-start justify-between gap-2"><p className="min-w-0 truncate text-sm font-semibold">{item.from || "Unknown sender"}</p><time className="shrink-0 text-xs text-muted-foreground">{formatEmailDate(item,true)}</time></div><p className="mt-1 truncate text-sm">{item.subject || "(No subject)"}</p><p className="mt-1 text-xs text-muted-foreground">Needs profile review</p></button>)}
+            {pending.map(item => <button key={item.messageId} type="button" disabled={busyMessageId !== null} aria-pressed={selectedReviewId === item.messageId} onClick={() => selectReview(item.messageId)} className={`email-message-row min-h-20 w-full px-4 py-3 text-left normal-case hover:bg-muted ${selectedReviewId === item.messageId ? "bg-secondary" : ""}`}><EmailSenderAvatar sender={item.from || ""} /><div className="email-message-copy"><div className="flex items-start justify-between gap-2"><p className="min-w-0 truncate text-sm font-semibold">{emailSenderName(item.from || "")}</p><time className="shrink-0 text-xs text-muted-foreground">{formatEmailDate(item,true)}</time></div><p className="mt-1 truncate text-sm">{item.subject || "(No subject)"}</p><p className="mt-1 text-xs text-muted-foreground">Needs profile review</p></div></button>)}
           </div> : null}
           {compact && !selectedReviewId ? <p className="hidden rounded-xl border bg-card p-5 text-sm text-muted-foreground md:block">Select a conversation to review it.</p> : null}
           {(compact ? pending.filter(item => item.messageId === selectedReviewId) : pending).map((item) => {
