@@ -71,6 +71,7 @@ function messageFromRow(
     date: row.date_value,
     direction: row.direction,
     bodyText: row.body_text,
+    ...(typeof row.body_html === 'string' && row.body_html ? {bodyHtml: row.body_html} : {}),
     attachments: attachments.flatMap((attachment) => {
       if (!attachment || typeof attachment !== "object") return [];
       const candidate = attachment as Record<string, unknown>;
@@ -219,10 +220,10 @@ export class PostgresGoogleProfileEmailArchiveRepository
            conversation_id, connection_id, gmail_message_id, gmail_thread_id,
            internal_date_ms, from_value, to_value, cc_value, subject,
            date_value, direction, body_text, attachments_json,
-           created_at, updated_at
+           created_at, updated_at, body_html
          ) VALUES (
            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb,
-           $14, $14
+           $14, $14, $15
          )
          ON CONFLICT (connection_id, gmail_message_id) DO UPDATE SET
            conversation_id = EXCLUDED.conversation_id,
@@ -235,6 +236,7 @@ export class PostgresGoogleProfileEmailArchiveRepository
            date_value = EXCLUDED.date_value,
            direction = EXCLUDED.direction,
            body_text = EXCLUDED.body_text,
+           body_html = EXCLUDED.body_html,
            attachments_json = EXCLUDED.attachments_json,
            updated_at = EXCLUDED.updated_at`,
         [
@@ -252,6 +254,7 @@ export class PostgresGoogleProfileEmailArchiveRepository
           message.bodyText,
           JSON.stringify(message.attachments),
           input.lastSyncedAt,
+          message.bodyHtml || null,
         ],
       );
     }

@@ -18,6 +18,7 @@ export type ArchivedProfileEmailMessage = {
   date: string;
   direction: "incoming" | "outgoing" | "unknown";
   bodyText: string;
+  bodyHtml?: string;
   attachments: GoogleThreadAttachment[];
 };
 

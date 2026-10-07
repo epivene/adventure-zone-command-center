@@ -273,6 +273,7 @@ function textFromHtml(value: string): string {
 function bodyTextFromPart(value: unknown): { plain: string; html: string } {
   if (!value || typeof value !== "object") return { plain: "", html: "" };
   const part = value as Record<string, unknown>;
+  if (typeof part.filename === "string" && part.filename.trim()) return {plain:"",html:""};
   const mimeType = typeof part.mimeType === "string" ? part.mimeType.toLowerCase() : "";
   const body = part.body && typeof part.body === "object"
     ? (part.body as Record<string, unknown>)
@@ -1338,13 +1339,26 @@ export function createGoogleWorkspaceReadClient(input: {
         throw clientError("GOOGLE_WORKSPACE_THREAD_DETAIL_INVALID");
       }
 
-      const messages = payload.messages.flatMap((value) => {
+      async function readablePart(value: unknown, messageId: string): Promise<Record<string, unknown>> {
+        if (!value || typeof value !== "object") return {};
+        const part = value as Record<string, unknown>;
+        if (typeof part.filename === "string" && part.filename.trim()) return part;
+        const body = part.body && typeof part.body === "object" ? part.body as Record<string, unknown> : {};
+        let data = body.data;
+        if ((part.mimeType === "text/html" || part.mimeType === "text/plain") && !data && typeof body.attachmentId === "string") {
+          const content = await authorizedJson(`${gmailBaseEndpoint}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(body.attachmentId)}`);
+          if (typeof content.data !== "string") throw clientError("GOOGLE_WORKSPACE_THREAD_DETAIL_INVALID");
+          data = content.data;
+        }
+        return {...part, body: {...body, data}, ...(Array.isArray(part.parts) ? {parts: await Promise.all(part.parts.map(child => readablePart(child, messageId)))} : {})};
+      }
+      const messages = (await Promise.all(payload.messages.map(async (value) => {
         if (!value || typeof value !== "object") return [];
         const message = value as Record<string, unknown>;
         if (typeof message.id !== "string") return [];
         const messagePayload =
           message.payload && typeof message.payload === "object"
-            ? (message.payload as Record<string, unknown>)
+            ? await readablePart(message.payload, message.id)
             : {};
         const headers = Array.isArray(messagePayload.headers)
           ? messagePayload.headers
@@ -1373,9 +1387,10 @@ export function createGoogleWorkspaceReadClient(input: {
               ? "incoming" as const
               : "unknown" as const,
           bodyText: (bodies.plain || textFromHtml(bodies.html)).trim(),
+          ...(bodies.html.trim() ? { bodyHtml: bodies.html } : {}),
           attachments: attachmentsFromPart(messagePayload, message.id),
         }];
-      }).sort((left, right) =>
+      }))).flat().sort((left, right) =>
         (left.internalDateMs ?? 0) - (right.internalDateMs ?? 0) ||
         left.id.localeCompare(right.id),
       );

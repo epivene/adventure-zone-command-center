@@ -130,6 +130,7 @@ export type GoogleThreadMessage = {
   date: string;
   direction: "incoming" | "outgoing" | "unknown";
   bodyText: string;
+  bodyHtml?: string;
   attachments: GoogleThreadAttachment[];
 };
 

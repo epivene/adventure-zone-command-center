@@ -53,6 +53,7 @@ function archiveMessages(detail: GoogleThreadDetail) {
     date: message.date,
     direction: message.direction,
     bodyText: message.bodyText,
+    ...(message.bodyHtml ? {bodyHtml:message.bodyHtml} : {}),
     attachments: message.attachments,
   }));
 }

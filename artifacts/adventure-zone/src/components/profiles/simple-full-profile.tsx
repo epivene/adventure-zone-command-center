@@ -1,3 +1,4 @@
+import { emailTime } from "@/features/emails/email-presentation";
 import { ProfileActivityHistory } from "./profile-activity-history";
 import { mergeProfileHistory } from "./profile-activity-history-model";
 import { getBossProfileEmails, getBossProfileDrafts, getBossThread } from "@/components/boss/boss-profile-emails";
@@ -258,7 +259,7 @@ export function SimpleFullProfile({
   const activities = mergeOptimisticActivities(persistedActivities, optimisticActivities);
   const recentHistory = mergeProfileHistory(
     activities.map(activity => ({id:activity.id,kind:activity.kind,body:activity.body,occurredAt:activity.occurredAt})),
-    emailConversations.map(conversation => ({id:"gmail:"+conversation.threadId,kind:"email",body:conversation.subject || "(No subject)",occurredAt:new Date((conversation.internalDateMs ?? Date.parse(conversation.date)) || 0),href:boss ? undefined : "/emails?"+new URLSearchParams({profileId:profile.id,threadId:conversation.threadId})}))
+    emailConversations.map(conversation => ({id:"gmail:"+conversation.threadId,kind:"email",body:conversation.subject || "(No subject)",occurredAt:new Date(emailTime(conversation) ?? NaN),href:boss ? undefined : "/emails?"+new URLSearchParams({profileId:profile.id,threadId:conversation.threadId})}))
   );
   const filteredHistory = noteSearch.trim() ? recentHistory.filter(item => (item.kind+" "+item.body).toLowerCase().includes(noteSearch.trim().toLowerCase())) : recentHistory;
   const normalizedSearch = noteSearch.trim().toLowerCase();

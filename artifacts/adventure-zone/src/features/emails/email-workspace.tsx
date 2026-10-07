@@ -1,3 +1,5 @@
+import { EmailMessageBody } from "./email-message-body";
+import { formatEmailDate, newestEmails } from "./email-presentation";
 import { EmailList } from "./email-list";
 import { EmailReader } from "./email-reader";
 import { EmailReviewPane } from "./email-review-pane";
@@ -41,6 +43,7 @@ export function EmailWorkspace() {
   const [confirmChange, setConfirmChange] = useState(false);
   const [showList, setShowList] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [reviewReading,setReviewReading] = useState(false);
   const listScroll = useRef(0);
   const listVersion = useRef(0);
   const detailVersion = useRef(0);
@@ -210,20 +213,21 @@ export function EmailWorkspace() {
   const emailAddress = recipient.match(/<([^<>]+)>/)?.[1] || recipient;
   return <main className="mx-auto min-w-0 max-w-[1600px]">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold">Emails</h1><p className="text-sm text-muted-foreground">{page?.email || "Your connected Google account"}</p></div>
-      <div className="flex flex-wrap gap-2"><a className="button-secondary" href={`https://mail.google.com/mail/?authuser=${encodeURIComponent(page?.email || "")}`} target="_blank" rel="noopener noreferrer">Open Gmail</a><Link className="button-secondary" href="/settings/google-workspace">Email connection</Link><button className="button-primary" disabled={!accountId || busy} onClick={() => { detailVersion.current++; setShowList(false); if(view==="review") {setView("inbox");setFolder("inbox");} setThread(null); setDraft(null); setSelected(null); pendingDraft.current = null; setComposer({ to: "", subject: "", body: "" }); setConfirmSend(false); }} type="button">Compose</button></div>
+      <div><h1 className="text-2xl font-bold">Emails</h1><p className="max-w-[60vw] truncate text-xs text-muted-foreground">{page?.email || "Your connected Google account"}</p></div>
+      <div className="flex shrink-0 items-center gap-2"><details className="relative"><summary className="cursor-pointer min-h-11 rounded-lg px-3 py-3 text-sm">More</summary><div className="absolute right-0 top-full z-30 grid w-52 gap-2 rounded-xl border bg-card p-3 shadow-lg"><a className="button-secondary" href={`https://mail.google.com/mail/?authuser=${encodeURIComponent(page?.email || "")}`} target="_blank" rel="noopener noreferrer">Open Gmail</a><Link className="button-secondary" href="/settings/google-workspace">Email connection</Link></div></details><button className="button-primary" disabled={!accountId || busy} onClick={() => { detailVersion.current++; setShowList(false); if(view==="review") {setView("inbox");setFolder("inbox");} setThread(null); setDraft(null); setSelected(null); pendingDraft.current = null; setComposer({ to: "", subject: "", body: "" }); setConfirmSend(false); }} type="button">Compose</button></div>
     </div>
-    <nav aria-label="Email views" className="mt-4 flex gap-1 overflow-x-auto border-b pb-2">
+    <div className={((!showList && (selected || composer || draft)) || (view==="review" && reviewReading)) ? "hidden md:block" : ""}><nav aria-label="Email views" className="mt-4 flex gap-1 overflow-x-auto border-b pb-2">
       {([{id:"inbox",label:"Inbox"},{id:"sent",label:"Sent"},{id:"drafts",label:"Drafts"},{id:"review",label:"Needs review"},{id:"needs_reply",label:"Needs your reply"},{id:"waiting",label:"Waiting"}] as const).map(item=><button key={item.id} type="button" aria-current={view===item.id?"page":undefined} disabled={busy} onClick={()=>changeView(item.id)} className={`min-h-11 shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${view===item.id?"bg-secondary text-secondary-foreground":"text-muted-foreground hover:bg-muted"}`}>{item.label}</button>)}
     </nav>
     {view !== "review" ? <form className="mt-3 flex gap-2" onSubmit={event => { event.preventDefault(); if (busy) return; setView("inbox"); setFolder("search"); setQuery(searchText); }}>
-      <input aria-label="Search emails" className="min-w-0 flex-1 rounded border bg-background p-2" placeholder="Search email (Gmail search supported)" value={searchText} onChange={event => setSearchText(event.target.value)} />
+      <input aria-label="Search emails" className="min-w-0 flex-1 rounded border bg-background p-2" placeholder="Search mail" value={searchText} onChange={event => setSearchText(event.target.value)} />
       <button className="button-secondary" disabled={busy} type="submit">Search</button>
       <button className="button-secondary" type="button" disabled={busy || loading} onClick={() => { setPage(null); setSelected(null); setThread(null); setDraft(null); setComposer(null); setShowProfile(false); setMessages([]); detailVersion.current++; restoredThread.current=true; void loadPage(undefined,true); }}>Refresh</button>
     </form> : null}
+    </div>
     {error ? <p role="alert" className="my-3 rounded border border-red-300 p-3 text-sm">{error}</p> : null}
     {notice ? <p role="status" className="my-3 rounded border p-3 text-sm">{notice}</p> : null}
-    {view === "review" ? <EmailReviewPane accountId={accountId} selectedMessageId={readEmailWorkspaceState(search).reviewMessageId || readEmailWorkspaceState(search).attentionMessage} attentionMessageId={readEmailWorkspaceState(search).attentionMessage} profileId={initialProfile || undefined}/> : <div className={`mt-4 grid min-w-0 items-start gap-4 md:grid-cols-[minmax(220px,0.75fr)_minmax(0,2fr)] ${showProfile ? "xl:grid-cols-[minmax(240px,0.8fr)_minmax(0,2fr)_minmax(260px,0.9fr)]" : ""}`}>
+    {view === "review" ? <EmailReviewPane onReadingChange={setReviewReading} accountId={accountId} selectedMessageId={readEmailWorkspaceState(search).reviewMessageId || readEmailWorkspaceState(search).attentionMessage} attentionMessageId={readEmailWorkspaceState(search).attentionMessage} profileId={initialProfile || undefined}/> : <div className={`mt-4 grid min-w-0 items-start gap-4 md:grid-cols-[minmax(220px,0.75fr)_minmax(0,2fr)] ${showProfile ? "xl:grid-cols-[minmax(240px,0.8fr)_minmax(0,2fr)_minmax(260px,0.9fr)]" : ""}`}>
       <section aria-label="Email list" className={`min-w-0 rounded-xl border bg-card ${showProfile ? "hidden md:block" : !showList && (selected || composer || draft) ? "hidden md:block" : ""}`}>
         {loading ? <p role="status" className="p-3 text-sm">Loading email…</p> : null}
         {!loading && !messages.length ? <p className="p-3 text-sm text-muted-foreground">{error ? "Unable to load email." : "No email in this view."}</p> : null}
@@ -232,7 +236,7 @@ export function EmailWorkspace() {
         {page?.nextPageToken ? <button className="button-secondary m-3" disabled={loading || busy} onClick={() => void loadPage(page.nextPageToken!)} type="button">Load more</button> : null}
       </section>
       <div className={showProfile ? "hidden md:block" : ""}><EmailReader hiddenOnPhone={showList || (!selected && !composer && !draft)}>
-        <div className="mb-3 flex flex-wrap gap-2"><button className="button-secondary" disabled={busy} type="button" onClick={() => { restoredThread.current=true; setShowList(true); setComposer(null); setShowProfile(false); requestAnimationFrame(() => window.scrollTo(0, listScroll.current)); }}>Back to emails</button><button className="button-secondary" type="button" onClick={() => setShowProfile(value => !value)}>Profile context</button></div>
+        <div className="sticky top-0 z-10 mb-3 flex items-center justify-between gap-2 border-b bg-card pb-2"><button className="button-secondary md:hidden" disabled={busy} type="button" onClick={() => { restoredThread.current=true; setShowList(true); setComposer(null); setShowProfile(false); requestAnimationFrame(() => window.scrollTo(0, listScroll.current)); }}>Back to emails</button>{selected || detail ? <button className="button-secondary ml-auto" type="button" onClick={() => setShowProfile(value => !value)}>Profile</button> : null}</div>
         {composer ? <form onSubmit={event => { event.preventDefault(); void saveDraft(); }} className="grid gap-3">
           <h2 className="text-lg font-bold">{composer.threadId ? "Reply" : "New email"}</h2>
           {templates.length ? <details className="rounded border p-3"><summary className="cursor-pointer text-sm font-semibold">Use approved email template</summary>
@@ -242,12 +246,12 @@ export function EmailWorkspace() {
           </details> : null}
           <label className="grid gap-1 text-sm">To<input type="email" required className="rounded border bg-background p-2" value={composer.to} onChange={event => setComposer({ ...composer, to: event.target.value })} /></label>
           <label className="grid gap-1 text-sm">Subject<input required className="rounded border bg-background p-2" value={composer.subject} onChange={event => setComposer({ ...composer, subject: event.target.value })} /></label>
-          {composer.bodyFormat === "html" ? <div><p className="mb-2 text-sm font-semibold">Template preview</p><iframe className="h-[460px] w-full rounded border bg-white" sandbox="" title="Approved email template preview" srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">${composer.body}`} /><p className="mt-2 text-xs text-muted-foreground">Template formatting is preserved in the saved draft.</p></div> : <label className="grid gap-1 text-sm">Message<textarea required rows={12} className="rounded border bg-background p-2" value={composer.body} onChange={event => setComposer({ ...composer, body: event.target.value })} /></label>}
+          {composer.bodyFormat === "html" ? <div><p className="mb-2 text-sm font-semibold">Template preview</p><EmailMessageBody bodyText="" bodyHtml={composer.body} title="Approved email template preview" /><p className="mt-2 text-xs text-muted-foreground">Template formatting is preserved in the saved draft.</p></div> : <label className="grid gap-1 text-sm">Message<textarea required rows={12} className="rounded border bg-background p-2" value={composer.body} onChange={event => setComposer({ ...composer, body: event.target.value })} /></label>}
           <p className="text-xs text-muted-foreground">Saves a Gmail draft for review. Attachments can be added in Gmail before opening the saved draft here.</p>
           <div className="flex gap-2"><button className="button-primary" disabled={busy} type="submit">Save draft</button><button className="button-secondary" disabled={busy} onClick={() => setComposer(null)} type="button">Cancel</button></div>
         </form> : <>
           {detail ? <>{thread?.savedCopy ? <p role="status" className="mb-3 rounded border p-3 text-sm">Saved copy · Last synchronized {thread.lastSyncedAt || "at an unknown time"}. Live Gmail is unavailable.</p> : null}<h2 className="break-words text-lg font-bold">{detail.subject || "(No subject)"}</h2>
-            <a className="mt-2 inline-block text-sm text-primary underline" target="_blank" rel="noopener noreferrer" href={`https://mail.google.com/mail/?authuser=${encodeURIComponent(page?.email || "")}#${draft ? "drafts" : `all/${encodeURIComponent(detail.id)}`}`}>Open in Gmail</a>
+            <details open={Boolean(draft)} className="my-3 rounded-lg border p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">Conversation actions</summary><a className="mt-2 inline-block text-sm text-primary underline" target="_blank" rel="noopener noreferrer" href={`https://mail.google.com/mail/?authuser=${encodeURIComponent(page?.email || "")}#${draft ? "drafts" : `all/${encodeURIComponent(detail.id)}`}`}>Open in Gmail</a>
             {draft ? <div className="my-3 rounded border p-3">
               <p className="text-sm font-semibold">Saved draft{` to ${draft.recipients.to}`}</p>
               {draft.recipients.cc ? <p className="break-all text-sm">Cc: {draft.recipients.cc}</p> : null}
@@ -258,16 +262,18 @@ export function EmailWorkspace() {
                 <button className="button-primary mt-3" disabled={!confirmSend || busy || !draftMessage} onClick={() => void send()} type="button">Send email</button>
               </>}
             </div> : <div className="my-3 flex flex-wrap gap-2">
-              <button className="button-secondary" disabled={busy || !emailAddress || !!thread?.savedCopy} onClick={() => setComposer({ to: emailAddress.trim(), subject: /^re:/i.test(detail.subject) ? detail.subject : `Re: ${detail.subject}`, body: "", threadId: detail.id })} type="button">Reply</button>
+
               <button className="button-secondary" disabled={busy} onClick={() => void action(async () => { await mailboxRequest(`/threads/${detail.id}/read`, { connectionId: accountId, read: !!selected?.labelIds.includes("UNREAD") }); setSelected(current => current ? { ...current, labelIds: current.labelIds.includes("UNREAD") ? current.labelIds.filter(item => item !== "UNREAD") : [...current.labelIds, "UNREAD"] } : current); await loadPage(); })} type="button">{selected?.labelIds.includes("UNREAD") ? "Mark read" : "Mark unread"}</button>
               <button className="button-secondary" disabled={busy} onClick={() => void action(async () => { await mailboxRequest(`/threads/${detail.id}/archive`, { connectionId: accountId }); setNotice("Archived in Gmail."); await loadPage(); })} type="button">Archive</button>
             </div>}
+            </details>
             {!draft && selected && profileId ? <details className="my-3 rounded border p-3"><summary className="cursor-pointer text-sm font-semibold">Reply and follow-up status</summary><EmailAttentionControls key={attentionContextKey(accountId || "",selected.id,profileId)} messageId={selected.id} profileId={profileId} onSaved={() => void loadPage()}/><p className="mt-2 text-xs text-muted-foreground">Saving an attention decision files and archives this conversation.</p></details> : null}
-            <div className="grid gap-4">{detail.messages.map(message => <article key={message.id} className="min-w-0 rounded border p-3">
-              <p className="break-all text-xs font-semibold">From {message.from} · To {message.to}</p><p className="text-xs text-muted-foreground">{message.date}</p>
-              <MessageBody body={message.bodyText} />
+            <div className="grid gap-4">{newestEmails(detail.messages).map((message,index) => <details open={index===0} key={message.id} className="min-w-0 rounded border p-3">
+              <summary className="cursor-pointer min-h-11 py-2"><span className="block break-words text-sm font-semibold">{message.from || "Unknown sender"}</span><time className="block text-xs text-muted-foreground">{formatEmailDate(message)}</time></summary><p className="break-all text-xs text-muted-foreground">To {message.to}</p>
+              <EmailMessageBody bodyText={message.bodyText} bodyHtml={message.bodyHtml} title={`Email from ${message.from || "sender"}`} />
               {message.attachments.map(file => <button className="button-secondary mt-2 max-w-full break-all" disabled={busy} type="button" key={file.attachmentId} onClick={() => void action(async () => { await downloadMailboxAttachment({ connectionId: accountId!, threadId: detail.id, messageId: message.id, attachmentId: file.attachmentId, filename: file.filename }); })}>{file.filename || "Download attachment"}</button>)}
-            </article>)}</div>
+            </details>)}</div>
+            {!draft ? <div className="mt-4">              <button className="button-secondary" disabled={busy || !emailAddress || !!thread?.savedCopy} onClick={() => setComposer({ to: emailAddress.trim(), subject: /^re:/i.test(detail.subject) ? detail.subject : `Re: ${detail.subject}`, body: "", threadId: detail.id })} type="button">Reply</button></div> : null}
           </> : <p role="status" className="text-sm text-muted-foreground">{selected ? "Opening conversation…" : "Select an email to read it, link it to a profile, or reply."}</p>}
         </>}
       </EmailReader></div>
@@ -287,11 +293,3 @@ export function EmailWorkspace() {
     </div>}
   </main>;
 }
-
-function MessageBody({ body }: { body: string }) {
-  const split = body.search(/(?:^|\n)(?:On .{5,300}wrote:|>)/);
-  const text = split < 0 ? body : body.slice(0, split);
-  const quoted = split < 0 ? "" : body.slice(split);
-  return <><p className="mt-3 whitespace-pre-wrap break-words text-sm">{text || "(No plain text body)"}</p>{quoted ? <details className="mt-3"><summary className="cursor-pointer text-xs text-muted-foreground">Quoted conversation</summary><p className="mt-2 whitespace-pre-wrap break-words text-sm text-muted-foreground">{quoted}</p></details> : null}</>;
-}
-
