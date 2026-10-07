@@ -619,6 +619,22 @@ export function GoogleValidationReview({
           <p className="text-sm text-muted-foreground" role="status">
             {selectedCleanupLabelIds.length} of {GOOGLE_PROFILE_LABEL_CLEANUP_LIMIT} selected. Clean up up to {GOOGLE_PROFILE_LABEL_CLEANUP_LIMIT} labels at a time, then select the next group.
           </p>
+          {cleanupLabels.length ? <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="button-secondary min-h-11 px-3 py-2 text-sm"
+              disabled={cleanupDeleting || cleanupLoading}
+              onClick={() => setSelectedCleanupLabelIds(cleanupLabels.slice(0, GOOGLE_PROFILE_LABEL_CLEANUP_LIMIT).map(label => label.id))}
+            >
+              {cleanupLabels.length <= GOOGLE_PROFILE_LABEL_CLEANUP_LIMIT ? "Select all" : "Select first 100"}
+            </button>
+            <button
+              type="button"
+              className="button-secondary min-h-11 px-3 py-2 text-sm"
+              disabled={cleanupDeleting || selectedCleanupLabelIds.length === 0}
+              onClick={() => setSelectedCleanupLabelIds([])}
+            >Clear selection</button>
+          </div> : null}
           {cleanupLabels.length ? (
             <div className="grid max-h-64 gap-2 overflow-y-auto">
               {cleanupLabels.map((label) => (
