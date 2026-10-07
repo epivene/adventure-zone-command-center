@@ -3,9 +3,7 @@ import { activeConnection, ConnectionError, inputHash, requireConnectionScope, t
 import { OperationStore } from "./operation-store";
 import { profileRow } from "./read-service";
 import { receipt } from "./lead-note-service";
-import { GoogleProfileLabelResolver } from "../google-workspace/google-profile-label-resolver";
-import { isCurrentProfileLabelPath } from "../google-workspace/google-profile-label-config";
-import type { GoogleGmailDraftRaw, GoogleLabelSummary } from "../google-workspace/google-api-types";
+import type { GoogleGmailDraftRaw } from "../google-workspace/google-api-types";
 
 export const draftFilingInput = z.object({ draftId: z.string().trim().min(1).max(200), profileId: z.string().uuid() }).strict();
 export const draftFilingApplyInput = draftFilingInput.extend({ expectedRevision: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
@@ -14,9 +12,6 @@ export type DraftFilingAccess = {
   connectionId: string;
   readDraft(id: string): Promise<GoogleGmailDraftRaw>;
   metadata(id: string): Promise<Metadata>;
-  labels(): Promise<GoogleLabelSummary[]>;
-  resolve(tx: SqlQuery, profileId: string): Promise<{ id: string; name: string }>;
-  modify(input: { messageId: string; addLabelIds: string[]; removeLabelIds: string[] }): Promise<void>;
 };
 type Access = () => Promise<DraftFilingAccess>;
 export class GmailDraftFilingService {
@@ -53,7 +48,7 @@ export class GmailDraftFilingService {
       subject: s.metadata.headers.subject, from: s.metadata.headers.from, to: s.metadata.headers.to,
       expectedRevision: s.revision, labelIds: s.metadata.labelIds,
       conflicts: await this.conflicts(s.access.connectionId, s.draft.threadId!),
-      instruction: "Read the current full Gmail draft and verify the event/profile match before filing. Filing changes only this unsent draft's profile label. It does not send, archive Inbox, change attention/follow-ups or certify outreach readiness." };
+      instruction: "Read the current full Gmail draft and verify the event/profile match before filing. Filing saves only an app profile association; Gmail drafts cannot carry Profiles labels. It does not send, archive Inbox, change attention/follow-ups or certify outreach readiness." };
   }
   async conflicts(connectionId: string, threadId: string, tx: SqlQuery = this.db) {
     return (await tx.query(
@@ -94,21 +89,11 @@ export class GmailDraftFilingService {
         [s.access.connectionId, s.draft.messageId])).rows;
       if ([...mappings, ...messageMappings].some(m => m.profileId !== input.profileId))
         throw new ConnectionError("EMAIL_ATTENTION_PROFILE_CONFLICT", 409);
-      const label = await s.access.resolve(tx, input.profileId);
-      if (!isCurrentProfileLabelPath(label.name))
-        throw new ConnectionError("GOOGLE_WORKSPACE_PROFILE_LABEL_CONFLICT", 409);
-      const labels = await s.access.labels();
-      const removeLabelIds = labels.filter(l => l.type === "user" && isCurrentProfileLabelPath(l.name) &&
-        l.id !== label.id && s.metadata.labelIds!.includes(l.id)).map(l => l.id);
-      // Revalidate after resolving the app's mapped label, immediately before the Gmail mutation.
-      const fresh = await this.source(tx, input);
-      if (fresh.revision !== input.expectedRevision)
-        throw new ConnectionError("CONNECTION_STALE_REVISION", 409);
-      await fresh.access.modify({ messageId: fresh.draft.messageId, addLabelIds: [label.id], removeLabelIds });
+      // Gmail forbids user labels on draft messages. Keep this an app-only
+      // association; sent/received mail uses the separate profile-label workflow.
       const verified = await this.source(tx, input);
-      if (verified.revision !== input.expectedRevision || !verified.metadata.labelIds!.includes(label.id) ||
-          removeLabelIds.some(id => verified.metadata.labelIds!.includes(id)))
-        throw new ConnectionError("CONNECTION_DRAFT_FILING_READBACK_FAILED", 409);
+      if (verified.revision !== input.expectedRevision)
+        throw new ConnectionError("CONNECTION_STALE_REVISION", 409);
       const association = await tx.query(
         `INSERT INTO google_workspace_validation_mappings(connection_id,message_id,thread_id,organization_id,contact_id,evidence_codes,created_at,updated_at)
          VALUES($1,$2,$3,$4,NULL,'["owner_authorized_draft_filing"]'::jsonb,now(),now())
@@ -119,50 +104,32 @@ export class GmailDraftFilingService {
       if (!association.rows.length) throw new ConnectionError("EMAIL_ATTENTION_PROFILE_CONFLICT", 409);
       return receipt(tx, input.profileId, `/profiles/${input.profileId}`, verified.revision, {
         draftId: input.draftId, messageId: verified.draft.messageId, threadId: verified.draft.threadId,
-        profileId: input.profileId, gmailLabelId: label.id, gmailLabelName: label.name,
+        profileId: input.profileId, filingLocation: "app", gmailLabelsChanged: false,
         state: "draft_filed", sent: false, archived: false,
-        instruction: "Verified label receipt at filing time; read the current draft again after any Gmail edit. This does not mark its content ready or update customer-reply state." });
+        instruction: "Verified app-only draft association. Gmail drafts cannot carry Profiles labels. Recheck after edits; file sent mail separately. This does not approve content or update reply state." });
   }
   async verifyCurrent(raw: z.infer<typeof draftFilingApplyInput>) {
     const input = draftFilingApplyInput.parse(raw);
     const s = await this.source(this.db, input);
     if (s.revision !== input.expectedRevision) throw new ConnectionError("CONNECTION_STALE_REVISION", 409);
-    const mapping = (await this.db.query(
-      "SELECT gmail_label_id,gmail_label_name FROM google_workspace_profile_labels WHERE connection_id=$1 AND organization_id=$2 AND state='active'",
-      [s.access.connectionId, input.profileId])).rows[0];
     const associations = await this.conflicts(s.access.connectionId, s.draft.threadId!);
-    const actualLabels = await s.access.labels();
-    if (!mapping || !isCurrentProfileLabelPath(mapping.gmail_label_name) ||
-        !s.metadata.labelIds!.includes(mapping.gmail_label_id) ||
-        !actualLabels.some(l => l.id === mapping.gmail_label_id && isCurrentProfileLabelPath(l.name)) ||
-        !associations.some(m => m.messageId === s.draft.messageId && m.profileId === input.profileId) ||
+    if (!associations.some(m => m.messageId === s.draft.messageId && m.profileId === input.profileId) ||
         associations.some(m => m.profileId !== input.profileId))
       throw new ConnectionError("CONNECTION_DRAFT_FILING_READBACK_FAILED", 409);
     return { draftId: input.draftId, messageId: s.draft.messageId, profileId: input.profileId,
-      gmailLabelId: mapping.gmail_label_id, state: "draft_filed", sent: false, archived: false };
+      filingLocation: "app", gmailLabelsChanged: false, state: "draft_filed", sent: false, archived: false };
   }
 }
 function productionAccess(db: ConnectionDatabase): Access {
   return async () => {
-    const [{ PostgresGoogleConnectionRepository }, { PostgresGoogleProfileLabelRepository }] = await Promise.all([
-      import("../google-workspace/google-connection-repository"),
-      import("../google-workspace/google-profile-label-repository"),
-    ]);
+    const { PostgresGoogleConnectionRepository } = await import("../google-workspace/google-connection-repository");
     const connections = new PostgresGoogleConnectionRepository({ pool: db });
     const before = await connections.getCurrent();
     const reader = await connections.createReadClient();
-    const writer = await connections.createGmailLabelMutationClient();
-    if (!before || !reader?.getGmailDraftRaw || !reader.getMessageMetadata || !writer ||
-        writer.connectionId !== before.id || (await connections.getCurrent())?.id !== before.id)
+    if (!before || !reader?.getGmailDraftRaw || !reader.getMessageMetadata ||
+        (await connections.getCurrent())?.id !== before.id)
       throw new ConnectionError("GOOGLE_WORKSPACE_NOT_CONNECTED", 409);
     return { connectionId: before.id,
-      readDraft: id => reader.getGmailDraftRaw!(id), metadata: id => reader.getMessageMetadata!(id),
-      labels: () => writer.client.listLabels(), modify: input => writer.client.modifyMessageLabels(input),
-      resolve: async (tx, organizationId) => {
-        const resolver = new GoogleProfileLabelResolver(new PostgresGoogleProfileLabelRepository(tx), writer.client);
-        const result = await resolver.resolve({ connectionId: before.id, organizationId });
-        if (result.status !== "resolved") throw new ConnectionError(result.code, 409);
-        return { id: result.mapping.gmailLabelId, name: result.mapping.gmailLabelName };
-      } };
+      readDraft: id => reader.getGmailDraftRaw!(id), metadata: id => reader.getMessageMetadata!(id) };
   };
 }
