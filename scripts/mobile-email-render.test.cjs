@@ -37,3 +37,12 @@ test('email link handling accepts web and mail links and rejects executable or r
  assert.equal(emailLinkUrl('mailto:organizer@event.test'),'mailto:organizer@event.test');
  assert.equal(emailLinkUrl('javascript:alert(1)'),null);assert.equal(emailLinkUrl('data:text/html,hi'),null);assert.equal(emailLinkUrl('/app-action'),null);
 });
+test('sender rows shorten address headers and render initials without exposing markup',()=>{
+ const {emailSenderName,EmailSenderAvatar}=moduleAt(dir+'email-list.tsx');
+ assert.equal(emailSenderName('"Event Organizer" <events@example.test>'),'Event Organizer');
+ assert.equal(emailSenderName('<events@example.test>'),'events@example.test');
+ assert.equal(emailSenderName(''), 'Unknown sender');
+ assert.equal(emailSenderName('<script>sender</script>'), '<script>sender</script>');
+ const markup=renderToStaticMarkup(React.createElement(EmailSenderAvatar,{sender:'Event Organizer <events@example.test>'}));
+ assert.ok(markup.includes('aria-hidden="true"')); assert.ok(markup.includes('>EO</span>'));
+});

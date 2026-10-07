@@ -1,0 +1,117 @@
+/* Mail uses quiet reading surfaces instead of the promotional display theme.
+   Sender HTML lives in a separate sandboxed document and is unaffected. */
+.email-workspace {
+  --background: 220 33% 98%;
+  --foreground: 210 6% 13%;
+  --card: 0 0% 100%;
+  --card-foreground: 210 6% 13%;
+  --border: 220 16% 90%;
+  --input: 220 16% 84%;
+  --muted: 220 30% 96%;
+  --muted-foreground: 213 5% 39%;
+  --primary: 217 89% 45%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 217 89% 93%;
+  --secondary-foreground: 217 80% 28%;
+  --ring: 217 89% 45%;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  border-radius: 24px;
+  padding: 20px;
+  font-family: Arial, system-ui, sans-serif !important;
+  line-height: 1.5;
+}
+.email-workspace :is(button, input, select, textarea, summary, h1, h2, h3, h4, h5, h6) {
+  font-family: Arial, system-ui, sans-serif !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  box-shadow: none;
+}
+.email-workspace h1 { font-size: 24px; font-weight: 500; }
+.email-workspace :is(h2,h3) { font-weight: 600; }
+.email-workspace :is(.button-primary,.button-secondary) {
+  border: 1px solid transparent;
+  border-radius: 20px;
+  box-shadow: none !important;
+  min-height: 44px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.email-workspace .button-primary {
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+}
+.email-workspace .button-secondary {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+}
+.email-workspace :is(.button-primary,.button-secondary):hover:not(:disabled) {
+  background: hsl(var(--secondary));
+}
+.email-workspace :is(button,a,summary):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+.email-workspace button:disabled { opacity: .55; cursor: not-allowed; }
+.email-workspace nav[aria-label="Email views"] { border-bottom: 0; }
+.email-workspace nav[aria-label="Email views"] button { border-radius: 24px; font-weight: 500; }
+.email-workspace input[aria-label="Search emails"] {
+  min-height: 48px;
+  border-radius: 24px;
+  border-color: transparent;
+  background: hsl(var(--muted));
+  padding: 12px 20px;
+}
+.email-message-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  border: 0;
+  box-shadow: none !important;
+  border-radius: 0;
+  font-family: Arial, system-ui, sans-serif !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+.email-message-copy { flex: 1; min-width: 0; }
+.email-sender-avatar {
+  display: flex;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: #d3e3fd;
+  color: #174ea6;
+  font: 500 15px/1 Arial, system-ui, sans-serif;
+}
+.dark .email-workspace {
+  --background: 210 5% 13%;
+  --foreground: 220 14% 90%;
+  --card: 210 5% 16%;
+  --card-foreground: 220 14% 90%;
+  --border: 210 5% 28%;
+  --input: 210 5% 35%;
+  --muted: 210 5% 20%;
+  --muted-foreground: 220 9% 72%;
+  --primary: 217 90% 80%;
+  --primary-foreground: 210 5% 13%;
+  --secondary: 217 31% 29%;
+  --secondary-foreground: 217 95% 88%;
+  --ring: 217 90% 80%;
+}
+@media (max-width: 767px) {
+  .email-workspace { padding: 12px 4px; border-radius: 16px; }
+  .email-workspace .email-message-row { padding: 14px 12px; }
+  .email-workspace form:has(input[aria-label="Search emails"]) { flex-wrap: wrap; }
+  .email-workspace input[aria-label="Search emails"] { flex-basis: 100%; }
+}
+
+.email-workspace .email-message-row { background: hsl(var(--card)); }
+.email-workspace .email-message-row[aria-pressed="true"] { background: hsl(var(--secondary)); }
+.email-workspace .email-message-row:hover:not(:disabled) { background: hsl(var(--muted)); }
+.email-message-row p { margin: 4px 0 0; }
