@@ -893,15 +893,23 @@
     .header-facebook svg { width: 24px; height: 24px; }
     .header-facebook:hover { background: #0866d9; transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--az-navy); }
     .header-facebook:focus-visible { outline: 3px solid var(--az-pink); outline-offset: 5px; }
-    @media (min-width: 768px) and (max-width: 1319px) {
+    @media (min-width: 768px) and (max-width: 1179px) {
       .desktop-nav { display: none; }
       .menu-toggle { display: inline-flex; }
       .desktop-book .button { padding: 10px 14px; font-size: 11px; box-shadow: 5px 5px 0 var(--az-navy); }
     }
-    @media (min-width: 1320px) {
+    @media (min-width: 1180px) {
       .header-row { gap: 20px; }
       .desktop-nav { gap: 20px; font-size: 13px; }
       .site-header .logo { width: 180px; }
+    }
+    /* Keep every desktop navigation link visible alongside Facebook. */
+    @media (min-width: 1180px) and (max-width: 1399px) {
+      .header-row { gap: 16px; }
+      .site-header .logo { width: 156px; }
+      .desktop-nav { gap: 14px; font-size: 12px; }
+      .header-actions { gap: 12px; }
+      .desktop-book .button { padding: 10px 14px; font-size: 11px; box-shadow: 5px 5px 0 var(--az-navy); }
     }
     @media (max-width: 767px) {
       .site-header .container { width: calc(100% - 24px); }
