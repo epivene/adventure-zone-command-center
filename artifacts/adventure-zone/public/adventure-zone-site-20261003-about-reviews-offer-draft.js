@@ -881,6 +881,40 @@
       .tube-man-sway, .tube-man-wobble { animation: none; }
       .convention-welcome, .convention-dialog { transition: none; }
     }
+
+    /* Social link belongs to the header layout at every screen size. */
+    .header-actions { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+    .header-facebook {
+      display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px;
+      width: 44px; height: 44px; border: 3px solid var(--az-navy); border-radius: 6px;
+      color: #fff; background: #1877f2; box-shadow: 4px 4px 0 var(--az-navy);
+      transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
+    }
+    .header-facebook svg { width: 24px; height: 24px; }
+    .header-facebook:hover { background: #0866d9; transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--az-navy); }
+    .header-facebook:focus-visible { outline: 3px solid var(--az-pink); outline-offset: 5px; }
+    @media (min-width: 768px) and (max-width: 1319px) {
+      .desktop-nav { display: none; }
+      .menu-toggle { display: inline-flex; }
+      .desktop-book .button { padding: 10px 14px; font-size: 11px; box-shadow: 5px 5px 0 var(--az-navy); }
+    }
+    @media (min-width: 1320px) {
+      .header-row { gap: 20px; }
+      .desktop-nav { gap: 20px; font-size: 13px; }
+      .site-header .logo { width: 180px; }
+    }
+    @media (max-width: 767px) {
+      .site-header .container { width: calc(100% - 24px); }
+      .header-row { gap: 8px; }
+      .site-header .logo { width: 64px; max-height: 40px; }
+      .header-actions { gap: 6px; margin-left: auto; }
+      .header-facebook { flex-basis: 36px; width: 36px; height: 36px; box-shadow: 3px 3px 0 var(--az-navy); }
+      .header-facebook svg { width: 21px; height: 21px; }
+      .header-actions .desktop-book { margin-left: 0; }
+      .header-actions .desktop-book .button { min-height: 36px; padding: 6px; font-size: 7px; gap: 6px; }
+      .header-actions .desktop-book .az-icon { width: 16px; height: 16px; }
+      .header-actions .menu-toggle { width: 36px; height: 36px; }
+    }
   `;
 
   function feature(iconName, title, copy, color) {
@@ -1033,8 +1067,13 @@
           <nav class="desktop-nav" aria-label="Primary navigation">
             <a href="#about">About</a><a href="#packages">Packages</a><a href="#experience">The Experience</a><a href="#safety">Safety</a><a href="#partnerships">Booking Structures</a><a href="#faq">FAQ</a>
           </nav>
-          <div class="desktop-book"><a class="button" href="#contact">Plan Your Event ${icon("arrow")}</a></div>
-          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="az-mobile-nav" aria-label="Open menu">${icon("menu")}</button>
+          <div class="header-actions">
+            <a class="header-facebook" href="https://www.facebook.com/BounceHouseCarnival" target="_blank" rel="noopener noreferrer" aria-label="Visit BounceHouseCarnival on Facebook (opens in a new tab)" title="Follow us on Facebook">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M13.5 22v-9h3l.5-3.5h-3.5V7.3c0-1 .3-1.8 1.8-1.8H17V2.3c-.3 0-1.3-.3-2.5-.3-2.5 0-4.2 1.5-4.2 4.3v3.2H7V13h3.3v9z"/></svg>
+            </a>
+            <div class="desktop-book"><a class="button" href="#contact">Plan Your Event ${icon("arrow")}</a></div>
+            <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="az-mobile-nav" aria-label="Open menu">${icon("menu")}</button>
+          </div>
         </div>
         <nav class="mobile-nav" id="az-mobile-nav" aria-label="Mobile navigation">
           <a href="#about">About ${icon("chevron")}</a><a href="#packages">Packages ${icon("chevron")}</a><a href="#experience">The Experience ${icon("chevron")}</a><a href="#safety">Safety &amp; Trust ${icon("chevron")}</a><a href="#partnerships">Booking Structures ${icon("chevron")}</a><a href="#gallery">Gallery ${icon("chevron")}</a><a href="#faq">FAQ ${icon("chevron")}</a><a href="#contact">Contact ${icon("chevron")}</a>
