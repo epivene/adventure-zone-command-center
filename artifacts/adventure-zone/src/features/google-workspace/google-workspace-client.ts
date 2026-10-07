@@ -530,9 +530,14 @@ export async function getGoogleProfileLabelCleanupPreview(): Promise<{
   );
 }
 
+export const GOOGLE_PROFILE_LABEL_CLEANUP_LIMIT = 100;
+
 export async function deleteGoogleProfileLabels(
   labelIds: string[],
 ): Promise<GoogleProfileLabelCleanupResult> {
+  if (labelIds.length === 0 || labelIds.length > GOOGLE_PROFILE_LABEL_CLEANUP_LIMIT) {
+    throw new Error(`Select 1–${GOOGLE_PROFILE_LABEL_CLEANUP_LIMIT} labels at a time. Delete this group, then select the next group.`);
+  }
   return responseJson(
     await apiFetch("/google-workspace/profile-labels/cleanup", {
       method: "POST",
