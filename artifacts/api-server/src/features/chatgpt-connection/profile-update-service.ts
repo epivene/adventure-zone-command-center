@@ -19,39 +19,14 @@ import {
   insertResearchNote,
 } from "./lead-note-service";
 import { normalizeNorthAmericanPhone } from "../contacts/phone-normalization";
-const fields = {
-  phone: "phone",
-  website: "website",
-  address1: "address_1",
-  address2: "address_2",
-  city: "city",
-  region: "region",
-  postalCode: "postal_code",
-} as const;
-const short = z.string().trim().max(500).nullable();
-const valuesSchema = z
-  .object({
-    phone: short.optional(),
-    website: z
-      .string()
-      .url()
-      .max(2048)
-      .refine(
-        (s) =>
-          ["http:", "https:"].includes(new URL(s).protocol) &&
-          !new URL(s).username &&
-          !new URL(s).password,
-      )
-      .nullable()
-      .optional(),
-    address1: short.optional(),
-    address2: short.optional(),
-    city: short.optional(),
-    region: short.optional(),
-    postalCode: short.optional(),
-  })
-  .strict()
-  .refine((v) => Object.keys(v).length > 0);
+import { sourceSchema } from "./lead-note-service";
+import { profileFields as fields, profileValuesSchema as valuesSchema, profileDetails, profileValueShape } from "./profile-fields";
+export const saveProfileInput = z.object({
+  profileId: z.string().uuid(), expectedRevision: z.string().min(1).max(100),
+  values: z.object(profileValueShape).strict().refine(v => Object.values(v).some(x => x !== undefined)),
+  reason: z.string().trim().min(1).max(1000),
+  sources: z.array(sourceSchema).min(1).max(20),
+}).strict();
 export type UpdateProposal = {
   id: string;
   connectionId: string;
@@ -68,6 +43,66 @@ export class ProfileUpdateService {
   private operations: OperationStore;
   constructor(private db: ConnectionDatabase) {
     this.operations = new OperationStore(db);
+  }
+  async save(
+    p: ConnectionPrincipal, key: MutationKey, raw: unknown,
+  ) {
+    requireConnectionScope(p, "crm:update");
+    const parsed = saveProfileInput.safeParse(raw);
+    if (!parsed.success) throw new ConnectionError("CONNECTION_INVALID_PROFILE_FIELDS");
+    const input = parsed.data;
+    const entries = Object.entries(input.values).filter((entry): entry is [string, string | null] => entry[1] !== undefined);
+    // Standing edit consent does not authorize clearing saved information.
+    if (entries.some(([, value]) => value == null || value.trim() === ""))
+      throw new ConnectionError("CONNECTION_PROFILE_DELETION_APPROVAL_REQUIRED", 403,
+        "Removing saved information requires an owner-approved profile proposal.");
+    if (/chatgpt|openai|\bAI\b/i.test(input.reason) ||
+        (typeof input.values.about === "string" && /chatgpt|openai|\bAI\b/i.test(input.values.about)))
+      throw new ConnectionError("CONNECTION_INVALID_PROFILE_FIELDS", 400,
+        "Keep profile text and edit reasons plain, without provider references.");
+    return this.operations.perform(p, "save_profile_update", key, input, async tx => {
+      const row = await profileRow(tx, input.profileId, true);
+      if (row.revision !== input.expectedRevision)
+        throw new ConnectionError("CONNECTION_STALE_REVISION", 409);
+      const details = profileDetails(row);
+      const changes = entries.filter(([field, value]) => (row[fields[field as keyof typeof fields]] ?? null) !== value);
+      if (!changes.length)
+        return receipt(tx, row.id, details.href, row.revision, { ...details, changed: false });
+      if (changes.some(([field]) => field !== "about") && !input.sources.some(source => source.verification === "verified"))
+        throw new ConnectionError("CONNECTION_VERIFIED_SOURCE_REQUIRED");
+      const newWebsite = changes.find(([field]) => field === "website")?.[1];
+      if (newWebsite) {
+        const target = new URL(newWebsite);
+        const sameSite = input.sources.some(source => {
+          if (source.verification !== "verified") return false;
+          const url = new URL(source.url);
+          return url.hostname.toLowerCase().replace(/^www\./, "") === target.hostname.toLowerCase().replace(/^www\./, "")
+            && url.port === target.port;
+        });
+        if (!sameSite) throw new ConnectionError("CONNECTION_WEBSITE_SOURCE_MISMATCH");
+      }
+      const before = Object.fromEntries(changes.map(([field]) => [field, row[fields[field as keyof typeof fields]] ?? null]));
+      const params: unknown[] = [row.id];
+      const assignments = changes.map(([field, value]) => {
+        params.push(value);
+        return fields[field as keyof typeof fields] + "=$" + params.length;
+      });
+      if (changes.some(([field]) => field === "phone")) {
+        params.push(normalizeNorthAmericanPhone(input.values.phone!));
+        assignments.push("normalized_phone=$" + params.length);
+      }
+      await tx.query("UPDATE organizations SET " + assignments.join(",") + ",updated_at=clock_timestamp() WHERE id=$1", params);
+      const updated = await profileRow(tx, row.id);
+      await tx.query(
+        'INSERT INTO audit_entries(entity_type,entity_id,action,"before","after") VALUES(\'organization\',$1,\'update\',$2::jsonb,$3::jsonb)',
+        [row.id, JSON.stringify(before), JSON.stringify({
+          values: Object.fromEntries(changes), reason: input.reason, sources: input.sources,
+          connectionId: p.connectionId, clientId: p.clientId, ownerId: p.ownerId,
+          priorRevision: row.revision, revision: updated.revision,
+        })],
+      );
+      return receipt(tx, row.id, details.href, updated.revision, { ...profileDetails(updated), changed: true });
+    });
   }
   async propose(
     p: ConnectionPrincipal,

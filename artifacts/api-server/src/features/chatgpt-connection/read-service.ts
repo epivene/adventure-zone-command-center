@@ -1,6 +1,8 @@
 import { emailReviewToolReminder } from "../email-next-step-review";
 import { readOperational } from "./operational-reads";
 import { z } from "zod";
+import { profileDetails } from "./profile-fields";
+import { readProfileRecords, readProfileRecord } from "./profile-record-reads";
 import {
   activeConnection,
   requireConnectionScope,
@@ -76,6 +78,12 @@ export class ConnectionReadService {
     requireConnectionScope(p, "crm:read");
     await activeConnection(this.db, p);
   }
+  async details(p: ConnectionPrincipal, input: { profileId: string }) {
+    await this.authorize(p);
+    return profileDetails(await profileRow(this.db, input.profileId));
+  }
+  async records(p: ConnectionPrincipal, input: unknown) { return readProfileRecords(this.db, p, input); }
+  async record(p: ConnectionPrincipal, input: unknown) { return readProfileRecord(this.db, p, input); }
   async search(
     p: ConnectionPrincipal,
     input: {
