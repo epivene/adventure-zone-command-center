@@ -1,3 +1,5 @@
+import { EmailMessageBody } from "@/features/emails/email-message-body";
+import { formatEmailDate, newestEmails } from "@/features/emails/email-presentation";
 import { useEffect, useState } from "react";
 import { ExternalLink, FileText, Mail, Paperclip } from "lucide-react";
 
@@ -121,7 +123,7 @@ function ThreadDetail({
           {savedLabel}
         </p>
       ) : null}
-      {thread.messages.map((message) => (
+      {newestEmails(thread.messages).map((message) => (
         <article
           className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950/40"
           key={message.id}
@@ -133,11 +135,9 @@ function ThreadDetail({
               </p>
               <p>To: {message.to || "Unknown recipient"}</p>
             </div>
-            <span className="capitalize">{message.direction}</span>
+            <div className="text-right"><time className="block">{formatEmailDate(message)}</time><span className="capitalize">{message.direction}</span></div>
           </div>
-          <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-800 dark:text-slate-100">
-            {message.bodyText || "(No readable text body)"}
-          </p>
+          <EmailMessageBody bodyText={message.bodyText} bodyHtml={message.bodyHtml} title={`Profile email from ${message.from || "sender"}`} />
           {message.attachments.length > 0 ? (
             <div className="mt-3 grid gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -255,6 +255,7 @@ export function ProfileGoogleConversationCard({
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+            <time>{formatEmailDate(conversation,true)}</time>
             {conversation.hasAttachments ? <span>Attachment</span> : null}
             <span>{loading ? "Opening…" : thread ? "Hide" : "Open"}</span>
           </div>
@@ -455,7 +456,7 @@ function ProfileGoogleEmailView({organizationId, state, readOnly = false, getThr
           ) : null}
           {conversations.length > 0 ? (
             <div className="mt-2 grid gap-2">
-              {conversations.map((conversation) => (
+              {newestEmails(conversations).map((conversation) => (
                 <ProfileGoogleConversationCard
                   conversation={conversation}
                   key={conversation.threadId}
@@ -476,7 +477,7 @@ function ProfileGoogleEmailView({organizationId, state, readOnly = false, getThr
                 Older conversations are preserved for relationship context but are not counted as current-year emails.
               </p>
               <div className="mt-3 grid gap-2">
-                {historicalConversations.map((conversation) => (
+                {newestEmails(historicalConversations).map((conversation) => (
                   <ProfileGoogleConversationCard
                     conversation={conversation}
                     key={conversation.threadId}

@@ -1,3 +1,5 @@
+import { EmailMessageBody } from "@/features/emails/email-message-body";
+import { formatEmailDate, newestEmails } from "@/features/emails/email-presentation";
 import { readReviewContext, writeReviewContext, reviewSelectionUrl } from "@/features/emails/email-workspace-state";
 import { EmailAttentionControls } from "./email-attention-controls";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -81,6 +83,7 @@ export function GoogleValidationReview({
   presentation = "legacy",
   initialMessageId,
   contextAccountId,
+  onReadingChange,
   checkGmailOnMount = false,
   showGmailActions = checkGmailOnMount,
   onPendingCountChange,
@@ -89,6 +92,7 @@ export function GoogleValidationReview({
   presentation?: "legacy" | "workspace";
   initialMessageId?: string;
   contextAccountId?: string;
+  onReadingChange?(reading: boolean): void;
   checkGmailOnMount?: boolean;
   showGmailActions?: boolean;
   onPendingCountChange?(count: number): void;
@@ -97,6 +101,7 @@ export function GoogleValidationReview({
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(initialMessageId || null);
   const compact = presentation === "workspace";
   const [reviewPane, setReviewPane] = useState<"list" | "reader">(initialMessageId ? "reader" : "list");
+  useEffect(() => {onReadingChange?.(compact && !!selectedReviewId && reviewPane==="reader");},[compact,selectedReviewId,reviewPane,onReadingChange]);
   const reviewScroll = useRef(0);
   const [reviewHydrated, setReviewHydrated] = useState<string | null>(null);
   function selectReview(id: string) {
@@ -285,12 +290,12 @@ export function GoogleValidationReview({
   }, [checkGmailOnMount]);
 
   const pending = useMemo(
-    () => items.filter((item) => item.state === "pending"),
+    () => newestEmails(items.filter((item) => item.state === "pending")),
     [items],
   );
   const resolvedCount = items.filter((item) => item.state === "resolved").length;
   const ignoredCount = items.filter((item) => item.state === "ignored").length;
-  const history = items.filter((item) => item.state !== "pending");
+  const history = newestEmails(items.filter((item) => item.state !== "pending"));
 
   const [attentionSelection, setAttentionSelection] = useState<{messageId:string;profileId:string}|null>(null);
   function assign(item: GoogleValidationReviewItem, organizationId: string) {
@@ -533,7 +538,7 @@ export function GoogleValidationReview({
   return (
     <section className={compact ? "grid min-w-0 gap-4" : "grid gap-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900 dark:bg-amber-950/20"}>
       {attentionSelection ? <EmailAttentionControls key={attentionSelection.messageId + attentionSelection.profileId} {...attentionSelection} onSaved={() => void load()} onCancel={() => setAttentionSelection(null)} /> : null}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className={(compact && selectedReviewId && reviewPane==="reader" ? "hidden md:flex" : "flex")+" flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"}>
         <div>
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
             Needs Review
@@ -662,7 +667,7 @@ export function GoogleValidationReview({
       ) : (
         <div className={compact ? "grid min-w-0 gap-4 md:grid-cols-[minmax(220px,0.8fr)_minmax(0,2fr)]" : "grid gap-3"}>
           {compact ? <div aria-label="Emails needing review" className={`min-w-0 divide-y rounded-xl border bg-card ${selectedReviewId && reviewPane==="reader" ? "hidden md:block" : ""}`}>
-            {pending.map(item => <button key={item.messageId} type="button" disabled={busyMessageId !== null} aria-pressed={selectedReviewId === item.messageId} onClick={() => selectReview(item.messageId)} className={`block min-h-11 w-full p-3 text-left hover:bg-muted ${selectedReviewId === item.messageId ? "bg-secondary" : ""}`}><p className="truncate text-sm font-semibold">{item.from || "Unknown sender"}</p><p className="mt-1 truncate text-sm">{item.subject || "(No subject)"}</p><p className="mt-1 text-xs text-muted-foreground">Needs profile review</p></button>)}
+            {pending.map(item => <button key={item.messageId} type="button" disabled={busyMessageId !== null} aria-pressed={selectedReviewId === item.messageId} onClick={() => selectReview(item.messageId)} className={`block min-h-20 w-full px-4 py-3 text-left normal-case hover:bg-muted ${selectedReviewId === item.messageId ? "bg-secondary" : ""}`}><div className="flex items-start justify-between gap-2"><p className="min-w-0 truncate text-sm font-semibold">{item.from || "Unknown sender"}</p><time className="shrink-0 text-xs text-muted-foreground">{formatEmailDate(item,true)}</time></div><p className="mt-1 truncate text-sm">{item.subject || "(No subject)"}</p><p className="mt-1 text-xs text-muted-foreground">Needs profile review</p></button>)}
           </div> : null}
           {compact && !selectedReviewId ? <p className="hidden rounded-xl border bg-card p-5 text-sm text-muted-foreground md:block">Select a conversation to review it.</p> : null}
           {(compact ? pending.filter(item => item.messageId === selectedReviewId) : pending).map((item) => {
@@ -694,19 +699,20 @@ export function GoogleValidationReview({
                         Has attachment
                       </span>
                     ) : null}
-                    <button
+                    {!compact || threadError ? <button
                       aria-expanded={Boolean(thread)}
-                      aria-label={`${thread ? "Hide" : "View"} email: ${item.subject || "(No subject)"}`}
+                      aria-label={`${threadError ? "Retry" : thread ? "Hide" : "View"} email: ${item.subject || "(No subject)"}`}
                       className="button-secondary inline-flex min-h-10 items-center gap-1.5 px-3 py-2 text-sm"
                       disabled={opening}
                       onClick={() => void toggleThread(item)}
                       type="button"
                     >
-                      {opening ? "Opening…" : thread ? "Hide email" : "View email"}
-                    </button>
+                      {opening ? "Opening…" : threadError ? "Retry email" : thread ? "Hide email" : "View email"}
+                    </button> : null}
                   </div>
                 </div>
 
+                {compact && opening ? <p className="mt-3 text-sm text-muted-foreground" role="status">Opening email…</p> : null}
                 {threadError ? (
                   <p className="mt-3 text-sm font-semibold text-rose-700" role="alert">
                     {threadError}
@@ -729,7 +735,7 @@ export function GoogleValidationReview({
                         Open in Gmail <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     </div>
-                    {thread.messages.map((message) => (
+                    {newestEmails(thread.messages).map((message) => (
                       <article
                         className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950/40"
                         key={message.id}
@@ -741,11 +747,9 @@ export function GoogleValidationReview({
                             </p>
                             <p className="break-all">To: {message.to || "Unknown recipient"}</p>
                           </div>
-                          <span className="max-w-full break-words">{message.date}</span>
+                          <span className="max-w-full break-words">{formatEmailDate(message)}</span>
                         </div>
-                        <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-800 dark:text-slate-100">
-                          {message.bodyText || "(No readable text body)"}
-                        </p>
+                        <EmailMessageBody bodyText={message.bodyText} bodyHtml={message.bodyHtml} title={`Review email from ${message.from || "sender"}`} />
                         {message.attachments.length ? (
                           <div className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300">
                             {message.attachments.map((attachment) => {

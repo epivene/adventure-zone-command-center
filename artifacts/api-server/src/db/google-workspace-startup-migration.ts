@@ -226,6 +226,7 @@ export async function ensureGoogleWorkspaceSchema(
         date_value text NOT NULL DEFAULT '',
         direction text NOT NULL DEFAULT 'unknown',
         body_text text NOT NULL DEFAULT '',
+        body_html text,
         attachments_json jsonb NOT NULL DEFAULT '[]'::jsonb,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now(),
@@ -238,6 +239,7 @@ export async function ensureGoogleWorkspaceSchema(
         CONSTRAINT google_workspace_profile_email_messages_attachments_array
           CHECK (jsonb_typeof(attachments_json) = 'array')
       );
+      ALTER TABLE google_workspace_profile_email_messages ADD COLUMN IF NOT EXISTS body_html text;
       CREATE INDEX IF NOT EXISTS google_workspace_profile_email_messages_conversation_idx
         ON google_workspace_profile_email_messages
           (connection_id, conversation_id, internal_date_ms, created_at);
