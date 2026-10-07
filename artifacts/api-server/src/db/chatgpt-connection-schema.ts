@@ -29,4 +29,11 @@ export async function ensureChatGPTConnectionSchema(db: SqlQuery) {
     .filter(Boolean)) {
     await db.query(statement);
   }
+  // About historically used lazy route DDL. Install it before connector saves.
+  // The isolated SQL fixture creates its CRM tables after connection tables.
+  await db.query(`DO $$ BEGIN
+    IF to_regclass('organizations') IS NOT NULL THEN
+      ALTER TABLE organizations ADD COLUMN IF NOT EXISTS description text;
+    END IF;
+  END; $$`);
 }

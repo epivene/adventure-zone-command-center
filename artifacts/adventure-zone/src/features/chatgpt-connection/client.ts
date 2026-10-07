@@ -20,10 +20,10 @@ export async function connectionRequest(
   return data;
 }
 export const scopeLabels: Record<string, string> = {
-  "crm:read": "Read profiles, history, saved document text and follow-ups",
+  "crm:read": "Read saved app records, profile history, emails, contracts, invoices and document text",
   "crm:append": "Create researched leads and append notes",
   "crm:update":
-    "Propose profile changes and apply exact owner-approved changes",
+    "Edit notes and profiles with saved history; removing information and merging profiles need exact approval",
   "drafts:write": "Save and edit app drafts",
   "followups:write": "Create and edit follow-up reminders",
 };
