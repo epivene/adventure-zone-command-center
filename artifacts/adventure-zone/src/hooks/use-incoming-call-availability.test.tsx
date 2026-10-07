@@ -26,7 +26,7 @@ class FakeDevice implements BrowserVoiceDevice {
   readonly updateToken = vi.fn().mockResolvedValue(undefined);
   readonly connect =
     vi.fn<(params: { sessionId: string }) => Promise<BrowserVoiceCall>>();
-  readonly listAudioDevices = vi.fn().mockResolvedValue({
+  readonly listAudioDevices = vi.fn<BrowserVoiceDevice["listAudioDevices"]>().mockResolvedValue({
     inputs: [],
     outputs: [],
   });
@@ -51,6 +51,7 @@ describe("useIncomingCallAvailability", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    window.localStorage.clear();
     const stop = vi.fn();
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
@@ -110,4 +111,48 @@ describe("useIncomingCallAvailability", () => {
     );
     unmount();
   });
+  it("configures input and speaker before registering for incoming calls", async () => {
+    const device = new FakeDevice();
+    device.listAudioDevices.mockResolvedValue({
+      inputs: [{deviceId:"default",label:"Microphone"} as MediaDeviceInfo],
+      outputs: [{deviceId:"default",label:"Headphones"} as MediaDeviceInfo],
+    });
+    device.selectOutput.mockResolvedValue(true);
+    const {result,unmount}=renderHook(()=>useIncomingCallAvailability(()=>device,{enabled:true}));
+    await act(async()=>{await result.current.turnOn();});
+    expect(device.selectInput).toHaveBeenCalledWith("default");
+    expect(device.selectOutput).toHaveBeenCalledWith("default");
+    expect(device.selectInput.mock.invocationCallOrder[0]).toBeLessThan(device.register.mock.invocationCallOrder[0]);
+    expect(device.selectOutput.mock.invocationCallOrder[0]).toBeLessThan(device.register.mock.invocationCallOrder[0]);
+    expect(result.current.audio?.inputId).toBe("default");
+    expect(result.current.state).toBe("ready");
+    unmount();
+  });
+
+  it("allows an available listener to change mic and releases the device when turned off", async () => {
+    const device=new FakeDevice();
+    const {result,unmount}=renderHook(()=>useIncomingCallAvailability(()=>device,{enabled:true}));
+    await act(async()=>{await result.current.turnOn();});
+    await act(async()=>{await result.current.selectAudio("input","voicemod");});
+    expect(device.selectInput).toHaveBeenLastCalledWith("voicemod");
+    expect(result.current.audio?.inputId).toBe("voicemod");
+    await act(async()=>{await result.current.turnOff();});
+    expect(device.destroy).toHaveBeenCalled();
+    expect(incomingApi.releaseLease).toHaveBeenCalled();
+    expect(result.current.state).toBe("off");
+    unmount();
+  });
+
+  it("does not register or retain a lease when microphone setup fails", async () => {
+    const device=new FakeDevice();device.selectInput.mockRejectedValue(new Error("Microphone blocked"));
+    const {result,unmount}=renderHook(()=>useIncomingCallAvailability(()=>device,{enabled:true}));
+    await act(async()=>{await result.current.turnOn();});
+    expect(device.register).not.toHaveBeenCalled();
+    expect(device.destroy).toHaveBeenCalled();
+    expect(incomingApi.releaseLease).toHaveBeenCalled();
+    expect(result.current.state).toBe("unavailable");
+    expect(result.current.audioError).toBe("Microphone blocked");
+    unmount();
+  });
+
 });

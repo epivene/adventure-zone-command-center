@@ -50,6 +50,7 @@ export interface BrowserVoiceDevice {
   }>;
   selectInput(deviceId: string): Promise<void>;
   selectOutput(deviceId: string): Promise<boolean>;
+  testOutput?(): Promise<void>;
   destroy(): Promise<void>;
   on(
     event: "registered" | "unregistered" | "tokenWillExpire" | "incoming" | "error",

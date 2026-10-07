@@ -158,6 +158,12 @@ export class TwilioBrowserDevice implements BrowserVoiceDevice {
     return true;
   }
 
+  async testOutput(): Promise<void> {
+    const audio = this.requireDevice().audio;
+    if (!audio?.isOutputSelectionSupported) throw new Error("Speaker testing is unavailable.");
+    await audio.speakerDevices.test();
+  }
+
   async destroy(): Promise<void> {
     for (const call of this.calls) {
       call.removeListeners();
