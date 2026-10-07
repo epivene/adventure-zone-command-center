@@ -1,3 +1,4 @@
+import type { ScheduleDateProvenance } from "@/features/calendar/schedule-date-status";
 export type Assignment = {
   id: string;
   assigneeKind: "office" | "owner";
@@ -13,6 +14,7 @@ export type Assignment = {
 };
 
 export type BossBooking = {
+  dateProvenance?: ScheduleDateProvenance;
   id: string;
   organizationId?: string | null;
   name?: string | null;

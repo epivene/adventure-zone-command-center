@@ -1,3 +1,4 @@
+import type { ScheduleDateProvenance } from "@/features/calendar/schedule-date-status";
 import type {
   BookingStatus,
   Probability,
@@ -18,6 +19,7 @@ export type RouteMappingState =
   | "needs_mapping_missing_location";
 
 export type MapEvent = {
+  dateProvenance?: ScheduleDateProvenance;
   id: string;
   organizationId?: string | null;
   name: string;

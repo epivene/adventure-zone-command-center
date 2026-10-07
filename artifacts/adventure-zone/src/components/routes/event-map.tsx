@@ -1,3 +1,4 @@
+import { ScheduleDateNotice } from "@/components/schedule/schedule-date-issues";
 "use client";
 
 import { Link } from "wouter";
@@ -172,7 +173,7 @@ function EventRows({
                   {[event.city, event.region].filter(Boolean).join(", ")}
                   {event.travelLegName ? ` · ${event.travelLegName}` : ""}
                 </p>
-                {!event.startsAt ? <p className="text-xs font-semibold text-amber-700">Needs dates</p> : null}
+                <ScheduleDateNotice event={event} readOnly={profileBasePath !== "/profiles"} />
                 {!event.travelLegId ? <p className="text-xs font-semibold text-amber-700">Needs leg</p> : null}
                 {showBookingLinks ? <Link className="mt-2 block text-sm font-semibold text-blue-700 underline" href={operationsScheduleHref({season:event.planningSeasonYear,legId:event.travelLegId,bookingId:event.id}).replace('/schedule',profileBasePath==='/boss/profiles'?'/boss/schedule':'/schedule')}>Operating plan for {event.name}</Link> : null}
                 {unmapped ? <p className="text-xs font-semibold text-amber-700">Needs mapping</p> : null}
@@ -742,7 +743,7 @@ export function EventMap({
 
       <div className="grid gap-5 xl:grid-cols-2">
         <EventList events={mappedEvents.filter(event => event.startsAt)} title="Route events · travel order" groupByLeg legOrderById={legOrderById} focusedEventId={focusedEventId} onFocus={(event) => setFocusedEventId(event.id)} profileBasePath={profileBasePath} showBookingLinks />
-        {mappedEvents.some(event => !event.startsAt) ? <EventList events={mappedEvents.filter(event => !event.startsAt)} title="Dates not recorded" profileBasePath={profileBasePath} showBookingLinks /> : null}
+        {mappedEvents.some(event => !event.startsAt) ? <EventList events={mappedEvents.filter(event => !event.startsAt)} title="Date checks" profileBasePath={profileBasePath} showBookingLinks /> : null}
         <EventList
           events={unmappedEvents}
           title="Location needs mapping"
