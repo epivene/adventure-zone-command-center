@@ -1,3 +1,4 @@
+import { ScheduleDateIssues } from "@/components/schedule/schedule-date-issues";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BookingLegOperationsCard } from '@/components/bookings/leg-operations-panel';
 import { bossOperationsClient } from '@/features/bookings/booking-leg-operations-client';
@@ -117,6 +118,7 @@ function asMapEvent(booking: BossBooking): MapEvent {
     locationLabel: booking.locationLabel ?? null,
     mappingState: booking.mappingState,
     seasonYear: booking.seasonYear ?? null,
+    dateProvenance: booking.dateProvenance,
     startsAt: booking.startsAt ? new Date(booking.startsAt) : null,
     endsAt: booking.endsAt ? new Date(booking.endsAt) : null,
     reservedStartsAt: booking.reservedStartsAt ? new Date(booking.reservedStartsAt) : null,
@@ -297,7 +299,7 @@ export default function BossSchedulePage() {
                   </button>
                 </div>
               ) : null}
-              {calendarEvents.some(event => !event.startsAt) ? <section aria-label="Needs dates" className="rounded-xl border bg-white p-3 text-sm"><h3 className="font-semibold">Needs dates</h3>{calendarEvents.filter(event => !event.startsAt).map(event => <p key={event.id}>{'organizationId' in event && event.organizationId ? <Link href={`/boss/profiles/${event.organizationId}?bookingId=${event.id}`}>{'name' in event ? event.name : 'Event'}</Link> : 'name' in event ? event.name : 'Event'}</p>)}</section> : null}
+              <ScheduleDateIssues events={calendarEvents} profileBasePath="/boss/profiles" season={season} readOnly />
               <EventCalendar colors={schedule?.displaySettings} events={calendarEvents} initialMonth={activeMonth} onMonthChange={setActiveMonth} profileBasePath="/boss/profiles" readOnly />
             </section>
           ) : (

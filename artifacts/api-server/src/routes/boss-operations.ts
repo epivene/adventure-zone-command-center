@@ -74,6 +74,7 @@ router.get("/boss/legs", requireBoss, async (_req, res) => {
       locationLabel: [event.city, event.region].filter(Boolean).join(", ") || null,
       mappingState: event.mappingState,
       seasonYear: event.seasonYear,
+      dateProvenance: event.dateProvenance,
     };
   });
   res.json({
