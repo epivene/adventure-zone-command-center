@@ -13,6 +13,7 @@ import {
 } from "@/features/google-workspace/google-review-new-profile";
 import {
   deleteGoogleProfileLabels,
+  GOOGLE_PROFILE_LABEL_CLEANUP_LIMIT,
   getGoogleProfileLabelCleanupPreview,
   getGoogleWorkspaceValidationReview,
   getGoogleWorkspaceValidationReviewThread,
@@ -228,7 +229,9 @@ export function GoogleValidationReview({
     setSelectedCleanupLabelIds((current) =>
       current.includes(labelId)
         ? current.filter((id) => id !== labelId)
-        : [...current, labelId],
+        : current.length >= GOOGLE_PROFILE_LABEL_CLEANUP_LIMIT
+          ? current
+          : [...current, labelId],
     );
   }
 
@@ -613,6 +616,9 @@ export function GoogleValidationReview({
               Deleting a label never deletes its emails.
             </p>
           </div>
+          <p className="text-sm text-muted-foreground" role="status">
+            {selectedCleanupLabelIds.length} of {GOOGLE_PROFILE_LABEL_CLEANUP_LIMIT} selected. Clean up up to {GOOGLE_PROFILE_LABEL_CLEANUP_LIMIT} labels at a time, then select the next group.
+          </p>
           {cleanupLabels.length ? (
             <div className="grid max-h-64 gap-2 overflow-y-auto">
               {cleanupLabels.map((label) => (
@@ -623,6 +629,7 @@ export function GoogleValidationReview({
                   <input
                     aria-label={label.name}
                     checked={selectedCleanupLabelIds.includes(label.id)}
+                    disabled={cleanupDeleting || (!selectedCleanupLabelIds.includes(label.id) && selectedCleanupLabelIds.length >= GOOGLE_PROFILE_LABEL_CLEANUP_LIMIT)}
                     className="mt-0.5"
                     onChange={() => toggleCleanupLabel(label.id)}
                     type="checkbox"
