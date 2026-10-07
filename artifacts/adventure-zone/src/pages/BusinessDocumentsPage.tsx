@@ -271,7 +271,7 @@ export default function BusinessDocumentsPage({
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{eyebrow}</p>
-          <h1 className="text-3xl font-bold text-foreground">Business Documents</h1>
+          <h1 className="text-3xl font-bold text-foreground">Documents</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Contracts, certificates, templates, and other Adventure Zone business files in one protected library.
           </p>
@@ -282,6 +282,10 @@ export default function BusinessDocumentsPage({
           </Button>
         )}
       </header>
+      {api === businessDocumentsApi ? <nav aria-label="Document areas" className="flex flex-wrap gap-2">
+        <span aria-current="page" className="rounded-lg bg-secondary px-3 py-3 text-sm font-semibold">Saved files</span>
+        <Link className="rounded-lg border px-3 py-3 text-sm font-semibold" href="/invoices-contracts">Contracts &amp; Invoices</Link>
+      </nav> : null}
 
       {!loading && reviewCount && view !== "review" ? (
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4">

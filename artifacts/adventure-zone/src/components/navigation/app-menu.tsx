@@ -83,8 +83,6 @@ const adminToolsGroups: MenuGroup[] = [
   {
     label: "Business Setup",
     items: [
-      { href: "/business-documents", label: "Business Documents" },
-      { href: "/invoices-contracts", label: "Invoices & Contracts" },
       { href: "/settings/business-sources", label: "Business sources" },
       { href: "/settings/coi", label: "Certificates of insurance" },
       { href: "/settings/packages-resources", label: "Packages & resources" },
@@ -351,6 +349,10 @@ export function AppMenu({
         side={mobile ? "top" : "bottom"}
         className={mobile ? "max-h-[72dvh] w-[min(92vw,22rem)] overflow-y-auto p-2" : "max-h-[76vh] w-72 overflow-y-auto p-2"}
       >
+        <DropdownMenuLabel>Documents</DropdownMenuLabel>
+        <MenuLink item={{ href: "/business-documents", label: "All documents", badgeCount: pendingDocumentReviewCount }} workspace={workspace} location={location} />
+        <MenuLink item={{ href: "/invoices-contracts", label: "Contracts & Invoices" }} workspace={workspace} location={location} />
+        <DropdownMenuSeparator />
         {!mobile ? (
           <div className="grid gap-0.5 py-1">
             {workspace === "booking" ? (

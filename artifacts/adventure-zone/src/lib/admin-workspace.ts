@@ -5,6 +5,8 @@ export const BOOKING_RETURN_STORAGE_KEY = "adventure-zone:booking-return-path";
 const bookingPrefixes = [
   "/assistant/workspace",
   "/today",
+  "/business-documents",
+  "/invoices-contracts",
   "/profiles",
   "/organizations",
   "/event-families",
