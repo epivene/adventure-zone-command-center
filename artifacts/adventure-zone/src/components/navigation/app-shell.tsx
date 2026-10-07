@@ -1,7 +1,7 @@
 import { bookingNavigation } from "@/features/navigation/booking-navigation";
 import { Link, useLocation } from "wouter";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { Bot, ArrowLeft, CalendarDays, House, Inbox, MailQuestion, MapPinned, ClipboardList, Megaphone, MessageSquare, Palette, UsersRound, type LucideIcon } from "lucide-react";
+import { FolderOpen, Bot, ArrowLeft, CalendarDays, House, Inbox, MailQuestion, MapPinned, ClipboardList, Megaphone, MessageSquare, Palette, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import { AddMenu, AppMenu } from "./app-menu";
 import { MobileBottomNav } from "./mobile-bottom-nav";
@@ -27,7 +27,7 @@ const OfficeUpdateHistory = lazy(() => import("@/components/office-admin/office-
 
 function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string | null): PrimaryNavigationItem[] {
   if (workspace === "booking") {
-    const icons = { home: House, profiles: UsersRound, emails: Inbox, schedule: CalendarDays };
+    const icons = { home: House, profiles: UsersRound, emails: Inbox, schedule: CalendarDays, documents: FolderOpen };
     return bookingNavigation().map(item => ({ ...item, icon: icons[item.icon] }));
   }
   if (workspace === "operations") {

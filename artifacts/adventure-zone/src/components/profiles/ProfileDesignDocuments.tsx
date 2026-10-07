@@ -116,10 +116,10 @@ export function ProfileDesignDocuments({
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Profile documents</p>
           <h2 className="mt-1 flex items-center gap-2 text-xl font-bold text-[#173b48]">
             <FileSignature className="h-5 w-5 text-[#397064]" />
-            Design Studio
+            Documents
           </h2>
           <p className="mt-1 text-sm text-[#71848a]">
-            Emails, contracts, and proposals saved for this profile.
+            Open saved files, or work on this profile’s Design Studio drafts.
           </p>
         </div>
         <Button onClick={() => setPickerOpen(true)} className="gap-2">
@@ -127,6 +127,10 @@ export function ProfileDesignDocuments({
           Choose template
         </Button>
       </div>
+
+      <Button asChild variant="outline" className="mt-4 min-h-11">
+        <Link href={`/business-documents?profileId=${encodeURIComponent(organizationId)}`}>Open saved files &amp; contracts</Link>
+      </Button>
 
       {error ? (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
