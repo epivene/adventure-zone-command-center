@@ -7,4 +7,4 @@ The user chose Today, leads, and booking follow-up as the first redesign area an
 
 **Why:** The user said the app has redundant buttons and that its overall layout and flow need simplification.
 
-**How to apply:** Preserve this direction when extending daily work. Keep actions contextual and repeated data in one place; do not treat this approval as permission to redesign unrelated workspaces.
+**How to apply:** Preserve this direction when extending daily work. Keep actions contextual and repeated data in one place. The user explicitly included profile simplification and chose Leads with suggested-leg assignments next; other workspaces still need their own scope.
