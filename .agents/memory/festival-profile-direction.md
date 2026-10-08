@@ -22,3 +22,9 @@ Profiles should have fewer buttons and separate pages; combine related informati
 **Why:** The user explicitly requested this simplification after using the expanded profiles.
 
 **How to apply:** Keep all existing records and actions, avoid repeated summary and action surfaces, and put the latest actual note ahead of secondary profile tools.
+
+The user prefers importing FestivalNet PDFs instead of spreadsheet exports.
+
+**Why:** The user said PDFs are cheaper for them.
+
+**How to apply:** Make PDFs a supported primary FestivalNet import format; do not require an Excel or CSV export.

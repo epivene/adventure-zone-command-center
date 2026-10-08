@@ -46,3 +46,4 @@ OWNER_CLERK_USER_ID = "user_3H62RPBMsn0wIxLQFDlXqkBE8Fs"
 
 [nix]
 channel = "stable-25_05"
+packages = ["freetype", "gumbo", "harfbuzz", "jbig2dec", "libjpeg_turbo", "mupdf", "openjpeg", "swig", "xcbuild"]
