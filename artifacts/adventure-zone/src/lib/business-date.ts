@@ -17,7 +17,13 @@ const businessDateFormatter = new Intl.DateTimeFormat("en-US", {
 
 const offsetFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: BUSINESS_TIME_ZONE,
-  timeZoneName: "longOffset",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
 });
 
 function partsFor(date: Date): DateParts {
@@ -59,15 +65,15 @@ function parseDateParts(value: string): DateParts | null {
 }
 
 function offsetMilliseconds(date: Date) {
-  const zoneName = offsetFormatter
-    .formatToParts(date)
-    .find((part) => part.type === "timeZoneName")?.value;
-  const match = /^GMT([+-])(\d{2}):(\d{2})$/.exec(zoneName ?? "");
-  if (!match) {
-    throw new Error(`Could not resolve ${BUSINESS_TIME_ZONE} offset.`);
-  }
-  const direction = match[1] === "+" ? 1 : -1;
-  return direction * (Number(match[2]) * 60 + Number(match[3])) * 60_000;
+  // Offset labels vary by browser/ICU (GMT-5, GMT-05:00, Unicode minus).
+  // Numeric wall-clock parts avoid parsing localized time-zone names.
+  const parts = new Map(offsetFormatter.formatToParts(date).map(part => [part.type, part.value]));
+  const wallClock = Date.UTC(
+    Number(parts.get("year")), Number(parts.get("month")) - 1,
+    Number(parts.get("day")), Number(parts.get("hour")) % 24,
+    Number(parts.get("minute")), Number(parts.get("second")),
+  );
+  return wallClock - Math.floor(date.getTime() / 1000) * 1000;
 }
 
 function localDateTimeToInstant(parts: DateParts, hour: number) {

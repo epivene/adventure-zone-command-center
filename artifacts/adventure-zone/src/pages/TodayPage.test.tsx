@@ -88,12 +88,6 @@ function mockDashboard(value: ReturnType<typeof dashboard>) {
   });
 }
 
-function summaryWithText(text: string) {
-  return screen.getByText((_content, node) =>
-    node?.tagName === "SUMMARY" && node.textContent?.replace(/\s+/g, " ").trim() === text,
-  );
-}
-
 afterEach(() => {
   cleanup();
   apiGet.mockReset();
@@ -120,7 +114,7 @@ describe("TodayPage renewals", () => {
     render(<TodayPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Current Fair Lead")).toBeInTheDocument();
+      expect(screen.getAllByText("Current Fair Lead").length).toBeGreaterThan(0);
     });
 
     const toggle = screen.getByRole("button", {
@@ -131,7 +125,7 @@ describe("TodayPage renewals", () => {
 
     fireEvent.click(toggle);
     expect(screen.getByText("County Fair Renewal")).toBeInTheDocument();
-    expect(screen.getByText("Current Fair Lead")).toBeInTheDocument();
+    expect(screen.getAllByText("Current Fair Lead").length).toBeGreaterThan(0);
   });
 
   it("keeps an urgent renewal collapsed until the user opens it", async () => {
@@ -171,13 +165,14 @@ describe("TodayPage renewals", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
-    expect(summaryWithText("Needs a decision (1)")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Daily work queue" })).toBeVisible();
+    expect(screen.getAllByText("Current Fair Lead").length).toBeGreaterThan(0);
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Could not load next-season renewals.",
     );
   });
 
-  it("explains post-event follow-up work while keeping normal lead status copy after opening decisions", async () => {
+  it("explains post-event follow-up work and lead work directly in the queue", async () => {
     mockDashboard(
       dashboard({
         needsFollowUpPlan: [currentBooking, postEventBooking],
@@ -190,13 +185,10 @@ describe("TodayPage renewals", () => {
       expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
 
-    const decisionsSummary = summaryWithText("Needs a decision (2)");
-    const decisions = decisionsSummary.closest("details");
-    expect(decisions).not.toHaveAttribute("open");
-    fireEvent.click(decisionsSummary);
-
-    expect(screen.getByText("Past event · Needs follow-up decision")).toBeInTheDocument();
-    expect(screen.getByText("New Lead · Needs follow-up decision")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Eastern Montana Fair/ })).toBeVisible();
+    expect(screen.getByText(/Past event needs a follow-up decision/)).toBeVisible();
+    expect(screen.getByRole("radio", { name: /Current Fair Lead/ })).toBeVisible();
+    expect(screen.getAllByText(/No future reminder scheduled/).length).toBeGreaterThan(0);
   });
 
   it("keeps later work collapsed alongside the invoice and contract workspace", async () => {
@@ -213,8 +205,10 @@ describe("TodayPage renewals", () => {
       expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("heading", { name: "Invoices & Contracts" })).toBeVisible();
-    const later = screen.getByText("Later").closest("details");
+    const tools = screen.getByText("Booking tools").closest("details");
+    expect(tools).not.toHaveAttribute("open");
+    expect(screen.getByRole("link", { name: "Open workspace", hidden: true })).toHaveAttribute("href", "/invoices-contracts");
+    const later = screen.getByText("Schedule & renewals").closest("details");
     expect(later).not.toHaveAttribute("open");
   });
 });

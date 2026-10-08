@@ -161,6 +161,10 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== "GET" || !withinScope(url)) return;
+  // Vite serves imported CSS as JavaScript modules. These development-only
+  // URLs must go straight to the dev server, not through production MIME
+  // validation or the explicitly prepared offline build cache.
+  if (/(?:^|\/)(?:src|@vite|@fs|@id|node_modules)\//.test(url.pathname)) return;
   if (request.mode === "navigate") event.respondWith(navigationResponse(request));
   else if (STATIC_EXTENSION.test(url.pathname)) event.respondWith(assetResponse(request));
 });

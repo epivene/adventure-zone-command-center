@@ -81,6 +81,15 @@ function worker() {
 }
 
 describe("explicit production offline shell", () => {
+  it("leaves Vite source modules outside production cache validation", async () => {
+    const app = worker();
+    for (const path of ["src/index.css", "src/mobile-compact.css", "@vite/client", "@fs/workspace/src/styles.css", "node_modules/.vite/deps/example.js"]) {
+      expect(await app.request(path, "cors", "script")).toBeUndefined();
+    }
+    expect(app.intercepted).toEqual([]);
+    expect(app.requested).toEqual([]);
+  });
+
   it("does not cache anything during worker installation", async () => {
     const app = worker();
     app.publish();

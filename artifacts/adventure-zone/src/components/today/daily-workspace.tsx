@@ -1,0 +1,175 @@
+import { useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
+import { Badge } from "@workspace/avz-crm/components/ui/badge";
+import { Button } from "@workspace/avz-crm/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@workspace/avz-crm/components/ui/card";
+import { Label } from "@workspace/avz-crm/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@workspace/avz-crm/components/ui/radio-group";
+import { Checkbox } from "@workspace/avz-crm/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@workspace/avz-crm/components/ui/dropdown-menu";
+import { FollowUpControls } from "@/components/follow-ups/follow-up-controls";
+import { deleteFollowUpAction, editFollowUpAction } from "@/actions/follow-ups";
+import { buildDailyWork, type DailyDecision, type DailyWork } from "@/features/today/daily-work";
+import type { MasterTodayQueue } from "@/features/today/master-work-types";
+import type { FollowUpSummary } from "@/features/follow-ups/today-query";
+import { BUSINESS_TIME_ZONE, classifyBusinessDueDate } from "@/lib/business-date";
+import { clearTodayReturnContext, readTodayReturnContext, saveTodayReturnContext } from "@/features/today/today-return-context";
+import { callWorkspaceHref, eventProfileHref } from "./next-call-card";
+import { DailyFollowUpForm } from "./daily-follow-up-form";
+import { apiGet } from "@/lib/auth-token";
+import type { LegAssignmentView } from "@/components/bookings/leg-assignment-panel";
+
+function dueLabel(work: DailyWork) {
+  if (!work.dueAt) return "Needs a next step";
+  const date = new Date(work.dueAt);
+  if (!Number.isFinite(date.getTime())) return "Date needs review";
+  const due = classifyBusinessDueDate(date, new Date());
+  return `${due === "overdue" ? "Overdue · " : due === "today" ? "Today · " : ""}${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: BUSINESS_TIME_ZONE }).format(date)}`;
+}
+
+export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callingEnabled, onChanged, onClear, onSnooze, busy }: {
+  queue: MasterTodayQueue; followUps: FollowUpSummary[]; decisions: DailyDecision[];
+  travelLegs: { id: string; name: string }[]; callingEnabled: boolean;
+  onChanged(): Promise<void>; onClear(ids: string[]): Promise<void>; onSnooze(ids: string[]): Promise<void>; busy: boolean;
+}) {
+  const { open, later } = buildDailyWork(queue, followUps, decisions);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [showLater, setShowLater] = useState(false);
+  const [manage, setManage] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formBusy, setFormBusy] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(8);
+  const [bookingLeg, setBookingLeg] = useState<{ bookingId: string; assignment: LegAssignmentView | null; legs: { id: string; name: string }[] } | null>(null);
+  const [legError, setLegError] = useState(false);
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current) return;
+    restored.current = true;
+    const context = readTodayReturnContext();
+    if (context?.workItemId) {
+      setActiveId(context.workItemId);
+      setShowLater(context.filter === "later");
+      requestAnimationFrame(() => window.scrollTo({ top: context.scrollY }));
+    }
+    clearTodayReturnContext();
+  }, []);
+  const visible = showLater ? [...open, ...later] : open;
+  const work = visible.find(item => item.id === activeId) ?? open[0] ?? (showLater ? later[0] : undefined);
+  const locked = busy || formBusy;
+  const validSelected = selected.filter(id => decisions.some(decision => decision.id === id));
+  const loadedLeg = bookingLeg?.bookingId === work?.bookingId ? bookingLeg : null;
+  const assignment = work?.decision?.legAssignment ?? loadedLeg?.assignment;
+  useEffect(() => {
+    let cancelled = false;
+    setLegError(false);
+    if (!work?.bookingId || work.decision?.legAssignment) return;
+    const bookingId = work.bookingId;
+    apiGet<{ legAssignment: LegAssignmentView | null; allTravelLegs: { id: string; name: string }[] }>(`/bookings/${bookingId}`)
+      .then(detail => { if (!cancelled) setBookingLeg({ bookingId, assignment: detail.legAssignment, legs: detail.allTravelLegs ?? [] }); })
+      .catch(() => { if (!cancelled) setLegError(true); });
+    return () => { cancelled = true; };
+  }, [work?.bookingId, work?.decision?.legAssignment]);
+  const legName = (id: string | null | undefined) => id ? [...travelLegs, ...(loadedLeg?.legs ?? [])].find(leg => leg.id === id)?.name ?? "Unknown leg" : "Unassigned";
+  const renderedWork = visible.slice(0, visibleCount);
+  // Keep a restored/selected item visible even when it is beyond the first page.
+  if (work && !renderedWork.some(item => item.id === work.id)) renderedWork.push(work);
+  const isConversation = !!work?.master?.threadId && ["reply", "draft", "review"].includes(work.master.kind);
+  const profileHref = work ? eventProfileHref({ organizationId: work.organizationId, contactId: work.contactId, bookingId: work.bookingId }) ?? work.href : "/profiles";
+  function remember() {
+    if (work) saveTodayReturnContext({ filter: showLater ? "later" : "active", workItemId: work.id, scrollY: window.scrollY });
+  }
+  async function bulk(action: (ids: string[]) => Promise<void>) {
+    await action(validSelected);
+    setSelected([]);
+  }
+  return <div className="grid gap-5 lg:grid-cols-2">
+    <section className="grid content-start gap-3" aria-label="Daily work queue">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-xl font-bold">Today's work</h2>
+        <p className="text-sm text-muted-foreground">Select a record to see its next step</p>
+      </div>
+      <Card className="min-w-0">
+        <CardHeader className="flex-row items-center justify-between space-y-0">
+          <CardTitle>Your work</CardTitle><Badge variant="outline">{open.length} open</Badge>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {decisions.length ? <Button size="sm" variant="ghost" aria-label="Manage next steps" disabled={locked} onClick={() => { setManage(value => !value); setSelected([]); }}>{manage ? "Done managing" : "Manage next steps"}</Button> : null}
+          {manage ? <div className="grid gap-3 rounded-lg border border-border p-3">
+            <p className="text-sm text-muted-foreground">Manage bookings without a future reminder.</p>
+            {decisions.map(decision => <div key={decision.id} className="flex items-center gap-2">
+              <Checkbox id={`manage-${decision.id}`} aria-label={`Select ${decision.name}`} checked={validSelected.includes(decision.id)} disabled={locked}
+                onCheckedChange={checked => setSelected(current => checked ? [...current, decision.id] : current.filter(id => id !== decision.id))} />
+              <Label htmlFor={`manage-${decision.id}`}>{decision.name}</Label>
+            </div>)}
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" disabled={locked || !validSelected.length} onClick={() => void bulk(onClear)}>Clear selected</Button>
+              <Button size="sm" variant="outline" disabled={locked || !validSelected.length} onClick={() => void bulk(onSnooze)}>Snooze selected 1 week</Button>
+            </div>
+          </div> : visible.length ? <RadioGroup aria-label="Select work item" value={work?.id ?? ""} onValueChange={id => { if (!locked) { setActiveId(id); setFormOpen(false); } }} className="gap-0">
+            {renderedWork.map(item => <div className="flex items-start gap-3 border-t border-border py-3" key={item.id} data-work-item-id={item.id}>
+              <RadioGroupItem id={`daily-${item.id}`} value={item.id} disabled={locked} className="mt-1" />
+              <Label htmlFor={`daily-${item.id}`} className="grid min-w-0 flex-1 cursor-pointer gap-1">
+                <span className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold">{item.name}</span><span className="text-xs text-muted-foreground">{dueLabel(item)}</span></span>
+                <span className="text-sm text-muted-foreground">{item.kind} · {item.reason}</span>
+                {item.location ? <span className="text-xs text-muted-foreground">{item.location}</span> : null}
+              </Label>
+            </div>)}
+          </RadioGroup> : <p className="text-sm text-muted-foreground">Nothing needs action right now.</p>}
+          {!manage && visible.length > 8 ? <Button size="sm" variant="ghost" disabled={locked} onClick={() => setVisibleCount(value => value >= visible.length ? 8 : value + 8)}>{visibleCount >= visible.length ? "Show less" : `Show more (${visible.length - visibleCount} remaining)`}</Button> : null}
+        </CardContent>
+      </Card>
+      <Card><CardContent className="flex flex-wrap items-center justify-between gap-3">
+        <div><p className="font-semibold">Waiting &amp; scheduled</p><p className="text-sm text-muted-foreground">{later.length} loaded items</p></div>
+        <Button size="sm" variant="outline" disabled={locked} aria-expanded={showLater} onClick={() => { setShowLater(value => !value); setFormOpen(false); }}>{showLater ? "Hide later work" : "View later work"}</Button>
+      </CardContent></Card>
+    </section>
+    <section className="grid content-start gap-3" aria-label="Selected next step">
+      <h2 className="text-xl font-bold">Next step</h2>
+      <Card className="min-w-0">
+        {work ? <>
+          <CardHeader><CardTitle>{work.name}</CardTitle><p className="text-sm text-muted-foreground">{[work.location, work.kind].filter(Boolean).join(" · ")}</p></CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="grid gap-3 rounded-lg border border-border bg-muted p-4">
+              <p className="font-semibold">Follow-up path</p>
+              <p className="text-sm text-muted-foreground">{work.reason}</p>
+              <p className="text-sm font-semibold">{dueLabel(work)}</p>
+              {work.decision?.copilot?.headline ? <p className="text-sm text-muted-foreground">{work.decision.copilot.headline}</p> : null}
+              {formOpen ? <DailyFollowUpForm key={work.id} work={work} onBusyChange={setFormBusy} onCancel={() => setFormOpen(false)} onSaved={async () => {
+                // A saved reminder must not be re-submitted if only the refresh fails.
+                try { await onChanged(); } finally { setFormOpen(false); }
+              }} /> :
+                <div className="flex flex-wrap gap-2">
+                  {work.decision && !work.followUp && work.organizationId && !isConversation ? <Button disabled={locked} onClick={() => setFormOpen(true)}>Schedule follow-up</Button> :
+                    <Button asChild><Link onClick={remember} href={work.followUp?.kind === "call" && callingEnabled ? callWorkspaceHref(work.followUp) : work.href}>{work.followUp?.kind === "call" && callingEnabled ? "Open call workspace" : isConversation ? "Open conversation" : "Open profile"}</Link></Button>}
+                  {isConversation && work.decision && work.organizationId ? <Button variant="outline" disabled={locked} onClick={() => setFormOpen(true)}>Schedule follow-up</Button> : null}
+                  {work.followUp ? <Button variant="outline" disabled={locked} onClick={() => setFormOpen(true)}>Reschedule</Button> : null}
+                  {work.decision ? <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" disabled={locked} aria-label={`More actions for ${work.name}`}>More</Button></DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem asChild><Link onClick={remember} href={profileHref}>Open profile</Link></DropdownMenuItem>
+                      <DropdownMenuItem disabled={locked} onSelect={() => void onSnooze([work.decision!.id])}>Snooze 1 week</DropdownMenuItem>
+                      <DropdownMenuItem disabled={locked} onSelect={() => void onClear([work.decision!.id])}>No follow-up needed</DropdownMenuItem>
+                    </DropdownMenuContent></DropdownMenu> : null}
+                </div>}
+              {work.followUp && !formOpen ? <FollowUpControls key={work.id} followUp={{ ...work.followUp, completedAt: null }}
+                onEdit={async (id, input) => { const result = await editFollowUpAction({ followUpId: id, kind: input.kind, dueAt: new Date(input.dueAt), completed: false, outcome: null }); if (result.ok) await onChanged(); return result; }}
+                onDismiss={async id => { const result = await editFollowUpAction({ followUpId: id, kind: work.followUp!.kind, dueAt: work.followUp!.dueAt, completed: true, outcome: "Dismissed" }); if (result.ok) await onChanged(); return result; }}
+                onDelete={async id => { const result = await deleteFollowUpAction(id); if (result.ok) await onChanged(); return result; }}
+              /> : null}
+            </div>
+            {work.bookingId ? <section aria-label="Leg assignment" className="grid gap-3 rounded-lg border border-border p-4">
+              <p className="font-semibold">Leg assignment</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><p className="text-xs font-semibold uppercase text-muted-foreground">Suggested leg</p><p className="font-semibold">{assignment?.suggestedLegId ? legName(assignment.suggestedLegId) : "No suggestion loaded"}</p></div>
+                <div><p className="text-xs font-semibold uppercase text-muted-foreground">Saved assignment</p><p className="font-semibold">{assignment ? legName(assignment.assignedLegId) : work.followUp?.operations?.leg?.name ?? "Check booking profile"}</p></div>
+              </div>
+              {assignment ? <p className="text-sm text-muted-foreground">{assignment.explanation} · {assignment.confidence} confidence</p> : <p className="text-sm text-muted-foreground">{legError ? "Could not load the recommendation. Open the booking to review its assignment." : "Open the booking to review dates, location, and route recommendations."}</p>}
+              {assignment?.warning ? <Badge variant="secondary">{assignment.warning === "major_travel_concern" ? "Major travel concern" : "Long travel"}</Badge> : null}
+              <Button asChild variant="outline" size="sm"><Link onClick={remember} href={`/bookings/${work.bookingId}/edit`}>Review assignment</Link></Button>
+            </section> : null}
+          </CardContent>
+        </> : <CardContent><p className="text-sm text-muted-foreground">Select waiting or scheduled work, or enjoy a clear queue.</p></CardContent>}
+      </Card>
+    </section>
+  </div>;
+}

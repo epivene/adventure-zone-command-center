@@ -30,14 +30,17 @@ function businessDate(): string {
 export function MasterWorkQueue({
   queue,
   onChanged,
+  managementOnly = false,
 }: {
   queue: MasterTodayQueue;
   onChanged: () => Promise<void>;
+  managementOnly?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const restored = useRef(false);
 
   useEffect(() => {
+    if (managementOnly) return;
     if (restored.current) return;
     restored.current = true;
     const context = readTodayReturnContext();
@@ -50,7 +53,7 @@ export function MasterWorkQueue({
       else window.scrollTo({ top: context.scrollY });
       clearTodayReturnContext();
     });
-  }, []);
+  }, [managementOnly]);
 
   function onOpen(item: MasterWorkItem, filter: string) {
     saveTodayReturnContext({ filter, workItemId: item.id, scrollY: window.scrollY });
@@ -70,11 +73,13 @@ export function MasterWorkQueue({
   const groups = groupMasterWork(queue);
   return (
     <div className="grid gap-4" aria-label="Booking master work queue">
+      {!managementOnly ? <>
       <GroupedWorkSection title="Replies" items={groups.replies} onOpen={onOpen}/>
       <GroupedWorkSection title="Calls & Follow-ups" items={groups.calls} onOpen={onOpen}/>
       <GroupedWorkSection title="Booking Work" items={groups.booking} onOpen={onOpen}/>
       <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Waiting ({groups.waiting.length})</summary><div className="mt-3"><GroupedWorkSection title="Waiting for a reply" items={groups.waiting} onOpen={onOpen}/></div></details>
       <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Later ({groups.later.length})</summary><div className="mt-3"><GroupedWorkSection title="Scheduled work" items={groups.later} onOpen={onOpen}/></div></details>
+      </> : null}
       <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Manage work and reviewed drafts</summary><div className="mt-3 grid gap-3"><ReadyToSendSection/>
       <ActiveWorkQueue
         items={queue.active}

@@ -1,21 +1,21 @@
 import { MasterWorkQueue } from "@/components/today/master-work-queue";
+import { DailyWorkspace } from "@/components/today/daily-workspace";
+import { Badge } from "@workspace/avz-crm/components/ui/badge";
+import { Button } from "@workspace/avz-crm/components/ui/button";
 import { coerceMasterTodayQueue } from "@/features/today/master-work-types";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { apiGet, apiPost } from "@/lib/auth-token";
-import { FollowUpList } from "@/components/today/follow-up-list";
 import { CallQueueWorkspace } from "@/components/today/call-queue-workspace";
-import { NextCallCard, eventProfileHref } from "@/components/today/next-call-card";
+import { eventProfileHref } from "@/components/today/next-call-card";
 import { BookingOperations } from "@/components/today/booking-operations";
 import { InvoiceContractWorkspaceCard } from "@/components/today/invoice-contract-workspace-card";
 import { RenewalsSection } from "@/components/today/renewals-section";
 import { ScoutAlertsSection, type ScoutAlertView } from "@/components/today/scout-alerts-section";
 import { BUSINESS_TIME_ZONE, classifyBusinessDueDate } from "@/lib/business-date";
 import { classifyTodayEventTiming } from "@/features/today/today-summary-labels";
-import { deriveTodayFocus } from "@/features/today/today-focus";
 import { LegCallList } from "@/components/today/leg-call-list";
 import { OutreachPlanner } from "@/components/today/outreach-planner";
-import { getLaterFollowUpCount } from "@/features/today/follow-up-counts";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: BUSINESS_TIME_ZONE }).format(value);
@@ -35,11 +35,6 @@ function formatToday(value: Date) {
   }).format(value);
 }
 
-function statusLabel(value: string | null | undefined) {
-  if (!value) return "Needs action";
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
 type CallingConfig = { assistedCallingEnabled: boolean; voicemailLauncherUrl: string | null };
 const disabledCallingConfig: CallingConfig = { assistedCallingEnabled: false, voicemailLauncherUrl: null };
 
@@ -51,13 +46,6 @@ function coerceRenewals(items: any[]) {
   return (items ?? []).map((renewal) => ({ ...renewal, dueAt: renewal.dueAt ? new Date(renewal.dueAt) : null }));
 }
 
-function FocusPrimaryAction({ href, label }: { href: string; label: string }) {
-  const classes = "inline-flex items-center justify-center rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-orange-700";
-  return href.startsWith("#")
-    ? <a className={classes} href={href}>{label}</a>
-    : <Link className={classes} href={href}>{label}</Link>;
-}
-
 export default function TodayPage() {
   const [dashboard, setDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -65,11 +53,7 @@ export default function TodayPage() {
   const [callingConfig, setCallingConfig] = useState<CallingConfig>(disabledCallingConfig);
   const [documentReviewCount, setDocumentReviewCount] = useState(0);
   const [scoutAlerts, setScoutAlerts] = useState<ScoutAlertView[]>([]);
-  const [manageNextSteps, setManageNextSteps] = useState(false);
-  const [selectedNextSteps, setSelectedNextSteps] = useState<Set<string>>(new Set());
   const [hiddenNextSteps, setHiddenNextSteps] = useState<Set<string>>(new Set());
-  const [actionOpenId, setActionOpenId] = useState<string | null>(null);
-  const [showAllNextSteps, setShowAllNextSteps] = useState(false);
   const [undoBookingIds, setUndoBookingIds] = useState<string[]>([]);
   const [nextStepError, setNextStepError] = useState<string | null>(null);
   const [nextStepBusy, setNextStepBusy] = useState(false);
@@ -91,6 +75,27 @@ export default function TodayPage() {
       .catch((e) => { setError(e.message); setLoading(false); });
   }, []);
 
+  async function refreshToday() {
+    try {
+      const refreshed = await apiGet<any>("/today");
+      setDashboard(refreshed);
+      setScoutAlerts(Array.isArray(refreshed.scoutAlerts) ? refreshed.scoutAlerts : []);
+      setNextStepError(null);
+      return refreshed;
+    } catch (cause) {
+      setNextStepError("Could not refresh Today. Reload to see the latest saved changes.");
+      throw cause;
+    }
+  }
+
+  useEffect(() => {
+    // Other screens and sessions can change reminders while Today remains open.
+    const refresh = () => { if (!document.hidden) void refreshToday().catch(() => {}); };
+    window.addEventListener("focus", refresh);
+    const interval = window.setInterval(refresh, 60_000);
+    return () => { window.removeEventListener("focus", refresh); window.clearInterval(interval); };
+  }, []);
+
   async function snoozeScoutAlert(alertId: string) {
     const until = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     await apiPost(`/today/scout-alerts/${alertId}/snooze`, { until });
@@ -109,9 +114,8 @@ export default function TodayPage() {
     try {
       await apiPost("/today/next-step/clear", { bookingIds, reason: "no_follow_up_needed" });
       setHiddenNextSteps((current) => new Set([...current, ...bookingIds]));
-      setSelectedNextSteps(new Set());
       setUndoBookingIds(bookingIds);
-      setActionOpenId(null);
+      await refreshToday();
     } catch (cause) {
       setNextStepError(cause instanceof Error ? cause.message : "Could not clear the selected items.");
     } finally {
@@ -127,8 +131,7 @@ export default function TodayPage() {
       const dueAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       await apiPost("/today/next-step/snooze", { bookingIds, dueAt });
       setHiddenNextSteps((current) => new Set([...current, ...bookingIds]));
-      setSelectedNextSteps(new Set());
-      setActionOpenId(null);
+      await refreshToday();
     } catch (cause) {
       setNextStepError(cause instanceof Error ? cause.message : "Could not snooze the selected items.");
     } finally {
@@ -148,6 +151,7 @@ export default function TodayPage() {
         return next;
       });
       setUndoBookingIds([]);
+      await refreshToday();
     } catch (cause) {
       setNextStepError(cause instanceof Error ? cause.message : "Could not restore the cleared items.");
     } finally {
@@ -155,8 +159,8 @@ export default function TodayPage() {
     }
   }
 
-  if (loading) return <div className="mx-auto max-w-5xl py-20 text-center text-slate-500">Loading Today…</div>;
-  if (error || !dashboard) return <div className="mx-auto max-w-5xl"><div className="mt-8 rounded-xl border border-rose-200 bg-rose-50 p-6"><p className="font-semibold text-rose-800">Could not load Today</p><p className="mt-1 text-sm text-rose-700">{error}</p></div></div>;
+  if (loading) return <div className="mx-auto max-w-6xl py-20 text-center text-muted-foreground">Loading Today…</div>;
+  if (error || !dashboard) return <div className="mx-auto max-w-6xl"><div className="mt-8 grid gap-3 rounded-xl border border-border bg-card p-6"><p className="font-semibold text-destructive">Could not load Today</p><p className="text-sm text-muted-foreground">{error}</p><Button onClick={() => window.location.reload()}>Try again</Button></div></div>;
 
   const followUps = coerceFollowUps(dashboard.followUps ?? []);
   const renewals = coerceRenewals(dashboard.renewals ?? []);
@@ -166,122 +170,69 @@ export default function TodayPage() {
     endsAt: event.endsAt ? new Date(event.endsAt) : null,
   }));
   const nextStepItems = (dashboard.needsFollowUpPlan ?? []).filter((booking: any) => !hiddenNextSteps.has(booking.id));
-  const displayedNextStepItems = showAllNextSteps ? nextStepItems : nextStepItems.slice(0, 8);
   const overdueFollowUps = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "overdue");
   const dueTodayFollowUps = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "today");
-  const laterFollowUps = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "future");
   const actionableFollowUps = [...overdueFollowUps, ...dueTodayFollowUps];
   const overdueCount = overdueFollowUps.length;
   const dueTodayCount = dueTodayFollowUps.length;
-  const laterCount = getLaterFollowUpCount({
-    followUpTotal: dashboard.followUpTotal,
-    actionableTotal: dashboard.followUpCount,
-    loadedLaterCount: laterFollowUps.length,
-  });
-  const contractCount = dashboard.contractCount ?? 0;
   const visibleRouteWarningCount = dashboard.visibleRouteWarningCount ?? 0;
   const urgentScoutAlertCount = scoutAlerts.filter((alert) => alert.severity === "urgent").length;
-  const focus = deriveTodayFocus({
-    overdueFollowUpCount: overdueCount,
-    dueTodayFollowUpCount: dueTodayCount,
-    laterFollowUpCount: laterCount,
-    followUpCount: followUps.length,
-    contractCount,
-    decisionCount: nextStepItems.length,
-    upcomingEventCount: upcomingEvents.length,
-  });
   const nextEvent = upcomingEvents[0] ?? null;
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-6 pb-8">
-      <header className="border-b border-slate-200 pb-5">
-        <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Command Center</p>
+    <div className="mx-auto grid max-w-6xl gap-5 pb-8">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
+        <div>
+        <p className="font-display text-xs font-bold uppercase tracking-wide text-primary">Command Center</p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight">Today</h1>
-        <p className="mt-1 text-sm font-medium text-slate-500">{formatToday(now)}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{formatToday(now)}</p>
+        </div>
+        {actionableFollowUps.length ? <Badge variant="secondary">{overdueCount ? `${overdueCount} overdue · ` : ""}{dueTodayCount} follow-ups due today</Badge> : null}
       </header>
 
-      <MasterWorkQueue queue={coerceMasterTodayQueue(dashboard.masterQueue)} onChanged={async()=>{setDashboard(await apiGet<any>("/today"));}}/>
-      <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Booking tools and decisions</summary><div className="mt-3 grid gap-4">
+      {nextStepError ? <p className="rounded-lg border border-border p-3 text-sm text-destructive" role="alert">{nextStepError}<Button variant="outline" size="sm" className="ml-3" onClick={() => void refreshToday().catch(() => {})}>Refresh</Button></p> : null}
+      {undoBookingIds.length ? <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted p-3" role="status"><span>Cleared from Today.</span><Button variant="outline" size="sm" onClick={undoClear} disabled={nextStepBusy}>Undo</Button></div> : null}
+      <DailyWorkspace queue={coerceMasterTodayQueue(dashboard.masterQueue)} followUps={followUps} decisions={nextStepItems} travelLegs={dashboard.travelLegs ?? []} callingEnabled={callingConfig.assistedCallingEnabled} onChanged={refreshToday} onClear={clearNextSteps} onSnooze={snoozeNextSteps} busy={nextStepBusy} />
+      <MasterWorkQueue managementOnly queue={coerceMasterTodayQueue(dashboard.masterQueue)} onChanged={refreshToday}/>
       {documentReviewCount > 0 ? (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4" aria-label="Document attention">
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-accent p-4" aria-label="Document attention">
           <div>
-            <h2 className="font-bold text-amber-950">{documentReviewCount} {documentReviewCount === 1 ? "document needs" : "documents need"} review</h2>
-            <p className="text-sm text-amber-800">This is document filing work and is separate from calls and follow-ups.</p>
+            <h2 className="font-bold text-accent-foreground">{documentReviewCount} {documentReviewCount === 1 ? "document needs" : "documents need"} review</h2>
+            <p className="text-sm text-accent-foreground">Document filing work is separate from calls and follow-ups.</p>
           </div>
-          <Link className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-bold text-white hover:bg-amber-800" href="/business-documents?view=review">Review documents</Link>
+          <Button asChild variant="outline"><Link href="/business-documents?view=review">Review documents</Link></Button>
         </section>
       ) : null}
 
-      <section className="grid gap-3" aria-labelledby="my-work-title">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-2xl font-bold" id="my-work-title">My Work</h2>
-          <span className="text-sm font-semibold text-slate-500">Only open what you want to work on</span>
-        </div>
-
-        {actionableFollowUps.length ? (
-          <details id="my-work-calls" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <details className="rounded-xl border border-border bg-card p-4"><summary className="cursor-pointer font-semibold">Booking tools</summary><div className="mt-3 grid gap-4">
+        {callingConfig.assistedCallingEnabled && actionableFollowUps.length ? (
+          <details id="my-work-calls" className="rounded-xl border border-border bg-card p-4">
             <summary className="cursor-pointer font-bold">
-              Calls & follow-ups <span className="ml-1 text-slate-500">({actionableFollowUps.length})</span>
-              {overdueCount ? <span className="ml-2 text-xs font-bold text-rose-700">{overdueCount} overdue</span> : null}
-              {dueTodayCount ? <span className="ml-2 text-xs font-bold text-orange-700">{dueTodayCount} today</span> : null}
-              {laterCount ? <span className="ml-2 text-xs font-semibold text-slate-500">{laterCount} later</span> : null}
+              Assisted calling <span className="ml-1 text-muted-foreground">({actionableFollowUps.length})</span>
+              {overdueCount ? <span className="ml-2 text-xs font-bold text-destructive">{overdueCount} overdue</span> : null}
+              {dueTodayCount ? <span className="ml-2 text-xs font-bold text-primary">{dueTodayCount} today</span> : null}
             </summary>
             <div className="mt-4">
-              {callingConfig.assistedCallingEnabled
-                ? <CallQueueWorkspace callingConfig={callingConfig} followUps={actionableFollowUps} initialFollowUpId={dashboard.nextCall?.id} refreshToday={async () => { const refreshed = await apiGet<any>("/today"); setDashboard(refreshed); setScoutAlerts(Array.isArray(refreshed.scoutAlerts) ? refreshed.scoutAlerts : []); const refreshedFollowUps = coerceFollowUps(refreshed.followUps ?? []); const refreshedActionable = refreshedFollowUps.filter((followUp: any) => { const due = classifyBusinessDueDate(followUp.dueAt, new Date()); return due === "overdue" || due === "today"; }); return { followUps: refreshedActionable, followUpTotal: refreshedActionable.length }; }} remainingCount={actionableFollowUps.length} />
-                : <div className="grid gap-4"><NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} /><FollowUpList followUps={actionableFollowUps} now={now} /></div>}
+              <CallQueueWorkspace callingConfig={callingConfig} followUps={actionableFollowUps} initialFollowUpId={dashboard.nextCall?.id} refreshToday={async () => { const refreshed = await refreshToday(); const refreshedFollowUps = coerceFollowUps(refreshed.followUps ?? []); const refreshedActionable = refreshedFollowUps.filter((followUp: any) => { const due = classifyBusinessDueDate(followUp.dueAt, new Date()); return due === "overdue" || due === "today"; }); return { followUps: refreshedActionable, followUpTotal: refreshedActionable.length }; }} remainingCount={actionableFollowUps.length} />
             </div>
           </details>
         ) : null}
 
         <InvoiceContractWorkspaceCard />
 
-        <ScoutAlertsSection
-          alerts={scoutAlerts}
-          urgentCount={urgentScoutAlertCount}
-          onSnooze={snoozeScoutAlert}
-          onDismiss={dismissScoutAlert}
-        />
-
-        {nextStepItems.length || undoBookingIds.length ? (
-          <details id="my-work-decisions" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <summary className="cursor-pointer font-bold">Needs a decision <span className="ml-1 text-slate-500">({nextStepItems.length})</span></summary>
-            <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-              <p className="text-sm text-slate-600">Leads or past events with no future reminder scheduled.</p>
-              {nextStepItems.length ? <button className="text-sm font-semibold text-orange-700" type="button" aria-label="Manage next steps" onClick={() => { setManageNextSteps((value) => !value); setSelectedNextSteps(new Set()); }}>{manageNextSteps ? "Done" : "Manage"}</button> : null}
-            </div>
-
-            {undoBookingIds.length ? <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-900"><span>Cleared from Today.</span><button className="font-semibold underline" type="button" onClick={undoClear} disabled={nextStepBusy}>Undo</button></div> : null}
-            {nextStepError ? <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">{nextStepError}</p> : null}
-
-            {manageNextSteps && nextStepItems.length ? <div className="mt-3 flex flex-wrap gap-2 rounded-xl bg-slate-50 p-3"><button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50" type="button" disabled={!selectedNextSteps.size || nextStepBusy} onClick={() => clearNextSteps([...selectedNextSteps])}>Clear selected</button><button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50" type="button" disabled={!selectedNextSteps.size || nextStepBusy} onClick={() => snoozeNextSteps([...selectedNextSteps])}>Snooze selected 1 week</button></div> : null}
-
-            {nextStepItems.length ? <ul className="mt-3 divide-y divide-slate-100">{displayedNextStepItems.map((booking: any) => {
-              const href = eventProfileHref({ organizationId: booking.organizationId ?? null, contactId: booking.primaryContactId, bookingId: booking.id, mode: booking.status === "new_lead" ? "prospect" : undefined }) ?? `/bookings/${booking.id}`;
-              const suggestedLeg = (dashboard.travelLegs ?? []).find((leg: any) => leg.id === booking.legAssignment?.suggestedLegId);
-              return <li className="relative flex items-start gap-3 py-3 first:pt-1 last:pb-0" key={booking.id}>
-                {manageNextSteps ? <input className="mt-1 h-4 w-4" type="checkbox" aria-label={`Select ${booking.name}`} checked={selectedNextSteps.has(booking.id)} onChange={(event) => setSelectedNextSteps((current) => { const next = new Set(current); if (event.target.checked) next.add(booking.id); else next.delete(booking.id); return next; })} /> : null}
-                <div className="min-w-0 flex-1"><Link className="font-semibold text-slate-950 hover:text-orange-700" href={href}>{booking.name}</Link><p className="mt-0.5 text-sm text-slate-600">{booking.planReason === "post_event" ? "Past event · Needs follow-up decision" : `${statusLabel(booking.status)} · Needs follow-up decision`}</p>{suggestedLeg ? <p className="mt-1 text-xs font-bold text-emerald-700">Suggested leg: {suggestedLeg.name}</p> : booking.status === "new_lead" ? <p className="mt-1 text-xs font-semibold text-amber-700">Leg suggestion needs dates and location</p> : null}{booking.copilot?.headline ? <p className="mt-1 text-xs font-semibold text-orange-700">{booking.copilot.headline}</p> : null}</div>
-                {!manageNextSteps ? <div className="relative"><button className="rounded-lg px-2 py-1 text-lg leading-none text-slate-500 hover:bg-slate-100" type="button" aria-label={`More actions for ${booking.name}`} onClick={() => setActionOpenId((current) => current === booking.id ? null : booking.id)}>⋯</button>{actionOpenId === booking.id ? <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-slate-200 bg-white p-1 shadow-xl"><Link className="block rounded-lg px-3 py-2 text-sm hover:bg-slate-50" href={href}>Open profile</Link><button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" type="button" onClick={() => snoozeNextSteps([booking.id])}>Snooze 1 week</button><button className="block w-full rounded-lg px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50" type="button" onClick={() => clearNextSteps([booking.id])}>No follow-up needed</button></div> : null}</div> : null}
-              </li>;
-            })}</ul> : <p className="mt-4 text-sm text-slate-600">Nothing needs a next step right now.</p>}
-            {nextStepItems.length > 8 ? <button className="mt-3 text-sm font-semibold text-orange-700" type="button" onClick={() => setShowAllNextSteps((value) => !value)}>{showAllNextSteps ? "Show less" : `View all ${nextStepItems.length}`}</button> : null}
-          </details>
-        ) : null}
-      </section>
-
       </div></details>
 
+      <ScoutAlertsSection alerts={scoutAlerts} urgentCount={urgentScoutAlertCount} onSnooze={snoozeScoutAlert} onDismiss={dismissScoutAlert} />
       <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Route outreach and scheduled calls</summary><div className="mt-3">
       <LegCallList callingEnabled={callingConfig.assistedCallingEnabled} followUps={followUps} followUpTotal={dashboard.followUpTotal} now={now} />
       <OutreachPlanner />
       </div></details>
 
       {visibleRouteWarningCount > 0 ? (
-        <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-sm" aria-label="Needs attention">
+        <section className="rounded-xl border border-border bg-accent p-4" aria-label="Needs attention">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><p className="font-bold text-amber-950">Route planning needs attention</p><p className="mt-1 text-sm text-amber-800">{visibleRouteWarningCount} route warning{visibleRouteWarningCount === 1 ? "" : "s"} need a look.</p></div>
-            <Link className="text-sm font-bold text-amber-900 underline" href="/routes">Review routes</Link>
+            <div><p className="font-bold text-accent-foreground">Route planning needs attention</p><p className="mt-1 text-sm text-accent-foreground">{visibleRouteWarningCount} route warning{visibleRouteWarningCount === 1 ? "" : "s"} need a look.</p></div>
+            <Button asChild variant="outline"><Link href="/routes">Review routes</Link></Button>
           </div>
         </section>
       ) : null}
@@ -289,24 +240,23 @@ export default function TodayPage() {
       <section className="grid gap-3" aria-labelledby="coming-up-title">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-2xl font-bold" id="coming-up-title">Coming up</h2>
-          <Link className="text-sm font-bold text-orange-700 hover:underline" href="/schedule">View schedule</Link>
+          <Button asChild variant="outline" size="sm"><Link href="/schedule">View schedule</Link></Button>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-border bg-card p-4">
           {nextEvent ? (
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Next event</p><Link className="mt-1 block text-lg font-bold text-slate-950 hover:text-orange-700" href={eventProfileHref({ organizationId: nextEvent.organizationId ?? null, contactId: nextEvent.primaryContactId, bookingId: nextEvent.id }) ?? `/bookings/${nextEvent.id}`}>{nextEvent.name}</Link><BookingOperations operations={nextEvent.operations} /></div>
-              {nextEvent.startsAt ? <span className="text-sm font-semibold text-slate-600">{formatEventDateRange(nextEvent.startsAt, nextEvent.endsAt)}</span> : null}
+              <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Next event</p><Link className="mt-1 block text-lg font-bold text-foreground hover:text-primary" href={eventProfileHref({ organizationId: nextEvent.organizationId ?? null, contactId: nextEvent.primaryContactId, bookingId: nextEvent.id }) ?? `/bookings/${nextEvent.id}`}>{nextEvent.name}</Link><BookingOperations operations={nextEvent.operations} /></div>
+              {nextEvent.startsAt ? <span className="text-sm font-semibold text-muted-foreground">{formatEventDateRange(nextEvent.startsAt, nextEvent.endsAt)}</span> : null}
             </div>
-          ) : <p className="text-sm text-slate-600">No upcoming event dates are set.</p>}
-          {upcomingEvents.length > 1 ? <p className="mt-3 text-xs font-semibold text-slate-500">{upcomingEvents.length - 1} more upcoming event{upcomingEvents.length - 1 === 1 ? "" : "s"}</p> : null}
+          ) : <p className="text-sm text-muted-foreground">No upcoming event dates are set.</p>}
+          {upcomingEvents.length > 1 ? <p className="mt-3 text-xs font-semibold text-muted-foreground">{upcomingEvents.length - 1} more upcoming event{upcomingEvents.length - 1 === 1 ? "" : "s"}</p> : null}
         </div>
       </section>
 
-      <details id="later-work" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <summary className="cursor-pointer text-lg font-bold">Later{laterCount ? <span className="ml-2 text-sm font-semibold text-slate-500">{laterCount} scheduled follow-up{laterCount === 1 ? "" : "s"}</span> : null}</summary>
-        <p className="mt-1 text-sm text-slate-600">Future follow-ups, schedule detail, trips, and renewals are here when you want them.</p>
+      <details id="later-work" className="rounded-xl border border-border bg-card p-4">
+        <summary className="cursor-pointer text-lg font-bold">Schedule &amp; renewals</summary>
+        <p className="mt-1 text-sm text-muted-foreground">Schedule detail, trips, and renewals are here when you want them.</p>
         <div className="mt-4 grid gap-3">
-          {laterFollowUps.length ? <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer font-bold">Scheduled follow-ups <span className="ml-1 text-slate-500">({laterCount})</span></summary><div className="mt-3"><FollowUpList followUps={laterFollowUps} now={now} />{laterCount > laterFollowUps.length ? <p className="mt-3 text-xs font-semibold text-slate-500">Showing the next {laterFollowUps.length} scheduled follow-ups.</p> : null}</div></details> : null}
 
           {upcomingEvents.length ? <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer font-bold">Current & upcoming events <span className="ml-1 text-slate-500">({upcomingEvents.length})</span></summary><ul className="mt-2 divide-y divide-slate-100">{upcomingEvents.map((event: any) => {
             const timing = classifyTodayEventTiming(event, now);
@@ -315,10 +265,10 @@ export default function TodayPage() {
 
           {(dashboard.todayTrips ?? []).length ? <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer font-bold">Today's trips <span className="ml-1 text-slate-500">({dashboard.todayTrips.length})</span></summary><ul className="mt-3 divide-y divide-slate-100">{dashboard.todayTrips.map((trip: any) => <li className="py-3" key={trip.id}><Link className="font-semibold hover:text-orange-700" href={`/trips/${trip.id}`}>{trip.name}</Link><span className="ml-2 text-sm text-slate-600">{trip.legName ? `${trip.legName} · ` : ""}{trip.stopCount} stops</span></li>)}</ul></details> : null}
 
-          {(dashboard.renewalTotal ?? renewals.length) > 0 || dashboard.renewalError ? <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer font-bold">Renewals <span className="ml-1 text-slate-500">({dashboard.renewalTotal ?? renewals.length})</span></summary><div className="mt-4"><RenewalsSection error={dashboard.renewalError ?? null} prominentCount={dashboard.renewalProminentCount ?? 0} renewals={renewals} total={dashboard.renewalTotal ?? renewals.length} /></div></details> : null}
         </div>
       </details>
 
+      {(dashboard.renewalTotal ?? renewals.length) > 0 || dashboard.renewalError ? <RenewalsSection error={dashboard.renewalError ?? null} prominentCount={dashboard.renewalProminentCount ?? 0} renewals={renewals} total={dashboard.renewalTotal ?? renewals.length} /> : null}
     </div>
   );
 }

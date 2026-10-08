@@ -72,7 +72,7 @@ describe("Today needs-a-next-step controls", () => {
     mockDashboard();
     render(<TodayPage />);
 
-    await waitFor(() => expect(screen.getByText("Utah Juneteenth Festival")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Utah Juneteenth Festival").length).toBeGreaterThan(0));
     expect(screen.getByRole("button", { name: "Manage next steps" })).toBeInTheDocument();
     expect(screen.queryByText(/0 packages/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/No attractions/i)).not.toBeInTheDocument();
@@ -83,9 +83,9 @@ describe("Today needs-a-next-step controls", () => {
     apiPost.mockResolvedValue({ ok: true });
     render(<TodayPage />);
 
-    await waitFor(() => expect(screen.getByText("Utah Juneteenth Festival")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "More actions for Utah Juneteenth Festival" }));
-    fireEvent.click(screen.getByRole("button", { name: "No follow-up needed" }));
+    await waitFor(() => expect(screen.getAllByText("Utah Juneteenth Festival").length).toBeGreaterThan(0));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "More actions for Utah Juneteenth Festival" }), { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "No follow-up needed" }));
 
     await waitFor(() => {
       expect(apiPost).toHaveBeenCalledWith("/today/next-step/clear", {
@@ -102,7 +102,7 @@ describe("Today needs-a-next-step controls", () => {
     apiPost.mockResolvedValue({ ok: true });
     render(<TodayPage />);
 
-    await waitFor(() => expect(screen.getByText("Utah Juneteenth Festival")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Utah Juneteenth Festival").length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole("button", { name: "Manage next steps" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Utah Juneteenth Festival" }));
     fireEvent.click(screen.getByRole("button", { name: "Clear selected" }));

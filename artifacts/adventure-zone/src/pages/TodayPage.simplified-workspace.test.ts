@@ -4,11 +4,11 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync("src/pages/TodayPage.tsx", "utf8");
 
 describe("Today simplified daily workspace", () => {
-  it("centers the page on one next action and compact work buckets", () => {
-    expect(source).toContain("Start here");
-    expect(source).toContain("My Work");
+  it("centers the page on one queue and selected next action", () => {
+    expect(source).toContain("<DailyWorkspace");
+    expect(source).toContain("managementOnly");
     expect(source).toContain("Coming up");
-    expect(source).toContain("Later");
+    expect(source).toContain("Schedule &amp; renewals");
   });
 
   it("does not keep the old competing dashboard section hierarchy", () => {

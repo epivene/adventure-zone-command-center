@@ -78,18 +78,18 @@ afterEach(() => {
 });
 
 describe("TodayPage Scout Alerts", () => {
-  it("shows urgent Scout Alerts between Contracts and Needs a decision", async () => {
+  it("keeps urgent Scout Alerts visible outside collapsed booking tools", async () => {
     mockApi();
     render(<TodayPage />);
 
     await waitFor(() => expect(screen.getByText("Twin Falls County Fair")).toBeInTheDocument());
 
-    const contracts = screen.getByText("Contracts (1)").closest("details")!;
+    const tools = screen.getByText("Booking tools").closest("details")!;
     const alerts = screen.getByText(/Scout Alerts/).closest("details")!;
-    const decisions = screen.getByText("Needs a decision (1)").closest("details")!;
     expect(alerts).toHaveAttribute("open");
-    expect(contracts.compareDocumentPosition(alerts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(alerts.compareDocumentPosition(decisions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tools).not.toContainElement(alerts);
+    expect(screen.getByRole("region", { name: "Daily work queue" })).toBeVisible();
+    expect(screen.getByText("Twin Falls County Fair")).toBeVisible();
   });
 
   it("snoozes one alert for one week and removes it from Today after success", async () => {
@@ -115,7 +115,7 @@ describe("TodayPage Scout Alerts", () => {
       "/today/scout-alerts/50000000-0000-4000-8000-000000000001/dismiss",
       {},
     ));
-    expect(screen.getByText("Needs a decision (1)")).toBeInTheDocument();
+    expect(screen.getAllByText("Another Fair").length).toBeGreaterThan(0);
     await waitFor(() => expect(screen.queryByText("Twin Falls County Fair")).not.toBeInTheDocument());
   });
 });

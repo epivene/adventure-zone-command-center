@@ -6,24 +6,23 @@ const summarySource = readFileSync("src/components/today/summary-cards.tsx", "ut
 const mainSource = readFileSync("src/main.tsx", "utf8");
 
 describe("simple Today layout", () => {
-  it("organizes the daily screen around Start here, My Work, Coming up, and Later", () => {
-    const startHere = todaySource.indexOf("Start here");
-    const myWork = todaySource.indexOf("My Work");
+  it("puts the unified workspace ahead of supporting tools and schedule", () => {
+    const daily = todaySource.indexOf("<DailyWorkspace");
+    const tools = todaySource.indexOf(">Booking tools<");
     const comingUp = todaySource.indexOf("Coming up");
-    const later = todaySource.indexOf("Later");
-    expect(startHere).toBeGreaterThan(-1);
-    expect(myWork).toBeGreaterThan(startHere);
-    expect(comingUp).toBeGreaterThan(myWork);
-    expect(later).toBeGreaterThan(comingUp);
-    expect(todaySource).toContain("FollowUpList");
+    expect(daily).toBeGreaterThan(-1);
+    expect(tools).toBeGreaterThan(daily);
+    expect(comingUp).toBeGreaterThan(tools);
+    expect(todaySource).not.toContain("<FollowUpList");
+    expect(todaySource).not.toContain("<NextCallCard");
   });
 
   it("separates due-now follow-ups from future scheduled work", () => {
     expect(todaySource).toContain("actionableFollowUps");
     expect(todaySource).toContain("dueTodayFollowUps");
-    expect(todaySource).toContain("laterFollowUps");
-    expect(todaySource).toContain("Scheduled follow-ups");
-    expect(todaySource.indexOf("Scheduled follow-ups")).toBeGreaterThan(todaySource.indexOf("Later"));
+    const workspace = readFileSync("src/components/today/daily-workspace.tsx", "utf8");
+    expect(workspace).toContain("Waiting &amp; scheduled");
+    expect(workspace).toContain("showLater");
   });
 
   it("opens a targeted details panel from same-page shortcuts", () => {
