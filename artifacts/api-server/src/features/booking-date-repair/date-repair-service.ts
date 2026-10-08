@@ -1,3 +1,4 @@
+import { savedSourceProvesDate } from "./saved-source-date-match";
 import { isBookedForSchedule } from "../calendar/schedule-booking-state";
 import { operationsSeason } from "../bookings/booking-leg-operations-history";
 import { sql } from "drizzle-orm";
@@ -49,7 +50,7 @@ export class BookingDateRepairService {
     if(!instant)fail(422,"INVALID_VERIFIED_DATE");
     const allowed=source.allowed?.[endpoint.field];
     if(source.classifyOnly||source.allowed&&(!allowed||allowed.value!==endpoint.value||allowed.semantics!==endpoint.semantics))fail(422,"SOURCE_DOES_NOT_PROVE_ENDPOINT");
-    if(!source.allowed&&(!endpoint.value||!source.content.includes(endpoint.value)))fail(422,"DATE_NOT_IN_SAVED_SOURCE");
+    if(!source.allowed&&!savedSourceProvesDate(source.content,endpoint))fail(422,"DATE_NOT_IN_SAVED_SOURCE");
     setRaw(after,endpoint.field,instant);
    }else if(p.clearFields.includes(endpoint.field))setRaw(after,endpoint.field,null);
    else if(endpoint.value!==endpointRaw(snapshot.input,endpoint.field)&&endpoint.kind!=="sales_milestone")fail(422,"CLASSIFICATION_MUST_PRESERVE_RAW_VALUE");
