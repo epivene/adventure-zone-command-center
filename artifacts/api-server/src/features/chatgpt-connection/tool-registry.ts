@@ -1,3 +1,4 @@
+import { mappingRepairInput, mappingRepairApplyInput } from "./email-mapping-repair-service";
 import type { WebsiteInquiryReads } from "./website-inquiry-reads";
 import { GmailDraftFilingService, draftFilingInput, draftFilingApplyInput } from "./gmail-draft-filing-service";
 import { operationalReviewToolReminder } from "../operational-review-policy";
@@ -329,9 +330,16 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       schema: draftFilingApplyInput.extend({ requestKey }).strict(),
       call: ({ requestKey, ...a }) => s.draftFiling!.apply(p, { requestKey }, a) },
     { name: "read_email_filing_conflicts", scope: "crm:read", readOnly: true,
-      description: "Read stored profile mappings for the exact current Google account and Gmail thread when filing reports EMAIL_ATTENTION_PROFILE_CONFLICT. Returns associated profile IDs/names without changing them. Compare full conversation/profile evidence; do not merge or overwrite conflicting destinations automatically.",
+      description: "Read stored profile mappings for the exact current Google account and Gmail thread when filing reports EMAIL_ATTENTION_PROFILE_CONFLICT. Returns associated profile IDs/names without changing them. Compare full conversation/profile evidence. For a verified wrong association, use preview_email_mapping_repair then repair_email_profile_mapping with exact revision and identity reason; never infer the destination from a similar name.",
       schema: z.object({ gmailConnectionId: id, threadId: z.string().trim().min(1).max(200) }).strict(),
       call: a => s.draftFiling!.inspect(p, a) },
+    { name: "preview_email_mapping_repair", scope: "crm:read", readOnly: true,
+      description: "Preview correction of a verified wrong app email/profile mapping. Supply the exact current Google account, thread, source message and intended profile. Returns all existing thread mappings, prior profiles, reply state, blockers and an exact revision. Read the full conversation and full profiles; resolve duplicate destination candidates using saved evidence. Does not choose a destination, merge, delete or change anything.",
+      schema: mappingRepairInput, call: a => s.draftFiling!.mappingRepair.preview(p, a) },
+    { name: "repair_email_profile_mapping", scope: "email:organize", readOnly: false, destructive: true,
+      description: "Correct only a verified wrong app association under the owner's authorized correction permission. First preview_email_mapping_repair, read full conversation/profiles, use its exact expectedRevision and supply a reason with identity evidence. Preserves full prior mappings in audit. Corrects reviewed thread mappings and attention profile while preserving reply state/due date; cross-profile linked follow-ups block correction. Supersedes old pending filing jobs. Never merges/deletes profiles, sends mail or modifies Gmail labels. Gmail/history sync is not performed: re-preview/apply normal email filing afterward and verify both sync receipts. For unsent drafts use draft filing afterward. Reuse requestKey for identical retries; changed revision requires rereading.",
+      schema: mappingRepairApplyInput.extend({ requestKey }).strict(),
+      call: ({requestKey,...a}) => s.draftFiling!.mappingRepair.apply(p,{requestKey},a) },
   );
   tools.push(...emailAttentionTools(s.attention, p));
   tools.push(...bookingWorkTools(s.work, p));
