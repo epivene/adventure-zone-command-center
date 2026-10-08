@@ -96,7 +96,7 @@ function SimplifiedQueue({
         <CardTitle>Your work</CardTitle>
         <Badge variant="outline">4 open</Badge>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent>
         <RadioGroup aria-label="Select work item" className="gap-0" onValueChange={onSelect} value={activeId}>
           {dailyQueue.map((item) => (
             <div className="flex items-start gap-3 border-t border-border py-3" key={item.id}>
@@ -123,6 +123,7 @@ export function SimplifiedTodayFlow() {
   const [assignedLegId, setAssignedLegId] = useState(dailyQueue[0]!.assignedLegId ?? "");
   const [legFeedback, setLegFeedback] = useState<string | null>(null);
   const [showFollowUpForm, setShowFollowUpForm] = useState(false);
+  const [showLaterWork, setShowLaterWork] = useState(false);
   const [followUpKind, setFollowUpKind] = useState("email");
   const [followUpDate, setFollowUpDate] = useState("2026-06-17");
   const [followUpNote, setFollowUpNote] = useState("Check whether the event committee has confirmed its dates.");
@@ -171,17 +172,26 @@ export function SimplifiedTodayFlow() {
         <div className="grid gap-5 lg:grid-cols-2">
           <section className="grid content-start gap-3" aria-label="Daily work queue">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-xl font-bold">One queue, one next step</h2>
-              <p className="text-sm text-muted-foreground">Overdue first · due today next</p>
+              <h2 className="text-xl font-bold">Today's work</h2>
+              <p className="text-sm text-muted-foreground">Select a record to see its next step</p>
             </div>
             <SimplifiedQueue activeId={activeId} onSelect={selectWorkItem} />
             <Card>
-              <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+              <CardContent className="grid gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="font-semibold">Waiting &amp; scheduled</p>
                   <p className="text-sm text-muted-foreground">{todayWorkFixture.waiting.length} waiting · {todayWorkFixture.later.length} later</p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setLegFeedback("Waiting and scheduled work is previewed in the source queue.")}>View later work</Button>
+                <Button size="sm" variant="outline" aria-expanded={showLaterWork} onClick={() => setShowLaterWork((value) => !value)}>{showLaterWork ? "Hide later work" : "View later work"}</Button>
+                </div>
+                {showLaterWork ? <ul className="grid gap-3 border-t border-border pt-3">
+                  {[...todayWorkFixture.waiting, ...todayWorkFixture.later].map((item) => <li key={item.id}>
+                    <p className="font-semibold">{item.eventName}</p>
+                    <p className="text-sm text-muted-foreground">{item.reason}</p>
+                    <p className="text-xs text-muted-foreground">{item.dueAt ? `Scheduled ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(item.dueAt))}` : "Waiting for a reply"}</p>
+                  </li>)}
+                </ul> : null}
               </CardContent>
             </Card>
           </section>
@@ -201,7 +211,7 @@ export function SimplifiedTodayFlow() {
                   <Badge variant="secondary">{followUpPreview ? "Preview reminder set" : activeWork.followUpStatus}</Badge>
                 </div>
               </CardHeader>
-              <CardContent className="grid gap-4 pt-0">
+              <CardContent className="grid gap-4">
                 <div className="rounded-lg border border-border bg-muted p-4">
                   <p className="font-semibold">Follow-up path</p>
                   <p className="mt-1 text-sm text-muted-foreground">{activeWork.reason}</p>
