@@ -57,6 +57,9 @@ export default function TodayPage() {
   const [undoBookingIds, setUndoBookingIds] = useState<string[]>([]);
   const [nextStepError, setNextStepError] = useState<string | null>(null);
   const [nextStepBusy, setNextStepBusy] = useState(false);
+  const [outreachPlannerOpen, setOutreachPlannerOpen] = useState(
+    () => new URLSearchParams(window.location.search).get("section") === "outreach-planner",
+  );
   const now = new Date();
 
   useEffect(() => {
@@ -95,6 +98,14 @@ export default function TodayPage() {
     const interval = window.setInterval(refresh, 60_000);
     return () => { window.removeEventListener("focus", refresh); window.clearInterval(interval); };
   }, []);
+
+  useEffect(() => {
+    if (loading || !outreachPlannerOpen) return;
+    document.getElementById("route-outreach-planner")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, [loading, outreachPlannerOpen]);
 
   async function snoozeScoutAlert(alertId: string) {
     const until = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -223,7 +234,7 @@ export default function TodayPage() {
       </div></details>
 
       <ScoutAlertsSection alerts={scoutAlerts} urgentCount={urgentScoutAlertCount} onSnooze={snoozeScoutAlert} onDismiss={dismissScoutAlert} />
-      <details className="rounded-xl border bg-card p-4"><summary className="cursor-pointer font-semibold">Route outreach and scheduled calls</summary><div className="mt-3">
+      <details id="route-outreach-planner" className="rounded-xl border bg-card p-4" open={outreachPlannerOpen} onToggle={(event) => setOutreachPlannerOpen(event.currentTarget.open)}><summary className="cursor-pointer font-semibold">Route outreach and scheduled calls</summary><div className="mt-3">
       <LegCallList callingEnabled={callingConfig.assistedCallingEnabled} followUps={followUps} followUpTotal={dashboard.followUpTotal} now={now} />
       <OutreachPlanner />
       </div></details>

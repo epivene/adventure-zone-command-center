@@ -92,9 +92,28 @@ afterEach(() => {
   cleanup();
   apiGet.mockReset();
   apiPost.mockReset();
+  window.history.replaceState(null, "", "/");
+  delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
 });
 
 describe("TodayPage renewals", () => {
+  it("opens the outreach planner for links from email send review", async () => {
+    mockDashboard(dashboard());
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    window.history.replaceState(null, "", "/today?section=outreach-planner");
+
+    render(<TodayPage />);
+    await waitFor(() => {
+      expect(document.getElementById("route-outreach-planner")).toHaveAttribute("open");
+    });
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+  });
+
   it("shows document attention separately from calls and follow-ups", async () => {
     mockDashboard(dashboard());
     apiGet.mockImplementation((path: string) => {
@@ -117,9 +136,7 @@ describe("TodayPage renewals", () => {
       expect(screen.getAllByText("Current Fair Lead").length).toBeGreaterThan(0);
     });
 
-    const toggle = screen.getByRole("button", {
-      name: /Next Season \/ Renewals \(1\)/,
-    });
+    const toggle = screen.getByRole("button", { name: /Next Season \/ Renewals \(1\)/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("County Fair Renewal")).not.toBeInTheDocument();
 
@@ -212,3 +229,5 @@ describe("TodayPage renewals", () => {
     expect(later).not.toHaveAttribute("open");
   });
 });
+
+    const scrollIntoView = vi.fn();

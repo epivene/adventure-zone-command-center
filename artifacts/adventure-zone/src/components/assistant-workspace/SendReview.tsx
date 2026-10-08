@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import type { Draft } from "@/features/assistant-workspace/types";
 import { workspaceApi } from "@/features/assistant-workspace/api";
 export function SendReview({
@@ -203,9 +204,9 @@ export function SendReview({
                     placeholder="Hold ID from Outreach Planner"
                     className="mt-1 w-full rounded border p-2"
                   />
-                  <a href="/outreach-planner" className="text-xs underline">
-                    Open Outreach Planner
-                  </a>
+                  <Link href="/today?section=outreach-planner" className="text-xs underline">
+                    Open Today’s Outreach Planner
+                  </Link>
                 </label>
               )}
               <label className="block text-sm">
