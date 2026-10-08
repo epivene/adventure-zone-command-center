@@ -14,6 +14,7 @@ import { EventProfileWorkspace } from "@/components/event-profiles/event-profile
 import { EarlyBirdPromoCard, type EarlyBirdPromoView } from "@/components/event-profiles/early-bird-promo-card";
 import { SimpleFullProfile, type OpenSection } from "@/components/profiles/simple-full-profile";
 import { FestivalProfileWorkspace } from "@/components/profiles/festival-profile-workspace";
+import { useProfileGoogleEmail } from "@/components/google-workspace/use-profile-google-email";
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { ScoutNotesPanel } from "@/components/profiles/scout-notes-panel";
 import { AttendanceHistoryPanel } from "@/components/profiles/attendance-history-panel";
@@ -46,6 +47,7 @@ export default function EventProfilePage() {
   const [, setLocation] = useLocation();
   const { openProfile } = useWorkspaceSession();
   const [data, setData] = useState<any>(null);
+  const profileEmails = useProfileGoogleEmail(profileId ?? "", undefined, undefined, Boolean(data?.id && data.id === profileId));
   const [profileSection, setProfileSection] = useState<OpenSection>(null);
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -207,12 +209,13 @@ export default function EventProfilePage() {
         <FollowUpDialog key={profileId} open={followUpOpen} onOpenChange={changeFollowUpOpen} profileId={profileId} profileName={profileLabel} contactId={contactId ?? data.selectedContactId} bookingId={bookingId} onSaved={() => { void loadProfile(); }} />
         {profileId ? <AssistantContextRegistration kind="organization" label={profileLabel} recordId={profileId} /> : null}
 
-        <FestivalProfileWorkspace key={profileId} profile={data} ratingSummary={data.wrapUpRatingSummary}
+        <FestivalProfileWorkspace key={profileId} profile={data} ratingSummary={data.wrapUpRatingSummary} profileEmails={profileEmails}
           onFollowUp={() => setFollowUpOpen(true)} onBack={goBack} originLabel={profileOrigin} onNoteSaved={loadProfile}
           toolsOpen={profileEditing || Boolean(profileSection) || action === "call" || researchOpen}
           legacyTools={
           <SimpleFullProfile
             compact
+            profileEmails={profileEmails}
             profile={data}
             onSectionChange={setProfileSection}
             onProfileSaved={loadProfile}

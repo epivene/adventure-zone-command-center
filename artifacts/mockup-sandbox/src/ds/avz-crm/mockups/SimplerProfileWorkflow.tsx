@@ -1,3 +1,4 @@
 import { FestivalProfileWorkspace } from './_shared/profile-simpler/festival-profile-workspace';
+import { demoEmails } from './_shared/profile-simpler/email-preview-adapter';
 import { demoProfile } from './_shared/profile-simpler/adapter';
-export function SimplerProfileWorkflow() { return <main className="min-h-dvh bg-background p-4 text-foreground sm:p-6"><FestivalProfileWorkspace profile={demoProfile} originLabel="Profiles" onBack={() => {}} onFollowUp={() => {}} legacyTools={<p>Activity combines notes and emails. Records combines contacts, bookings, and documents. All existing editors remain in the live app. This preview uses demonstration data only.</p>} /></main>; }
+export function SimplerProfileWorkflow() { return <main className="min-h-dvh bg-background p-4 text-foreground sm:p-6"><FestivalProfileWorkspace profile={demoProfile} profileEmails={demoEmails} originLabel="Profiles" onBack={() => {}} onFollowUp={() => {}} legacyTools={<p>Activity combines notes and emails. Records combines contacts, bookings, and documents. All existing editors remain in the live app. This preview uses demonstration data only.</p>} /></main>; }

@@ -13,6 +13,8 @@ import { BUSINESS_TIME_ZONE } from "./adapter";
 import { FestivalEditionEditor } from "./festival-edition-editor";
 import { editionGroups } from "./festival-edition-fields";
 import { ProfileLatestNote } from "./profile-latest-note";
+import { ProfileLatestEmail } from "./profile-latest-email";
+import type { ProfileGoogleEmailState } from "./email-preview-adapter";
 
 function calendarLabel(value: string | undefined) {
   if (!value) return "Not added yet";
@@ -23,11 +25,12 @@ function Detail({ label, value, url }: { label: string; value?: string | null; u
     <p className="mt-1 whitespace-pre-line break-words text-sm leading-6">{value ? url ? <a href={value} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-4">Open {label.toLowerCase()}</a> : value : <span className="text-muted-foreground">Not added yet</span>}</p></div>;
 }
 
-export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, onBack, originLabel, legacyTools, toolsOpen = false, onNoteSaved, children }: {
+export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, onBack, originLabel, legacyTools, toolsOpen = false, onNoteSaved, children, profileEmails }: {
   profile: EventProfile; ratingSummary?: { average: number | null; count: number };
   onFollowUp(): void; onBack(): void; originLabel: string; legacyTools: ReactNode; toolsOpen?: boolean;
   onNoteSaved?(): Promise<void> | void;
   children?: ReactNode;
+  profileEmails?: ProfileGoogleEmailState;
 }) {
   const [editions, setEditions] = useState<FestivalEdition[]>([]);
   const [year, setYear] = useState(new Date().getFullYear());
@@ -78,7 +81,10 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
       </div>
       {ratingSummary?.count ? <Badge variant="outline">{ratingSummary.average?.toFixed(1) ?? "—"} · {ratingSummary.count} reviews</Badge> : <Badge variant="outline">No reviews yet</Badge>}
     </header>
-    <ProfileLatestNote key={profile.id} profileId={profile.id} contactId={contact?.id} notes={profile.notes ?? []} onSaved={onNoteSaved} />
+    <div className={`grid min-w-0 items-start gap-5 ${profileEmails ? "lg:grid-cols-2" : ""}`}>
+      <ProfileLatestNote key={profile.id} profileId={profile.id} contactId={contact?.id} notes={profile.notes ?? []} onSaved={onNoteSaved} />
+      {profileEmails ? <ProfileLatestEmail key={`email-${profile.id}`} profileId={profile.id} gmail={profileEmails} /> : null}
+    </div>
     {savedNotice ? <p role="status" className="text-sm font-semibold text-primary">Event-year details saved.</p> : null}
     <div className="grid min-w-0 grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.9fr)]">
       <div className="grid min-w-0 gap-4">

@@ -3,7 +3,7 @@ import { ProfileActivityHistory } from "./profile-activity-history";
 import { mergeProfileHistory } from "./profile-activity-history-model";
 import { getBossProfileEmails, getBossProfileDrafts, getBossThread } from "@/components/boss/boss-profile-emails";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
-import { useProfileGoogleEmail } from "@/components/google-workspace/use-profile-google-email";
+import { useProfileGoogleEmail, type ProfileGoogleEmailState } from "@/components/google-workspace/use-profile-google-email";
 import { ProfileWorkspaceActions } from "./profile-workspace-actions";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { ProfileLatestNote } from "./profile-latest-note";
@@ -141,6 +141,7 @@ export function SimpleFullProfile({
   role = "admin",
   editor,
   compact = false,
+  profileEmails,
 }: {
   profile: EventProfile & { place: EventProfile["place"] & { description?: string | null }; managerReviews?: ProfileManagerReview[] };
   onProfileSaved?: () => Promise<void> | void;
@@ -155,6 +156,7 @@ export function SimpleFullProfile({
   role?: "admin" | "boss";
   editor?: ReactNode;
   compact?: boolean;
+  profileEmails?: ProfileGoogleEmailState;
 }) {
   const [internalEditing, setInternalEditing] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSection>(() =>
@@ -179,7 +181,8 @@ export function SimpleFullProfile({
   const recordsOpen = compact && ["contacts", "events", "documents"].includes(openSection ?? "");
   const activityOpen = compact && ["notes", "emails"].includes(openSection ?? "");
   const routePrefix = boss ? "/boss" : "";
-  const gmail = useProfileGoogleEmail(profile.id, undefined, boss ? getBossProfileEmails : undefined);
+  const localEmails = useProfileGoogleEmail(profile.id, undefined, boss ? getBossProfileEmails : undefined, !profileEmails);
+  const gmail = profileEmails ?? localEmails;
   const emailConversations = gmail.conversations;
   const search = useSearch();
   const [,navigate] = useLocation();

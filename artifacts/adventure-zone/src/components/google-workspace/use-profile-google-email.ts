@@ -34,6 +34,7 @@ export function useProfileGoogleEmail(
   organizationId: string,
   currentYear = new Date().getUTCFullYear(),
   loadEmails: typeof getGoogleProfileEmails = getGoogleProfileEmails,
+  enabled = true,
 ): ProfileGoogleEmailState {
   const requestVersion = useRef(0);
   const [loadedFor, setLoadedFor] = useState(organizationId);
@@ -49,6 +50,7 @@ export function useProfileGoogleEmail(
     setConversations([]);
     setLoading(true);
     setError(null);
+    if (!enabled) { setLoading(false); return; }
     try {
       const result = await loadEmails(organizationId);
       if (version !== requestVersion.current) return;
@@ -76,7 +78,7 @@ export function useProfileGoogleEmail(
     } finally {
       if (version === requestVersion.current) setLoading(false);
     }
-  }, [organizationId, loadEmails]);
+  }, [organizationId, loadEmails, enabled]);
 
   useEffect(() => {
     void reload();

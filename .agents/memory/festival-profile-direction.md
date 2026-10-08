@@ -17,7 +17,7 @@ Do not silently combine or overwrite two organizers' saved edition records for t
 
 **How to apply:** Reparent distinct years inside the existing merge transaction. Block overlapping years before deletion and require reconciliation.
 
-Profiles should have fewer buttons and separate pages; combine related information, and show the newest note front and center.
+Profiles should have fewer buttons and separate pages; combine related information, and show the newest note and newest linked profile email front and center. The email must link to that conversation in the app's Emails workspace.
 
 **Why:** The user explicitly requested this simplification after using the expanded profiles.
 
