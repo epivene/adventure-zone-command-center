@@ -10,3 +10,9 @@ Keep existing organizer and contact information, bookings, and CRM history. Add 
 The user approved both the festival-profile layout and the Today-style Leads layout with visible suggested-leg assignments for integration into the app.
 
 **How to apply:** Treat new event fields as optional, preserve existing values and relationships, and apply the simpler Today interaction direction. Leads and suggested-leg assignments are the next area after profiles.
+
+Do not silently combine or overwrite two organizers' saved edition records for the same year during a duplicate-profile merge.
+
+**Why:** The user requires existing CRM information to be preserved; choosing one annual record or merging conflicting text automatically can lose information.
+
+**How to apply:** Reparent distinct years inside the existing merge transaction. Block overlapping years before deletion and require reconciliation.

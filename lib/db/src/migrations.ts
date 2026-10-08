@@ -691,6 +691,30 @@ const migrationFiles = [
       AND to_regprocedure('booking_resolved_dates(uuid,timestamptz,timestamptz,timestamptz,timestamptz)') IS NOT NULL
       AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='booking_date_receipt_immutable' AND tgrelid=to_regclass(current_schema()||'.booking_date_repair_receipts')) AS ready`,
   },
+  {
+    name: "20260912_profile_booking_decisions.sql",
+    markerSql: `SELECT
+      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'organizations' AND column_name = 'application_deadline')
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'organizations' AND column_name = 'recommended_deal_model')
+      AND to_regclass(current_schema() || '.organizations_application_deadline_idx') IS NOT NULL
+      AND to_regclass(current_schema() || '.organizations_recommended_deal_model_idx') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'organizations'::regclass AND conname = 'organizations_recommended_deal_model_valid')
+      AS ready`,
+  },
+  {
+    name: "20260921_event_date_coverage.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.event_date_facts') IS NOT NULL
+      AND to_regclass(current_schema() || '.event_date_facts_one_active_per_org') IS NOT NULL
+      AND to_regclass(current_schema() || '.event_date_coverage_runs') IS NOT NULL
+      AND to_regclass(current_schema() || '.event_date_coverage_items') IS NOT NULL
+      AND to_regclass(current_schema() || '.event_date_coverage_items_run_org_unique') IS NOT NULL
+      AS ready`,
+  },
+  {
+    name: "20261008_festival_editions.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.festival_editions') IS NOT NULL AND to_regclass(current_schema() || '.festival_editions_organization_year') IS NOT NULL AS ready",
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
@@ -720,6 +744,17 @@ export async function loadActReviewMigrations(): Promise<ActReviewMigration[]> {
       sql: await readFile(new URL(name, directory), "utf8"),
     })),
   );
+}
+
+export async function ensureFestivalEditionSchema(): Promise<void> {
+  const directory = await resolveMigrationDirectory();
+  const required = ["20260912_profile_booking_decisions.sql", "20260921_event_date_coverage.sql", "20261008_festival_editions.sql"];
+  const migrations = await Promise.all(required.map(async name => {
+    const migration = migrationFiles.find(item => item.name === name);
+    if (!migration) throw new Error(`Required profile migration is missing: ${name}`);
+    return { ...migration, sql: await readFile(new URL(name, directory), "utf8") };
+  }));
+  await runActReviewMigrations({ migrations });
 }
 
 export async function runActReviewMigrations(options?: {

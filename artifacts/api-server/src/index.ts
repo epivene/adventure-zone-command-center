@@ -12,6 +12,7 @@ import { exitAfterRequiredStartupFailure } from "./lib/required-startup-shutdown
 import { validateOwnerConfig } from "./lib/auth";
 import { db, pool } from "@workspace/db";
 import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
+import { ensureFestivalEditionSchema } from "@workspace/db/migrations";
 import { runRequiredSchemaStartup } from "./db/required-schema-startup";
 import { recoverStaleDatabaseLockConvoys } from "./db/stale-lock-recovery";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
@@ -348,6 +349,7 @@ process.once("SIGTERM", () => {
 async function completeRequiredStartup(): Promise<void> {
   try {
     await runRequiredSchemaStartup();
+    await runStartupStep("required festival edition schema", ensureFestivalEditionSchema);
     await runStartupStep(
       "development sample account seed",
       ensureDevelopmentSampleAccounts,

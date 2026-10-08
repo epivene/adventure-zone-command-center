@@ -57,14 +57,15 @@ export default defineConfig({
       prettier: true,
       override: {
         zod: {
+          version: 3,
           coerce: {
             query: ['boolean', 'number', 'string'],
-            param: ['boolean', 'number', 'string'],
-            body: ['bigint', 'date'],
-            response: ['bigint', 'date'],
+            param: ['boolean', 'number'],
+            body: ['bigint'],
+            response: ['bigint'],
           },
         },
-        useDates: true,
+        useDates: false,
         useBigInt: true,
       },
     },

@@ -46,7 +46,7 @@ function coerceRenewals(items: any[]) {
   return (items ?? []).map((renewal) => ({ ...renewal, dueAt: renewal.dueAt ? new Date(renewal.dueAt) : null }));
 }
 
-export default function TodayPage() {
+export default function TodayPage({ leadsOnly = false }: { leadsOnly?: boolean }) {
   const [dashboard, setDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -181,6 +181,23 @@ export default function TodayPage() {
     endsAt: event.endsAt ? new Date(event.endsAt) : null,
   }));
   const nextStepItems = (dashboard.needsFollowUpPlan ?? []).filter((booking: any) => !hiddenNextSteps.has(booking.id));
+  if (leadsOnly) {
+    const leadStatuses = new Set(["new_lead", "researching", "contact_due", "contacted", "interested", "possible", "unlikely", "quote_sent", "pending_decision"]);
+    const leads = nextStepItems.filter((booking: any) => leadStatuses.has(booking.status));
+    const leadIds = new Set(leads.map((booking: any) => booking.id));
+    return <div className="mx-auto grid max-w-6xl gap-5 text-foreground">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
+        <div><p className="text-xs font-semibold uppercase tracking-wide text-primary">Adventure Zone · Leads</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Lead work queue</h1><p className="mt-1 text-sm text-muted-foreground">One queue, with the selected lead’s next step alongside it.</p></div>
+        <Badge variant="secondary">{leads.length} need a next step</Badge>
+      </header>
+      <p className="text-sm text-muted-foreground">Open leads without a future reminder. Scheduled work remains in Today.</p>
+      <div className="flex flex-wrap gap-2"><Button asChild variant="outline" size="sm"><Link href="/today">Today</Link></Button><Button asChild variant="ghost" size="sm"><Link href="/profiles">All profiles</Link></Button><Button asChild variant="ghost" size="sm"><Link href="/imports/leads">Import leads</Link></Button></div>
+      {nextStepError ? <p role="alert" className="text-sm text-destructive">{nextStepError} <Button variant="outline" size="sm" onClick={() => void refreshToday().catch(() => {})}>Refresh</Button></p> : null}
+      <DailyWorkspace key="leads" leadsOnly queue={coerceMasterTodayQueue({})} decisions={leads}
+        followUps={followUps.filter((item: any) => leadIds.has(item.bookingId))} travelLegs={dashboard.travelLegs ?? []}
+        callingEnabled={callingConfig.assistedCallingEnabled} onChanged={refreshToday} onClear={clearNextSteps} onSnooze={snoozeNextSteps} busy={nextStepBusy} />
+    </div>;
+  }
   const overdueFollowUps = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "overdue");
   const dueTodayFollowUps = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "today");
   const actionableFollowUps = [...overdueFollowUps, ...dueTodayFollowUps];
@@ -204,6 +221,7 @@ export default function TodayPage() {
       {nextStepError ? <p className="rounded-lg border border-border p-3 text-sm text-destructive" role="alert">{nextStepError}<Button variant="outline" size="sm" className="ml-3" onClick={() => void refreshToday().catch(() => {})}>Refresh</Button></p> : null}
       {undoBookingIds.length ? <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted p-3" role="status"><span>Cleared from Today.</span><Button variant="outline" size="sm" onClick={undoClear} disabled={nextStepBusy}>Undo</Button></div> : null}
       <DailyWorkspace queue={coerceMasterTodayQueue(dashboard.masterQueue)} followUps={followUps} decisions={nextStepItems} travelLegs={dashboard.travelLegs ?? []} callingEnabled={callingConfig.assistedCallingEnabled} onChanged={refreshToday} onClear={clearNextSteps} onSnooze={snoozeNextSteps} busy={nextStepBusy} />
+      <Button asChild variant="outline" className="w-fit"><Link href="/leads">Review leads and suggested legs</Link></Button>
       <MasterWorkQueue managementOnly queue={coerceMasterTodayQueue(dashboard.masterQueue)} onChanged={refreshToday}/>
       {documentReviewCount > 0 ? (
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-accent p-4" aria-label="Document attention">

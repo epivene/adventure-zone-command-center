@@ -11,6 +11,57 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /event-profiles/{id}/editions:
+    get:
+      operationId: listFestivalEditions
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Saved festival years
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [editions]
+                properties:
+                  editions:
+                    type: array
+                    items: {$ref: "#/components/schemas/FestivalEdition"}
+  /event-profiles/{id}/editions/{year}:
+    put:
+      operationId: saveFestivalEdition
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: year, in: path, required: true, schema: {type: integer, minimum: 1900, maximum: 2200}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/FestivalEditionInput"}
+      responses:
+        "200":
+          description: Saved event year
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FestivalEdition"}
+        "409":
+          description: This event year changed; reload before saving
+  /bookings/{id}/lead-leg:
+    post:
+      operationId: assignLeadLeg
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LeadLegInput"}
+      responses:
+        "200":
+          description: Lead leg assigned
+        "409":
+          description: Assignment changed or booking is no longer a lead
   /healthz:
     get:
       operationId: healthCheck
@@ -26,6 +77,32 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
 components:
   schemas:
+    FestivalEdition:
+      type: object
+      required: [id, organizationId, year, details, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        organizationId: {type: string, format: uuid}
+        year: {type: integer}
+        details:
+          type: object
+          additionalProperties: {type: string, maxLength: 4000}
+        updatedAt: {type: string, format: date-time}
+    FestivalEditionInput:
+      type: object
+      required: [details, expectedUpdatedAt]
+      properties:
+        details:
+          type: object
+          maxProperties: 60
+          additionalProperties: {type: string, maxLength: 4000}
+        expectedUpdatedAt: {type: [string, "null"], format: date-time}
+    LeadLegInput:
+      type: object
+      required: [travelLegId, expectedTravelLegId]
+      properties:
+        travelLegId: {type: string, format: uuid}
+        expectedTravelLegId: {type: [string, "null"], format: uuid}
     HealthStatus:
       type: object
       properties:

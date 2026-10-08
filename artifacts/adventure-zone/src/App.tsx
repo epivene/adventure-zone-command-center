@@ -378,7 +378,8 @@ function AdminProtectedApp() {
           <Route path="/design-studio/email-templates" component={SettingsCommunicationTemplatesPage} />
           <Route path="/design-studio/:id" component={DesignStudioEditorPage} />
           <Route path="/design-studio" component={DesignStudioPage} />
-          <Route path="/today" component={TodayPage} />
+          <Route path="/today"><TodayPage /></Route>
+          <Route path="/leads"><TodayPage leadsOnly /></Route>
           <Route path="/website-inquiries" component={WebsiteInquiriesPage} />
           <Route path="/emails" component={EmailsPage} />
           <Route path="/email-review" component={EmailReviewPage} />

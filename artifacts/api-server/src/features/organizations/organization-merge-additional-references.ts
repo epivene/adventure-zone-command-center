@@ -12,6 +12,16 @@ export async function reparentAdditionalOrganizationReferences(
   primaryId: string,
   duplicateId: string,
 ): Promise<void> {
+  const editionTable = await transaction.execute(sql`SELECT to_regclass(current_schema() || '.festival_editions') IS NOT NULL AS present`);
+  if (editionTable.rows[0]?.present) {
+    const overlapping = await transaction.execute(sql`
+      SELECT incoming.year FROM festival_editions incoming
+      JOIN festival_editions surviving ON surviving.organization_id = ${primaryId} AND surviving.year = incoming.year
+      WHERE incoming.organization_id = ${duplicateId} LIMIT 1
+    `);
+    if (overlapping.rows.length) throw new Error("Both profiles have details for the same festival year. Reconcile those details before merging; neither record has been deleted.");
+    await transaction.execute(sql`UPDATE festival_editions SET organization_id = ${primaryId}, updated_at = now() WHERE organization_id = ${duplicateId}`);
+  }
   // node-postgres sends prepared statements through PostgreSQL's extended
   // protocol, which accepts one command per statement. Keep each update
   // separate so the merge works against the real driver as well as PGlite.

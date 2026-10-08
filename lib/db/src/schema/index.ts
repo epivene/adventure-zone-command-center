@@ -19,6 +19,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { sql } from "drizzle-orm";
+export * from "./festival-editions";
 
 // Inlined type constants (originally from features/)
 const bookingStatusValues = [

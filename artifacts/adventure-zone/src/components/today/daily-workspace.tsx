@@ -18,6 +18,7 @@ import { callWorkspaceHref, eventProfileHref } from "./next-call-card";
 import { DailyFollowUpForm } from "./daily-follow-up-form";
 import { apiGet } from "@/lib/auth-token";
 import type { LegAssignmentView } from "@/components/bookings/leg-assignment-panel";
+import { LeadLegControls } from "./lead-leg-controls";
 
 function dueLabel(work: DailyWork) {
   if (!work.dueAt) return "Needs a next step";
@@ -26,11 +27,17 @@ function dueLabel(work: DailyWork) {
   const due = classifyBusinessDueDate(date, new Date());
   return `${due === "overdue" ? "Overdue · " : due === "today" ? "Today · " : ""}${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: BUSINESS_TIME_ZONE }).format(date)}`;
 }
+function leadDate(work: DailyWork) {
+  const value = work.decision?.startsAt;
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: BUSINESS_TIME_ZONE }).format(date) : null;
+}
 
-export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callingEnabled, onChanged, onClear, onSnooze, busy }: {
+export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callingEnabled, onChanged, onClear, onSnooze, busy, leadsOnly = false }: {
   queue: MasterTodayQueue; followUps: FollowUpSummary[]; decisions: DailyDecision[];
   travelLegs: { id: string; name: string }[]; callingEnabled: boolean;
-  onChanged(): Promise<void>; onClear(ids: string[]): Promise<void>; onSnooze(ids: string[]): Promise<void>; busy: boolean;
+  onChanged(): Promise<void>; onClear(ids: string[]): Promise<void>; onSnooze(ids: string[]): Promise<void>; busy: boolean; leadsOnly?: boolean;
 }) {
   const { open, later } = buildDailyWork(queue, followUps, decisions);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -42,6 +49,7 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
   const [visibleCount, setVisibleCount] = useState(8);
   const [bookingLeg, setBookingLeg] = useState<{ bookingId: string; assignment: LegAssignmentView | null; legs: { id: string; name: string }[] } | null>(null);
   const [legError, setLegError] = useState(false);
+  const [legBusy, setLegBusy] = useState(false);
   const restored = useRef(false);
   useEffect(() => {
     if (restored.current) return;
@@ -56,14 +64,14 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
   }, []);
   const visible = showLater ? [...open, ...later] : open;
   const work = visible.find(item => item.id === activeId) ?? open[0] ?? (showLater ? later[0] : undefined);
-  const locked = busy || formBusy;
+  const locked = busy || formBusy || legBusy;
   const validSelected = selected.filter(id => decisions.some(decision => decision.id === id));
   const loadedLeg = bookingLeg?.bookingId === work?.bookingId ? bookingLeg : null;
-  const assignment = work?.decision?.legAssignment ?? loadedLeg?.assignment;
+  const assignment = loadedLeg?.assignment ?? work?.decision?.legAssignment;
   useEffect(() => {
     let cancelled = false;
     setLegError(false);
-    if (!work?.bookingId || work.decision?.legAssignment) return;
+    if (!work?.bookingId) return;
     const bookingId = work.bookingId;
     apiGet<{ legAssignment: LegAssignmentView | null; allTravelLegs: { id: string; name: string }[] }>(`/bookings/${bookingId}`)
       .then(detail => { if (!cancelled) setBookingLeg({ bookingId, assignment: detail.legAssignment, legs: detail.allTravelLegs ?? [] }); })
@@ -91,7 +99,7 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
       </div>
       <Card className="min-w-0">
         <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle>Your work</CardTitle><Badge variant="outline">{open.length} open</Badge>
+          <CardTitle>{leadsOnly ? "Open leads" : "Your work"}</CardTitle><Badge variant="outline">{open.length} open</Badge>
         </CardHeader>
         <CardContent className="grid gap-3">
           {decisions.length ? <Button size="sm" variant="ghost" aria-label="Manage next steps" disabled={locked} onClick={() => { setManage(value => !value); setSelected([]); }}>{manage ? "Done managing" : "Manage next steps"}</Button> : null}
@@ -113,6 +121,8 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
                 <span className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold">{item.name}</span><span className="text-xs text-muted-foreground">{dueLabel(item)}</span></span>
                 <span className="text-sm text-muted-foreground">{item.kind} · {item.reason}</span>
                 {item.location ? <span className="text-xs text-muted-foreground">{item.location}</span> : null}
+                {leadDate(item) ? <span className="text-xs text-muted-foreground">Event: {leadDate(item)}</span> : null}
+                {item.decision?.legAssignment ? <span className="text-xs font-semibold text-primary">{item.decision.legAssignment.suggestedLegId ? `${item.decision.legAssignment.source === "manual" ? "Assigned leg" : "Suggested leg"}: ${legName(item.decision.legAssignment.suggestedLegId)}` : "Needs leg assignment"}</span> : null}
               </Label>
             </div>)}
           </RadioGroup> : <p className="text-sm text-muted-foreground">Nothing needs action right now.</p>}
@@ -128,7 +138,7 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
       <h2 className="text-xl font-bold">Next step</h2>
       <Card className="min-w-0">
         {work ? <>
-          <CardHeader><CardTitle>{work.name}</CardTitle><p className="text-sm text-muted-foreground">{[work.location, work.kind].filter(Boolean).join(" · ")}</p></CardHeader>
+          <CardHeader><CardTitle>{work.name}</CardTitle><p className="text-sm text-muted-foreground">{[work.location, leadDate(work), work.kind].filter(Boolean).join(" · ")}</p></CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid gap-3 rounded-lg border border-border bg-muted p-4">
               <p className="font-semibold">Follow-up path</p>
@@ -165,6 +175,11 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
               </div>
               {assignment ? <p className="text-sm text-muted-foreground">{assignment.explanation} · {assignment.confidence} confidence</p> : <p className="text-sm text-muted-foreground">{legError ? "Could not load the recommendation. Open the booking to review its assignment." : "Open the booking to review dates, location, and route recommendations."}</p>}
               {assignment?.warning ? <Badge variant="secondary">{assignment.warning === "major_travel_concern" ? "Major travel concern" : "Long travel"}</Badge> : null}
+              {assignment && work.decision && ["new_lead", "researching", "contact_due", "contacted", "interested", "possible", "unlikely", "quote_sent", "pending_decision"].includes(work.decision.status)
+                ? <LeadLegControls key={work.bookingId} bookingId={work.bookingId} assignment={assignment} legs={loadedLeg?.legs ?? travelLegs} onBusyChange={setLegBusy} onSaved={async saved => {
+                    setBookingLeg({ bookingId: work.bookingId!, assignment: saved, legs: loadedLeg?.legs ?? travelLegs });
+                    await onChanged();
+                  }} /> : null}
               <Button asChild variant="outline" size="sm"><Link onClick={remember} href={`/bookings/${work.bookingId}/edit`}>Review assignment</Link></Button>
             </section> : null}
           </CardContent>

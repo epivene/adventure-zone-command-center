@@ -13,6 +13,7 @@ import { apiGet } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
 import { EarlyBirdPromoCard, type EarlyBirdPromoView } from "@/components/event-profiles/early-bird-promo-card";
 import { SimpleFullProfile, type OpenSection } from "@/components/profiles/simple-full-profile";
+import { FestivalProfileWorkspace } from "@/components/profiles/festival-profile-workspace";
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { ScoutNotesPanel } from "@/components/profiles/scout-notes-panel";
 import { AttendanceHistoryPanel } from "@/components/profiles/attendance-history-panel";
@@ -206,7 +207,10 @@ export default function EventProfilePage() {
         <FollowUpDialog key={profileId} open={followUpOpen} onOpenChange={changeFollowUpOpen} profileId={profileId} profileName={profileLabel} contactId={contactId ?? data.selectedContactId} bookingId={bookingId} onSaved={() => { void loadProfile(); }} />
         {profileId ? <AssistantContextRegistration kind="organization" label={profileLabel} recordId={profileId} /> : null}
 
-        <div>
+        <FestivalProfileWorkspace key={profileId} profile={data} ratingSummary={data.wrapUpRatingSummary}
+          onFollowUp={() => setFollowUpOpen(true)} onBack={goBack} originLabel={profileOrigin}
+          toolsOpen={profileEditing || Boolean(profileSection) || action === "call"}
+          legacyTools={
           <SimpleFullProfile
             profile={data}
             onSectionChange={setProfileSection}
@@ -219,7 +223,7 @@ export default function EventProfilePage() {
             editing={profileEditing}
             onEditingChange={setProfileEditing}
           />
-        </div>
+        } />
 
         {profileSection === "events" ? <>
         {contractBookings.length || contractVersions.length ? <section className="rounded-xl border border-[#d8dfd6] bg-white p-4 shadow-sm">
@@ -243,9 +247,13 @@ export default function EventProfilePage() {
           />
         ) : null}
 
-        {!profileEditing && profileId ? <ProfileWorkActivity profileId={profileId} /> : null}
+        {!profileEditing && profileId ? <details className="rounded-md border border-border bg-card p-4">
+        <summary className="cursor-pointer font-semibold">Booking operations &amp; outreach</summary>
+        <div className="mt-4 grid gap-4">
+        <ProfileWorkActivity profileId={profileId} />
         {!profileEditing && profileId ? <ProfileLegOperations profileId={profileId} client={ownerOperationsClient} role="owner" search={search} onSearchChange={(query) => setLocation(`/profiles/${profileId}?${query}`, { replace: true })} /> : null}
         {!profileEditing && profileId ? <OutreachProfileSummary organizationId={profileId} /> : null}
+        </div></details> : null}
 
         {!profileEditing && profileSection === "documents" && profileId ? <ProfileDocuments profileId={profileId} /> : null}
         {profileSection === "notes" ? <>

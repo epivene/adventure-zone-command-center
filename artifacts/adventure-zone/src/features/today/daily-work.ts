@@ -13,6 +13,8 @@ export type DailyDecision = {
   city?: string | null;
   region?: string | null;
   status: string;
+  startsAt?: Date | string | null;
+  endsAt?: Date | string | null;
   planReason?: string;
   legAssignment?: LegAssignmentView | null;
   copilot?: { headline?: string } | null;
