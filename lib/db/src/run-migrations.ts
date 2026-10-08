@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { orderMigrations } from "./migration-order";
 
 const raw = process.env.RENDER_DATABASE_URL ?? process.env.DATABASE_URL;
 
@@ -44,11 +45,10 @@ try {
     );
   `);
 
-  // Collect pending migrations in filename order.
-  const files = fs
+  // Keep filename order except where an explicit prerequisite must run first.
+  const files = orderMigrations(fs
     .readdirSync(migrationsDir)
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
+    .filter((f) => f.endsWith(".sql")));
 
   const { rows: applied } = await client.query<{ filename: string }>(
     "SELECT filename FROM _custom_migrations",
