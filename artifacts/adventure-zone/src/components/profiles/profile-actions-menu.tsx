@@ -28,6 +28,9 @@ export function ProfileActionsMenu({
   showFollowUp = true,
   onEdit,
   triggerLabel = "Actions",
+  onOpenEmails,
+  onAssistant,
+  callHref,
 }: {
   profileId: string;
   contactId?: string | null;
@@ -36,6 +39,9 @@ export function ProfileActionsMenu({
   showFollowUp?: boolean;
   onEdit?: () => void;
   triggerLabel?: string;
+  onOpenEmails?: () => void;
+  onAssistant?: () => void;
+  callHref?: string | null;
 }) {
   const [lastResortOpen, setLastResortOpen] = useState(false);
   const [fillerOpen, setFillerOpen] = useState(false);
@@ -70,6 +76,9 @@ export function ProfileActionsMenu({
             <DropdownMenuSeparator />
             {showAddNote ? <DropdownMenuItem onSelect={() => onAddNote?.()}>Add note</DropdownMenuItem> : null}
             {onEdit ? <DropdownMenuItem onSelect={onEdit}>Edit profile</DropdownMenuItem> : null}
+            {callHref ? <DropdownMenuItem asChild><Link href={callHref}>Open call workspace</Link></DropdownMenuItem> : null}
+            {onOpenEmails ? <DropdownMenuItem onSelect={onOpenEmails}>Emails</DropdownMenuItem> : null}
+            {onAssistant ? <DropdownMenuItem onSelect={onAssistant}>Assistant</DropdownMenuItem> : null}
             {showFollowUp ? <DropdownMenuItem asChild><Link href={followUpHref}>Add follow-up</Link></DropdownMenuItem> : null}
             <DropdownMenuItem onSelect={() => setEventFamilyOpen(true)}>Add to Event Family</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setFillerOpen(true)}>{fillerLabel}</DropdownMenuItem>

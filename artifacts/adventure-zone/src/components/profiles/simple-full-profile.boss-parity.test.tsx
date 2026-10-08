@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   adminEmails: vi.fn(async () => ({ conversations: [] })),
@@ -23,6 +23,7 @@ vi.mock("@/components/profiles/profile-email-composer", () => ({
 }));
 vi.mock("@/components/profiles/profile-actions-menu", () => ({ ProfileActionsMenu: () => null }));
 vi.mock("@/components/profiles/profile-inline-editor", () => ({ ProfileInlineEditor: () => null }));
+vi.mock("@/components/profiles/ProfileDesignDocuments", () => ({ ProfileDesignDocuments: () => <div>Design documents</div> }));
 vi.mock("@/actions/activities", () => ({
   createActivityAction: vi.fn(), deleteActivityAction: vi.fn(), editActivityAction: vi.fn(),
   listActivityRevisionsAction: vi.fn(), loadTimelinePageAction: vi.fn(),
@@ -41,6 +42,19 @@ const profile = {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("one profile renderer for admin and Dave", () => {
+  it("combines the owner profile into three sections without dropping its records or email history", () => {
+    render(<SimpleFullProfile compact profile={profile} />);
+    const navigation = within(screen.getByRole("navigation", { name: "Profile sections" }));
+    expect(navigation.getAllByRole("button").map(button => button.textContent)).toEqual(["Overview", "Activity", "Records"]);
+    fireEvent.click(navigation.getByRole("button", { name: "Records" }));
+    expect(screen.getByRole("link", { name: /Fair 2027/ })).toHaveAttribute("href", "/bookings/booking-1");
+    expect(screen.getByRole("link", { name: "Details" })).toHaveAttribute("href", "/contacts/contact-1");
+    expect(screen.getByText("Design documents")).toBeInTheDocument();
+    fireEvent.click(navigation.getByRole("button", { name: "Activity" }));
+    expect(screen.getByText("Shared timeline")).toBeInTheDocument();
+    expect(screen.getByText("Shared email reader")).toBeInTheDocument();
+    expect(screen.getByText("Shared drafts")).toBeInTheDocument();
+  });
   it("uses identical overview content and section styling with fewer actions for Dave", async () => {
     const admin = render(<SimpleFullProfile profile={profile} ratingSummary={{ average: 4, count: 2 }} />);
     await waitFor(() => expect(mocks.adminEmails).toHaveBeenCalledWith(profile.id));
@@ -62,11 +76,11 @@ describe("one profile renderer for admin and Dave", () => {
     expect(screen.queryByRole("link", { name: "Add contact" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Bookings" }));
     expect(screen.getByRole("link", { name: /Fair 2027/ })).toHaveAttribute("href", "/boss/bookings/booking-1");
-    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Profile sections" })).getByRole("button", { name: "History" }));
     expect(mocks.timeline.mock.calls.at(-1)?.[0]).toMatchObject({
       editActivity: undefined, deleteActivity: undefined, loadPage: undefined, openPaperNoteSource: undefined,
     });
-    fireEvent.click(screen.getByRole("button", { name: /Emails/ }));
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Profile sections" })).getByRole("button", { name: "Emails" }));
     expect(mocks.emailPanel.mock.calls.at(-1)?.[0]).toMatchObject({ readOnly: true, getThread: mocks.bossThread });
     expect(mocks.drafts.mock.calls.at(-1)?.[0]).toMatchObject({ readOnly: true, getDrafts: mocks.bossDrafts });
   });

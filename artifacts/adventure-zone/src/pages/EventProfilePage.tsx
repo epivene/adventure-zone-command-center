@@ -208,10 +208,11 @@ export default function EventProfilePage() {
         {profileId ? <AssistantContextRegistration kind="organization" label={profileLabel} recordId={profileId} /> : null}
 
         <FestivalProfileWorkspace key={profileId} profile={data} ratingSummary={data.wrapUpRatingSummary}
-          onFollowUp={() => setFollowUpOpen(true)} onBack={goBack} originLabel={profileOrigin}
-          toolsOpen={profileEditing || Boolean(profileSection) || action === "call"}
+          onFollowUp={() => setFollowUpOpen(true)} onBack={goBack} originLabel={profileOrigin} onNoteSaved={loadProfile}
+          toolsOpen={profileEditing || Boolean(profileSection) || action === "call" || researchOpen}
           legacyTools={
           <SimpleFullProfile
+            compact
             profile={data}
             onSectionChange={setProfileSection}
             onProfileSaved={loadProfile}
@@ -223,9 +224,9 @@ export default function EventProfilePage() {
             editing={profileEditing}
             onEditingChange={setProfileEditing}
           />
-        } />
+         }>
 
-        {profileSection === "events" ? <>
+        {["contacts", "events", "documents"].includes(profileSection ?? "") ? <>
         {contractBookings.length || contractVersions.length ? <section className="rounded-xl border border-[#d8dfd6] bg-white p-4 shadow-sm">
           <h2 className="font-bold">Contracts</h2>
           <p className="mb-3 mt-1 text-sm text-[#58717a]">Create one from an event booking, or continue the unfinished draft.</p>
@@ -255,8 +256,8 @@ export default function EventProfilePage() {
         {!profileEditing && profileId ? <OutreachProfileSummary organizationId={profileId} /> : null}
         </div></details> : null}
 
-        {!profileEditing && profileSection === "documents" && profileId ? <ProfileDocuments profileId={profileId} /> : null}
-        {profileSection === "notes" ? <>
+        {!profileEditing && ["contacts", "events", "documents"].includes(profileSection ?? "") && profileId ? <ProfileDocuments profileId={profileId} /> : null}
+        {["notes", "emails"].includes(profileSection ?? "") ? <>
         {!profileEditing ? <ScoutNotesPanel notes={data.scoutNotes ?? []} /> : null}
 
         {!profileEditing && profileId ? <AttendanceHistoryPanel mode="owner" profileId={profileId} /> : null}
@@ -267,7 +268,7 @@ export default function EventProfilePage() {
 
         {!profileEditing && profileId ? <DerivedFactsReview organizationId={profileId} /> : null}
 
-        {profileSection === "notes" ? <>
+        {["notes", "emails"].includes(profileSection ?? "") ? <>
         {!profileEditing && profileId ? <PaperNoteHistorySources profileId={profileId} /> : null}
 
         {!profileEditing ? <HistoricalEventDates dates={historicalEventDates} /> : null}
@@ -320,7 +321,8 @@ export default function EventProfilePage() {
               onOrganizationChanged={() => void loadProfile()}
             />
           </div>
-        </details>
+         </details>
+        </FestivalProfileWorkspace>
     </ProfilePageFrame>
   );
 }

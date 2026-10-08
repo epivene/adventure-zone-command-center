@@ -9,7 +9,10 @@ import { ProfileActionsMenu } from "./profile-actions-menu";
 import { ProfileInlineEditor } from "./profile-inline-editor";
 import { ProfileAtAGlance } from "./profile-at-a-glance";
 import { ProfileEmailSummary } from "./profile-email-summary";
-import { historyCategory, simplifyHistoryText } from "./history-summary";
+import { simplifyHistoryText } from "./history-summary";
+import { latestProfileNote } from "./latest-profile-note";
+import { Button } from "@workspace/avz-crm/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@workspace/avz-crm/components/ui/card";
 import { formatPhoneDisplay } from "@/features/contacts/phone-display";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 
@@ -137,10 +140,7 @@ export function ProfileDetailSheet({
   ]
     .filter(Boolean)
     .join(" · ");
-  const meaningfulNotes = notes.filter(
-    (note: any) => historyCategory(note) !== "system",
-  );
-  const recentNote = optimisticRecentNote ?? meaningfulNotes[0] ?? null;
+  const recentNote = optimisticRecentNote ?? latestProfileNote(notes);
   const openFollowUps = [...followUps]
     .filter((item: any) => !item.completedAt)
     .sort(
@@ -222,6 +222,24 @@ export function ProfileDetailSheet({
             />
           ) : (
             <>
+              {recentNote ? (
+                <Card data-testid="profile-sheet-latest-note">
+                  <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
+                    <CardTitle>Latest note</CardTitle>
+                    <span className="text-xs text-muted-foreground">{recentNote.historicalDateUnknown ? "Historical date not recorded" : formatDate(recentNote.occurredAt ?? recentNote.createdAt)}</span>
+                  </CardHeader>
+                  <CardContent>
+                    <p className={`whitespace-pre-wrap break-words text-sm leading-6 ${recentNoteExpanded ? "" : "line-clamp-4"}`}>
+                      {simplifyHistoryText(recentNote.body ?? "")}
+                    </p>
+                    {simplifyHistoryText(recentNote.body ?? "").length > 220 ? (
+                      <Button variant="ghost" size="sm" className="mt-2" onClick={() => setRecentNoteExpanded(current => !current)}>
+                        {recentNoteExpanded ? "Show less" : "More"}
+                      </Button>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              ) : null}
               <ProfileAtAGlance profile={data} />
               {!nextFollowUp ? (
                 <section className="rounded-md border border-[#8fc9bf] bg-[#eaf6f3] p-4">
@@ -339,39 +357,6 @@ export function ProfileDetailSheet({
                   </p>
                 </div>
               </section>
-
-              {recentNote ? (
-                <section className="rounded-md border border-[#d8d1c4] bg-[#fffefa] p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-bold">Recent note</h3>
-                    {formatDate(
-                      recentNote.occurredAt ?? recentNote.createdAt,
-                    ) ? (
-                      <span className="text-xs text-[#657377]">
-                        {formatDate(
-                          recentNote.occurredAt ?? recentNote.createdAt,
-                        )}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p
-                    className={`mt-2 whitespace-pre-wrap text-sm leading-6 text-[#536064] ${recentNoteExpanded ? "" : "line-clamp-4"}`}
-                  >
-                    {simplifyHistoryText(recentNote.body ?? "")}
-                  </p>
-                  {simplifyHistoryText(recentNote.body ?? "").length > 220 ? (
-                    <button
-                      className="mt-2 text-sm font-semibold text-[#157d78]"
-                      onClick={() =>
-                        setRecentNoteExpanded((current) => !current)
-                      }
-                      type="button"
-                    >
-                      {recentNoteExpanded ? "Show less" : "More"}
-                    </button>
-                  ) : null}
-                </section>
-              ) : null}
 
               {noteComposerOpen ? (
                 <section className="grid gap-2 rounded-md border border-[#8fc9bf] bg-[#eaf6f3] p-3">

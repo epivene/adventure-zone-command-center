@@ -12,6 +12,7 @@ import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 import { FestivalEditionEditor } from "./festival-edition-editor";
 import { editionGroups } from "./festival-edition-fields";
+import { ProfileLatestNote } from "./profile-latest-note";
 
 function calendarLabel(value: string | undefined) {
   if (!value) return "Not added yet";
@@ -22,9 +23,11 @@ function Detail({ label, value, url }: { label: string; value?: string | null; u
     <p className="mt-1 whitespace-pre-line break-words text-sm leading-6">{value ? url ? <a href={value} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-4">Open {label.toLowerCase()}</a> : value : <span className="text-muted-foreground">Not added yet</span>}</p></div>;
 }
 
-export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, onBack, originLabel, legacyTools, toolsOpen = false }: {
+export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, onBack, originLabel, legacyTools, toolsOpen = false, onNoteSaved, children }: {
   profile: EventProfile; ratingSummary?: { average: number | null; count: number };
   onFollowUp(): void; onBack(): void; originLabel: string; legacyTools: ReactNode; toolsOpen?: boolean;
+  onNoteSaved?(): Promise<void> | void;
+  children?: ReactNode;
 }) {
   const [editions, setEditions] = useState<FestivalEdition[]>([]);
   const [year, setYear] = useState(new Date().getFullYear());
@@ -75,6 +78,7 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
       </div>
       {ratingSummary?.count ? <Badge variant="outline">{ratingSummary.average?.toFixed(1) ?? "—"} · {ratingSummary.count} reviews</Badge> : <Badge variant="outline">No reviews yet</Badge>}
     </header>
+    <ProfileLatestNote key={profile.id} profileId={profile.id} contactId={contact?.id} notes={profile.notes ?? []} onSaved={onNoteSaved} />
     {savedNotice ? <p role="status" className="text-sm font-semibold text-primary">Event-year details saved.</p> : null}
     <div className="grid min-w-0 grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.9fr)]">
       <div className="grid min-w-0 gap-4">
@@ -107,8 +111,7 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
         <Card><CardHeader><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Next action</p><CardTitle>{nextFollowUp ? `Follow up${contact ? ` with ${contact.name}` : ""}` : "Choose the next useful step"}</CardTitle></CardHeader><CardContent className="grid gap-3">
           <p className="text-sm text-muted-foreground">{nextFollowUp ? `${nextFollowUp.kind.replaceAll("_", " ")} · ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: BUSINESS_TIME_ZONE }).format(new Date(nextFollowUp.dueAt))}` : "No open follow-up. Schedule one when the organizer needs another contact."}</p>
           <Button className="w-fit" onClick={onFollowUp}>Schedule follow-up</Button>
-        </CardContent></Card>
-        <Card><CardHeader><CardTitle>Organizer at a glance</CardTitle></CardHeader><CardContent className="grid gap-3">
+           <div className="border-t border-border pt-3"><p className="font-semibold">Organizer contact</p></div>
           <Detail label="Primary contact" value={contact ? `${contact.name}${contact.role ? ` · ${contact.role}` : ""}` : null} />
           {contact?.email ? <a className="break-all text-sm text-primary underline" href={`mailto:${contact.email}`}>{contact.email}</a> : null}
           <Detail label="Phone" value={contact?.phone ?? profile.place.phone} />
@@ -120,9 +123,9 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
       </aside>
     </div>
     <details className="rounded-md border border-border bg-card p-4" open={showTools} onToggle={event => setShowTools(event.currentTarget.open)}>
-      <summary className="cursor-pointer font-semibold">Organizer details, contacts &amp; CRM history</summary>
-      <p className="my-3 text-sm text-muted-foreground">All existing profile tools are retained here: organizer editing, contacts, bookings, notes, emails, documents, calling, and assistant actions.</p>
+       <summary className="cursor-pointer font-semibold">Activity, records &amp; profile tools</summary>
       <div className="profile-modern">{legacyTools}</div>
+       {children}
     </details>
   </section>;
 }

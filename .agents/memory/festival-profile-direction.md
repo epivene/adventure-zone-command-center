@@ -16,3 +16,9 @@ Do not silently combine or overwrite two organizers' saved edition records for t
 **Why:** The user requires existing CRM information to be preserved; choosing one annual record or merging conflicting text automatically can lose information.
 
 **How to apply:** Reparent distinct years inside the existing merge transaction. Block overlapping years before deletion and require reconciliation.
+
+Profiles should have fewer buttons and separate pages; combine related information, and show the newest note front and center.
+
+**Why:** The user explicitly requested this simplification after using the expanded profiles.
+
+**How to apply:** Keep all existing records and actions, avoid repeated summary and action surfaces, and put the latest actual note ahead of secondary profile tools.

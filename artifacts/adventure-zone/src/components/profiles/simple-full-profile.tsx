@@ -5,6 +5,8 @@ import { getBossProfileEmails, getBossProfileDrafts, getBossThread } from "@/com
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 import { useProfileGoogleEmail } from "@/components/google-workspace/use-profile-google-email";
 import { ProfileWorkspaceActions } from "./profile-workspace-actions";
+import { Button } from "@workspace/avz-crm/components/ui/button";
+import { ProfileLatestNote } from "./profile-latest-note";
 import { useSearch, useLocation } from "wouter";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
@@ -138,6 +140,7 @@ export function SimpleFullProfile({
   onEditingChange,
   role = "admin",
   editor,
+  compact = false,
 }: {
   profile: EventProfile & { place: EventProfile["place"] & { description?: string | null }; managerReviews?: ProfileManagerReview[] };
   onProfileSaved?: () => Promise<void> | void;
@@ -151,6 +154,7 @@ export function SimpleFullProfile({
   onEditingChange?: (editing: boolean) => void;
   role?: "admin" | "boss";
   editor?: ReactNode;
+  compact?: boolean;
 }) {
   const [internalEditing, setInternalEditing] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSection>(() =>
@@ -172,6 +176,8 @@ export function SimpleFullProfile({
   const [noteError, setNoteError] = useState("");
   const [optimisticActivities, setOptimisticActivities] = useState<ActivityTimelineItem[]>([]);
   const boss = role === "boss";
+  const recordsOpen = compact && ["contacts", "events", "documents"].includes(openSection ?? "");
+  const activityOpen = compact && ["notes", "emails"].includes(openSection ?? "");
   const routePrefix = boss ? "/boss" : "";
   const gmail = useProfileGoogleEmail(profile.id, undefined, boss ? getBossProfileEmails : undefined);
   const emailConversations = gmail.conversations;
@@ -359,6 +365,7 @@ export function SimpleFullProfile({
   const CallLink = boss ? "a" : Link;
   return (
     <div className="profile-modern grid gap-5">
+      {!compact ? <>
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3 text-sm">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#173b48] text-sm font-bold tracking-tight text-[#f8f5ee]">
@@ -575,18 +582,31 @@ export function SimpleFullProfile({
         </div>
         </details>
       </section>
+      <ProfileLatestNote key={profile.id} profileId={profile.id} contactId={primaryContact?.id} notes={profile.notes} onSaved={onProfileSaved} readOnly={boss} />
+      </> : <div className="flex justify-end">
+        <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id} showAddNote={false} onEdit={() => setEditing(true)}
+          callHref={callHref} onOpenEmails={() => setOpenSection("emails")} onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))} />
+      </div>}
 
-      <ProfileCallBrief profile={profile} emails={emailConversations} readOnly={boss} onEmails={() => setOpenSection("emails")} onHistory={() => setOpenSection("notes")} onDocuments={() => setOpenSection("documents")} onAddNote={openNoteComposer} />
-      <details><summary className="cursor-pointer text-sm font-semibold">More profile facts</summary><ProfileAtAGlance profile={profile} allowDateManagement={!boss} /></details>
+      {compact ? <details><summary className="cursor-pointer text-sm font-semibold">Call brief</summary>
+        <ProfileCallBrief profile={profile} emails={emailConversations} readOnly={boss} />
+      </details> : <ProfileCallBrief profile={profile} emails={emailConversations} readOnly={boss} onEmails={() => setOpenSection("emails")} onHistory={() => setOpenSection("notes")} onDocuments={() => setOpenSection("documents")} onAddNote={openNoteComposer} />}
+      {!compact ? <details><summary className="cursor-pointer text-sm font-semibold">More profile facts</summary><ProfileAtAGlance profile={profile} allowDateManagement={!boss} /></details> : null}
 
       <nav aria-label="Profile sections" className="flex flex-wrap gap-2 border-b pb-3">
-        {([[null,"Overview"],["contacts","Contacts"],["events","Bookings"],["notes","History"],["emails","Emails"],["documents","Documents"]] as const).filter(([section]) => !boss || section !== "documents").map(([section,label]) => <button key={label} type="button" aria-current={openSection === section ? "page" : undefined} className={openSection === section ? "button-primary" : "button-secondary"} onClick={() => setOpenSection(section)}>{label}</button>)}
+        {compact ? ([[null, "Overview"], ["notes", "Activity"], ["events", "Records"]] as const).map(([section, label]) =>
+          <Button key={label} variant={(section === null ? openSection === null : section === "notes" ? activityOpen : recordsOpen) ? "default" : "outline"}
+            size="sm" data-testid={`profile-section-${label.toLowerCase()}`} onClick={() => setOpenSection(section)}>{label}</Button>
+        ) :
+        ([[null,"Overview"],["contacts","Contacts"],["events","Bookings"],["notes","History"],["emails","Emails"],["documents","Documents"]] as const).filter(([section]) => !boss || section !== "documents").map(([section,label]) => <button key={label} type="button" aria-current={openSection === section ? "page" : undefined} className={openSection === section ? "button-primary" : "button-secondary"} onClick={() => setOpenSection(section)}>{label}</button>)
+        }
       </nav>
-      {!boss && openSection === "emails" ? <Link className="button-secondary w-fit" href={`/emails?profileId=${encodeURIComponent(profile.id)}`}>Open email account</Link> : null}
+      {!boss && (openSection === "emails" || activityOpen) ? <Link className="button-secondary w-fit" href={`/emails?profileId=${encodeURIComponent(profile.id)}`}>Open email account</Link> : null}
       <div id="profile-section-content" className="scroll-mt-4" />
-      {!boss && openSection === "documents" ? <ProfileDesignDocuments organizationId={profile.id} contactId={primaryContact?.id ?? null} bookingId={currentBooking?.id ?? null} documentYear={profileDocumentYear} /> : null}
+      {!boss && (openSection === "documents" || recordsOpen) ? <ProfileDesignDocuments organizationId={profile.id} contactId={primaryContact?.id ?? null} bookingId={currentBooking?.id ?? null} documentYear={profileDocumentYear} /> : null}
 
-      {openSection === null ? (
+      {compact && openSection === null ? <ProfileAtAGlance profile={profile} allowDateManagement={!boss} /> : null}
+      {openSection === null && !compact ? (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.85fr)]">
           <div className="grid gap-5">
             <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
@@ -689,7 +709,7 @@ export function SimpleFullProfile({
         </div>
       ) : null}
 
-      {openSection === "contacts" ? (
+      {openSection === "contacts" || recordsOpen ? (
         <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -751,7 +771,7 @@ export function SimpleFullProfile({
         </section>
       ) : null}
 
-      {openSection === "events" ? (
+      {openSection === "events" || recordsOpen ? (
         <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Yearly booking records</p>
           <h2 className="mt-1 text-xl font-bold text-[#173b48]">Bookings & opportunities</h2>
@@ -820,7 +840,7 @@ export function SimpleFullProfile({
         </section>
       ) : null}
 
-      {openSection === "notes" ? (
+      {openSection === "notes" || activityOpen ? (
         <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -871,8 +891,8 @@ export function SimpleFullProfile({
             ) : (
               <ActivityTimeline
                 activities={filteredActivities}
-                editActivity={boss ? undefined : editActivityAction}
-                deleteActivity={boss ? undefined : deleteActivityAction}
+                editActivity={boss ? undefined : async (...args: Parameters<typeof editActivityAction>) => { const result = await editActivityAction(...args); if (result.ok) void onProfileSaved?.(); return result; }}
+                deleteActivity={boss ? undefined : async (...args: Parameters<typeof deleteActivityAction>) => { const result = await deleteActivityAction(...args); if (result.ok) void onProfileSaved?.(); return result; }}
                 loadRevisions={boss ? async () => ({ ok: true, revisions: [] }) : listActivityRevisionsAction}
                 loadPage={boss || normalizedSearch ? undefined : loadSimpleNotesPage}
                 openPaperNoteSource={boss ? undefined : openOriginalPaperNote}
@@ -886,7 +906,7 @@ export function SimpleFullProfile({
 
       {!boss && emailComposerOpen ? <ProfileEmailComposer key={`${profile.id}:${emailDraft?.id ?? "new"}`} organizationId={profile.id} profileName={profile.place.name} contacts={profile.contacts} draft={emailDraft} onClose={() => setEmailComposerOpen(false)} onSaved={() => { setEmailComposerOpen(false); setOpenSection("emails"); setDraftRevision((value) => value + 1); setEmailSaved(true); }} /> : null}
       {emailSaved ? <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Email draft saved. Nothing was sent. Find it in Emails below.</p> : null}
-      {openSection === "emails" ? <div className="grid gap-4">
+      {openSection === "emails" || activityOpen ? <div className="grid gap-4">
         <ProfileEmailDrafts readOnly={boss} getDrafts={boss ? getBossProfileDrafts : undefined} organizationId={profile.id} revision={draftRevision} onCreate={createEmail} onEdit={(draft) => { setEmailDraft(draft); setEmailSaved(false); setEmailComposerOpen(true); }} />
         <ProfileGoogleEmailPanel organizationId={profile.id} state={gmail} readOnly={boss} getThread={boss ? getBossThread : undefined} />
       </div> : null}
