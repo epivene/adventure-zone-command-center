@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EmailMappingRepairService } from "./email-mapping-repair-service";
 import { activeConnection, ConnectionError, inputHash, requireConnectionScope, type ConnectionDatabase, type ConnectionPrincipal, type MutationKey, type SqlQuery } from "./contracts";
 import { OperationStore } from "./operation-store";
 import { profileRow } from "./read-service";
@@ -16,8 +17,10 @@ export type DraftFilingAccess = {
 type Access = () => Promise<DraftFilingAccess>;
 export class GmailDraftFilingService {
   private operations: OperationStore;
+  readonly mappingRepair: EmailMappingRepairService;
   constructor(private db: ConnectionDatabase, private access: Access = productionAccess(db)) {
     this.operations = new OperationStore(db);
+    this.mappingRepair = new EmailMappingRepairService(db, access);
   }
   private async source(tx: SqlQuery, input: z.infer<typeof draftFilingInput>) {
     const profile = await profileRow(tx, input.profileId);
@@ -67,7 +70,7 @@ export class GmailDraftFilingService {
     if (access.connectionId !== input.gmailConnectionId)
       throw new ConnectionError("CONNECTION_DRAFT_SOURCE_CHANGED", 409);
     return { ...input, mappings: await this.conflicts(input.gmailConnectionId, input.threadId),
-      instruction: "These are stored profile associations, not proof of the correct event. Compare the full conversation and profiles. Do not merge or overwrite conflicting destinations automatically." };
+      instruction: "These are stored profile associations, not proof of the correct event. Compare the full conversation and profiles. For a verified wrong association, use preview_email_mapping_repair and repair_email_profile_mapping with the exact reviewed revision and an identity-based reason. Do not infer a destination from a similar name or merge profiles." };
   }
   async apply(p: ConnectionPrincipal, key: MutationKey, raw: z.infer<typeof draftFilingApplyInput>) {
     requireConnectionScope(p, "email:organize");
