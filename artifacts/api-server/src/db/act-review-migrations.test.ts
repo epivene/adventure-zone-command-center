@@ -6,6 +6,41 @@ import { loadActReviewMigrations, runActReviewMigrations } from "@workspace/db/m
 import { contactPhones } from "@workspace/db/schema";
 
 describe("runActReviewMigrations", () => {
+  it("keeps guarded directory imports pending at startup but retains explicit-run safeguards", async () => {
+    const queries: string[] = [];
+    const client = {
+      async query(sql: string) {
+        queries.push(sql);
+        if (sql === "schema-marker") return { rows: [{ ready: queries.includes("schema-repair") }] };
+        if (sql === "import-marker") return { rows: [{ ready: false }] };
+        if (sql === "guarded-import") throw new Error("Expected the five existing 2026 convention editions");
+        return { rows: [] };
+      },
+      release() {},
+    };
+    const pool = { connect: async () => client };
+    const migrations = [
+      { name: "20260910_public_directory_leads.sql", markerSql: "import-marker", sql: "guarded-import" },
+      { name: "20260910_rmaf_online_directory.sql", markerSql: "import-marker", sql: "guarded-import" },
+      { name: "schema-upgrade.sql", markerSql: "schema-marker", sql: "schema-repair" },
+    ];
+    expect(await runActReviewMigrations({ pool, migrations, automatic: true })).toEqual(["schema-upgrade.sql"]);
+    expect(queries).not.toContain("import-marker");
+    expect(queries).not.toContain("guarded-import");
+    expect(await runActReviewMigrations({ pool, migrations, automatic: true })).toEqual([]);
+    await expect(runActReviewMigrations({ pool, migrations })).rejects.toThrow(
+      "Expected the five existing 2026 convention editions",
+    );
+  });
+
+  it("registers the schema-only directory audit companion before manual imports", async () => {
+    const migrations = await loadActReviewMigrations();
+    const schemaIndex = migrations.findIndex(({ name }) => name === "20261009_directory_import_audit_schema.sql");
+    expect(schemaIndex).toBeGreaterThan(-1);
+    expect(schemaIndex).toBeLessThan(migrations.findIndex(({ name }) => name === "20260910_public_directory_leads.sql"));
+    expect(migrations[schemaIndex]!.sql).not.toMatch(/^\s*(?:INSERT|UPDATE|DELETE)\b/im);
+  });
+
   it("loads the approval provenance migration with a two-column marker", async () => {
     const migrations = await loadActReviewMigrations();
     const provenance = migrations.find((migration) => migration.name === "019_act_approval_provenance.sql");

@@ -1,4 +1,5 @@
 import { access, readFile } from "node:fs/promises";
+import { shouldApplyMigration } from "./migration-scope";
 
 const advisoryLockSql =
   "SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))";
@@ -258,7 +259,9 @@ const migrationFiles = [
           AND confdeltype = 'a'
           AND confupdtype = 'a'
           AND position('FOREIGN KEY (SOURCE_RECORD_ID, SOURCE_DATABASE_KEY)' in upper(pg_get_constraintdef(oid))) > 0
-          AND position('REFERENCES ACT_SOURCE_RECORDS(ID, SOURCE_DATABASE_KEY, STREAM_TYPE)' in upper(pg_get_constraintdef(oid))) > 0
+          -- Membership scopes a source to its database; stream_type belongs
+          -- to the separate three-column external-link provenance FK.
+          AND position('REFERENCES ACT_SOURCE_RECORDS(ID, SOURCE_DATABASE_KEY)' in upper(pg_get_constraintdef(oid))) > 0
       ) AS ready`,
   },
   {
@@ -611,8 +614,16 @@ const migrationFiles = [
       AS ready`,
   },
   {
+    name: "20261009_directory_import_audit_schema.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.directory_import_records') IS NOT NULL
+      AND to_regclass(current_schema() || '.directory_import_20260910_batch') IS NOT NULL
+      AS ready`,
+  },
+  {
     name: "20260910_public_directory_leads.sql",
-    markerSql: `SELECT to_regclass(current_schema() || '.directory_import_20260910_batch') IS NOT NULL AS ready`,
+    markerSql: `SELECT to_regclass(current_schema() || '.directory_import_20260910_batch') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM directory_import_20260910_batch WHERE batch = 'public-directories-20260910-v1') AS ready`,
   },
   {
     name: "20260910_rmaf_online_directory.sql",
@@ -764,6 +775,7 @@ export async function ensureFestivalEditionSchema(): Promise<void> {
 export async function runActReviewMigrations(options?: {
   pool?: MigrationPool;
   migrations?: ActReviewMigration[];
+  automatic?: boolean;
 }): Promise<string[]> {
   const migrationPool = options?.pool ?? (await import("./index")).pool;
   const migrations = options?.migrations ?? (await loadActReviewMigrations());
@@ -776,6 +788,9 @@ export async function runActReviewMigrations(options?: {
     locked = true;
 
     for (const migration of migrations) {
+      // Startup follows the same explicit business-import boundary as merge
+      // setup. Do not query import markers or fabricate completion records.
+      if (!shouldApplyMigration(migration.name, options?.automatic ?? false)) continue;
       const marker = await client.query(migration.markerSql);
       if (marker.rows[0]?.["ready"] === true) continue;
       await client.query(migration.sql);

@@ -21,7 +21,7 @@ interface MigrationPool {
   connect(): Promise<MigrationClient>;
 }
 
-type MigrationRunner = (options: { pool: MigrationPool }) => Promise<string[]>;
+type MigrationRunner = (options: { pool: MigrationPool; automatic: true }) => Promise<string[]>;
 
 function isLockTimeout(error: unknown) {
   return Boolean(
@@ -70,6 +70,7 @@ export async function runActReviewMigrationsAtStartup(options?: {
       };
 
       const applied = await runMigrations({
+        automatic: true,
         pool: {
           connect: async () => migrationClient,
         },

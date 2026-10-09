@@ -42,6 +42,7 @@ describe("runActReviewMigrationsAtStartup", () => {
   it("pre-acquires the migration lock without waiting and checks all additive schemas", async () => {
     const { client, queries, wasReleased } = fakeClient();
     const runMigrations = vi.fn(async (options: any) => {
+      expect(options.automatic).toBe(true);
       const migrationClient = await options.pool.connect();
       await migrationClient.query("SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))");
       migrationClient.release();
