@@ -730,6 +730,13 @@ const migrationFiles = [
     name: "20261009_festival_crew_stops.sql",
     markerSql: "SELECT to_regclass(current_schema() || '.festival_crew_stops') IS NOT NULL AND to_regclass(current_schema() || '.festival_crew_stops_edition_idx') IS NOT NULL AND to_regclass(current_schema() || '.festival_crew_stops_edition_source_unique') IS NOT NULL AS ready",
   },
+  {
+    name: "20261009z_festival_crew_confirmations.sql",
+    markerSql: `SELECT count(*) = 3 AS ready FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'festival_crew_stops'
+      AND column_name IN ('rig_fit_confirmed_on', 'hookups_confirmed_on', 'overnight_confirmed_on')
+      AND data_type = 'date'`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
@@ -763,7 +770,7 @@ export async function loadActReviewMigrations(): Promise<ActReviewMigration[]> {
 
 export async function ensureFestivalEditionSchema(): Promise<void> {
   const directory = await resolveMigrationDirectory();
-  const required = ["20260912_profile_booking_decisions.sql", "20260921_event_date_coverage.sql", "20261008_festival_editions.sql", "20261009_festival_crew_stops.sql"];
+  const required = ["20260912_profile_booking_decisions.sql", "20260921_event_date_coverage.sql", "20261008_festival_editions.sql", "20261009_festival_crew_stops.sql", "20261009z_festival_crew_confirmations.sql"];
   const migrations = await Promise.all(required.map(async name => {
     const migration = migrationFiles.find(item => item.name === name);
     if (!migration) throw new Error(`Required profile migration is missing: ${name}`);

@@ -81,6 +81,21 @@ export interface FestivalCrewStopInput {
   hookups: FestivalCrewFact;
   overnight: FestivalCrewFact;
   /**
+     * Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact and rig length are unchanged.
+     * @nullable
+     */
+  rigFitConfirmedOn?: string | null;
+  /**
+     * Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact is unchanged.
+     * @nullable
+     */
+  hookupsConfirmedOn?: string | null;
+  /**
+     * Staff-confirmed calendar date for permission or refusal, never inferred from a listing. Unknown must have no confirmation date.
+     * @nullable
+     */
+  overnightConfirmedOn?: string | null;
+  /**
      * @minimum 1
      * @maximum 150
      * @nullable

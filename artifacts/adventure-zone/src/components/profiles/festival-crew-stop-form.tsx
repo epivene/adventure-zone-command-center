@@ -6,10 +6,11 @@ import { Label } from "@workspace/avz-crm/components/ui/label";
 import { Textarea } from "@workspace/avz-crm/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/avz-crm/components/ui/select";
 import { CATEGORIES, CATEGORY_LABELS } from "./crew-location-api";
+import { confirmationLabel } from "@/lib/crew-confirmation";
 
 const FACTS: FestivalCrewFact[] = ["unknown", "yes", "no"];
 export function blankStop(): FestivalCrewStopInput {
-  return { name: "", category: "rv_park", address: "", latitude: null, longitude: null, sourceKey: null, sourceUrl: "", phone: "", website: "", notes: "", rigFit: "unknown", hookups: "unknown", overnight: "unknown", maxRigLengthFeet: null, expectedUpdatedAt: null };
+  return { name: "", category: "rv_park", address: "", latitude: null, longitude: null, sourceKey: null, sourceUrl: "", phone: "", website: "", notes: "", rigFit: "unknown", hookups: "unknown", overnight: "unknown", rigFitConfirmedOn: null, hookupsConfirmedOn: null, overnightConfirmedOn: null, maxRigLengthFeet: null, expectedUpdatedAt: null };
 }
 export function FestivalCrewStopForm({ initial, busy, error, onSave, onCancel, onDirty }: {
   initial: FestivalCrewStopInput; busy: boolean; error: string | null;
@@ -33,15 +34,22 @@ export function FestivalCrewStopForm({ initial, busy, error, onSave, onCancel, o
     const { lat: _a, lon: _b, rig: _c, ...rest } = v;
     onSave({ ...rest, name, latitude, longitude, maxRigLengthFeet: rig });
   }
-  const fact = (label: string, key: "rigFit" | "hookups" | "overnight") => (
+  const fact = (label: string, key: "rigFit" | "hookups" | "overnight") => {
+    const field = `${key}ConfirmedOn` as "rigFitConfirmedOn" | "hookupsConfirmedOn" | "overnightConfirmedOn";
+    return (
     <div className="grid gap-1"><Label htmlFor={`stop-${key}`}>{label}</Label>
-      <Select disabled={busy} value={v[key]} onValueChange={x => set({ [key]: x as FestivalCrewFact })}><SelectTrigger id={`stop-${key}`}><SelectValue /></SelectTrigger>
-        <SelectContent>{FACTS.map(f => <SelectItem key={f} value={f}>{f === "unknown" ? "Unknown" : f === "yes" ? "Yes" : "No"}</SelectItem>)}</SelectContent></Select></div>);
+      <Select disabled={busy} value={v[key]} onValueChange={x => set({ [key]: x as FestivalCrewFact, [field]: null })}><SelectTrigger id={`stop-${key}`}><SelectValue /></SelectTrigger>
+        <SelectContent>{FACTS.map(f => <SelectItem key={f} value={f}>{f === "unknown" ? "Unknown" : f === "yes" ? "Yes" : "No"}</SelectItem>)}</SelectContent></Select>
+      <Label htmlFor={`stop-${field}`}>{label} staff-confirmed date</Label>
+      <Input id={`stop-${field}`} type="date" disabled={busy || v[key] === "unknown"} value={v[field] ?? ""} max={new Date().toLocaleDateString("en-CA")} onChange={e => set({ [field]: e.target.value || null })} />
+      <p className="text-xs text-muted-foreground">{confirmationLabel(v[key], v[field])}</p>
+    </div>);
+  };
   const text = (id: string, label: string, key: "name" | "address" | "phone" | "website" | "lat" | "lon" | "rig") => (
-    <div className="grid gap-1"><Label htmlFor={`stop-${id}`}>{label}</Label><Input disabled={busy} id={`stop-${id}`} value={v[key]} onChange={e => set({ [key]: e.target.value })} /></div>);
+    <div className="grid gap-1"><Label htmlFor={`stop-${id}`}>{label}</Label><Input disabled={busy} id={`stop-${id}`} value={v[key]} onChange={e => set({ [key]: e.target.value, ...(key === "rig" ? { rigFitConfirmedOn: null } : {}) })} /></div>);
   const shown = local ?? error;
   return <form className="grid gap-3 rounded-md border border-border bg-muted p-3" onSubmit={e => { e.preventDefault(); submit(); }} aria-label="Crew stop details">
-    <p className="text-xs text-muted-foreground">Facts below are staff-reported. Leave them unknown until someone confirms with the place.</p>
+    <p className="text-xs text-muted-foreground">Facts below are staff-reported. Leave them unknown until someone confirms with the place. Enter the date staff checked each fact; source lookups do not count. Never assume Walmart allows overnight parking.</p>
     <div className="grid gap-3 sm:grid-cols-2">
       {text("name", "Name", "name")}
       <div className="grid gap-1"><Label htmlFor="stop-category">Category</Label>

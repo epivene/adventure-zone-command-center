@@ -14,7 +14,30 @@ function pinFrom(details: Record<string, string>) {
   return { latitude, longitude, displayName: details.venuePinLabel || details.venue };
 }
 export function stopResponse(row: typeof festivalCrewStops.$inferSelect) {
-  return { ...row.data, sourceKey: row.sourceKey, id: row.id, expectedUpdatedAt: row.updatedAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
+  return { ...row.data, rigFitConfirmedOn: row.data.rigFit === "unknown" ? null : row.rigFitConfirmedOn ?? null, hookupsConfirmedOn: row.data.hookups === "unknown" ? null : row.hookupsConfirmedOn ?? null, overnightConfirmedOn: row.data.overnight === "unknown" ? null : row.overnightConfirmedOn ?? null, sourceKey: row.sourceKey, id: row.id, expectedUpdatedAt: row.updatedAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
+}
+const confirmationFields = [
+  ["rigFit", "rigFitConfirmedOn"],
+  ["hookups", "hookupsConfirmedOn"],
+  ["overnight", "overnightConfirmedOn"],
+] as const;
+function confirmationDates(input: FestivalCrewStopInput, current?: typeof festivalCrewStops.$inferSelect) {
+  const dates: { rigFitConfirmedOn: string | null; hookupsConfirmedOn: string | null; overnightConfirmedOn: string | null } = {
+    rigFitConfirmedOn: null, hookupsConfirmedOn: null, overnightConfirmedOn: null,
+  };
+  for (const [fact, field] of confirmationFields) {
+    const value = input[field];
+    if (value != null) {
+      const parsed = new Date(`${value}T00:00:00.000Z`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value || value > new Date().toISOString().slice(0, 10)) {
+        throw new CrewRequestError(400, "Staff confirmation dates must be real calendar dates, today or earlier.");
+      }
+      if (input[fact] === "unknown") throw new CrewRequestError(400, "Unknown facts cannot have a staff confirmation date.");
+    }
+    const changed = current && (input[fact] !== current.data[fact] || (fact === "rigFit" && input.maxRigLengthFeet !== current.data.maxRigLengthFeet));
+    dates[field] = input[fact] === "unknown" ? null : value !== undefined ? value : !changed ? current?.[field] ?? null : null;
+  }
+  return dates;
 }
 export async function getCrewLocation(id: string, year: number, database = db) {
   const [organization] = await database.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, id));
@@ -40,20 +63,21 @@ export async function saveCrewStop(id: string, year: number, stopId: string | nu
   return database.transaction(async tx => {
     const [edition] = await tx.select().from(festivalEditions).where(scope(id, year)).for("update");
     if (!edition) throw new CrewRequestError(409, "Add an event-year record before saving crew stops.");
-    const { expectedUpdatedAt, sourceKey, ...data } = input;
+    const { expectedUpdatedAt, sourceKey, rigFitConfirmedOn: _rig, hookupsConfirmedOn: _hookups, overnightConfirmedOn: _overnight, ...data } = input;
     data.name = data.name.trim();
     const where = stopId ? and(eq(festivalCrewStops.id, stopId), eq(festivalCrewStops.editionId, edition.id)) : undefined;
     const [current] = where ? await tx.select().from(festivalCrewStops).where(where).for("update") : [];
     if (stopId && !current) throw new CrewRequestError(404, "This stop does not belong to the selected event year.");
     if (stopId && current!.updatedAt.toISOString() !== expectedUpdatedAt) throw new CrewRequestError(409, "This stop changed in another session. Reload before saving.");
     if (!stopId && expectedUpdatedAt !== null) throw new CrewRequestError(400, "New stops must not have an update timestamp.");
+    const dates = confirmationDates(input, current);
     if (sourceKey) {
       const [duplicate] = await tx.select({ id: festivalCrewStops.id }).from(festivalCrewStops).where(and(eq(festivalCrewStops.editionId, edition.id), eq(festivalCrewStops.sourceKey, sourceKey)));
       if (duplicate && duplicate.id !== stopId) throw new CrewRequestError(409, "That suggested place is already saved. Edit its saved crew stop instead.");
     }
     const [saved] = current
-      ? await tx.update(festivalCrewStops).set({ data, sourceKey, updatedAt: new Date(Math.max(Date.now(), current.updatedAt.getTime() + 1)) }).where(where!).returning()
-      : await tx.insert(festivalCrewStops).values({ editionId: edition.id, sourceKey, data }).returning();
+      ? await tx.update(festivalCrewStops).set({ data, sourceKey, ...dates, updatedAt: new Date(Math.max(Date.now(), current.updatedAt.getTime() + 1)) }).where(where!).returning()
+      : await tx.insert(festivalCrewStops).values({ editionId: edition.id, sourceKey, data, ...dates }).returning();
     return stopResponse(saved);
   });
 }

@@ -7,6 +7,7 @@ import { FestivalCrewMap, type CrewMapPoint } from "@/components/profiles/festiv
 import { CATEGORY_LABELS, crewApi, directionsUrl, safeUrl, type ManagerCrewLocationResponse } from "@/components/profiles/crew-location-api";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { crewCacheEpoch, getCrewSnapshot, removeCrewSnapshot, saveCrewSnapshot } from "@/lib/manager-crew-cache";
+import { confirmationLabel } from "@/lib/crew-confirmation";
 
 type Stop = NonNullable<ManagerCrewLocationResponse["crewLocation"]>["stops"][number];
 const fact = (v: string) => (v === "yes" ? "Yes" : v === "no" ? "No" : "Unknown");
@@ -25,9 +26,9 @@ function StopRow({ stop }: { stop: Stop }) {
       <p className="text-sm font-semibold">Saved staff notes</p>
       <p className="whitespace-pre-wrap break-words text-sm">{stop.notes || "No notes saved."}</p>
       <dl className="grid grid-cols-2 gap-1 text-sm sm:grid-cols-4">
-        <div><dt className="text-muted-foreground">Rig fit</dt><dd>{fact(stop.rigFit)}</dd></div>
-        <div><dt className="text-muted-foreground">Hookups</dt><dd>{fact(stop.hookups)}</dd></div>
-        <div><dt className="text-muted-foreground">Overnight allowed</dt><dd>{fact(stop.overnight)}</dd></div>
+        <div><dt className="text-muted-foreground">Rig fit</dt><dd>{fact(stop.rigFit)}<p className="text-xs text-muted-foreground">{confirmationLabel(stop.rigFit, stop.rigFitConfirmedOn)}</p></dd></div>
+        <div><dt className="text-muted-foreground">Hookups</dt><dd>{fact(stop.hookups)}<p className="text-xs text-muted-foreground">{confirmationLabel(stop.hookups, stop.hookupsConfirmedOn)}</p></dd></div>
+        <div><dt className="text-muted-foreground">Overnight allowed</dt><dd>{fact(stop.overnight)}<p className="text-xs text-muted-foreground">{confirmationLabel(stop.overnight, stop.overnightConfirmedOn)}</p></dd></div>
         <div><dt className="text-muted-foreground">Max rig length</dt><dd>{stop.maxRigLengthFeet != null ? `${stop.maxRigLengthFeet} ft` : "Unknown"}</dd></div>
       </dl>
       <div className="flex flex-wrap gap-3 text-sm">

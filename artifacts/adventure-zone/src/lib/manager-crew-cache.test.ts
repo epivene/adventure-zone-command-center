@@ -6,10 +6,18 @@ import type { ManagerCrewLocationResponse } from "@/components/profiles/crew-loc
 const data: ManagerCrewLocationResponse = {
   bookingId: "booking-a", year: 2026,
   crewLocation: { venue: "Annual venue", editionUpdatedAt: null, location: { latitude: 1, longitude: 2, displayName: "Annual pin" },
-    stops: [{ id: "stop", updatedAt: "now", name: "Walmart", category: "walmart", address: "1 Main", latitude: null, longitude: null, sourceKey: null, sourceUrl: "", phone: "", website: "", notes: "Ask before parking", rigFit: "unknown", hookups: "unknown", overnight: "unknown", maxRigLengthFeet: null, expectedUpdatedAt: null }],
+    stops: [{ id: "stop", updatedAt: "now", name: "Walmart", category: "walmart", address: "1 Main", latitude: null, longitude: null, sourceKey: null, sourceUrl: "", phone: "", website: "", notes: "Ask before parking", rigFit: "unknown", hookups: "unknown", overnight: "unknown", rigFitConfirmedOn: null, hookupsConfirmedOn: null, overnightConfirmedOn: null, maxRigLengthFeet: null, expectedUpdatedAt: null }],
   },
 };
 describe("manager private crew snapshots", () => {
+  it("retains staff confirmation dates after cache reload, separate from loadedAt", async () => {
+    const confirmed: ManagerCrewLocationResponse = { ...data, bookingId: "confirmed-booking", crewLocation: { ...data.crewLocation!, stops: [{ ...data.crewLocation!.stops[0]!, rigFit: "yes", rigFitConfirmedOn: "2026-10-01", hookups: "no", hookupsConfirmedOn: "2026-09-30" }] } };
+    await saveCrewSnapshot("confirmed-leg", confirmed, crewCacheEpoch("confirmed-leg"));
+    const saved = await getCrewSnapshot("confirmed-leg", confirmed.bookingId);
+    expect(saved?.data).toEqual(confirmed);
+    expect(saved?.loadedAt).not.toBe("2026-10-01");
+    expect(saved?.data.crewLocation?.stops[0]?.overnightConfirmedOn).toBeNull();
+  });
   it("projects only annual venue and saved stop fields, never CRM or suggestions", () => {
     const expanded = { ...data, organizer: { email: "private" }, suggestions: ["not saved"],
       crewLocation: { ...data.crewLocation!, organizerAddress: "mailing address", suggestions: ["external"],

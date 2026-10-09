@@ -34,5 +34,5 @@ export function directionsUrl(s: { latitude: number | null; longitude: number | 
   return dest ? `https://www.google.com/maps/dir/?api=1&destination=${dest}` : null;
 }
 export function suggestionToInput(s: FestivalNearbySuggestion): FestivalCrewStopInput {
-  return { name: s.name, category: s.category, address: s.address, latitude: s.latitude, longitude: s.longitude, sourceKey: s.sourceKey, sourceUrl: s.sourceUrl, phone: s.phone, website: s.website, notes: "", rigFit: "unknown", hookups: "unknown", overnight: "unknown", maxRigLengthFeet: null, expectedUpdatedAt: null };
+  return { name: s.name, category: s.category, address: s.address, latitude: s.latitude, longitude: s.longitude, sourceKey: s.sourceKey, sourceUrl: s.sourceUrl, phone: s.phone, website: s.website, notes: "", rigFit: "unknown", hookups: "unknown", overnight: "unknown", rigFitConfirmedOn: null, hookupsConfirmedOn: null, overnightConfirmedOn: null, maxRigLengthFeet: null, expectedUpdatedAt: null };
 }

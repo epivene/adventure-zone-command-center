@@ -72,6 +72,9 @@ export const GetManagerFestivalCrewLocationResponse = zod.object({
   "rigFit": zod.enum(['unknown', 'yes', 'no']),
   "hookups": zod.enum(['unknown', 'yes', 'no']),
   "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "rigFitConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact and rig length are unchanged.'),
+  "hookupsConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact is unchanged.'),
+  "overnightConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date for permission or refusal, never inferred from a listing. Unknown must have no confirmation date.'),
   "maxRigLengthFeet": zod.number().int().min(1).max(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneMaxRigLengthFeetMax).nullable(),
   "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
 }).and(zod.object({
@@ -146,6 +149,9 @@ export const GetBossFestivalCrewLocationResponse = zod.object({
   "rigFit": zod.enum(['unknown', 'yes', 'no']),
   "hookups": zod.enum(['unknown', 'yes', 'no']),
   "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "rigFitConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact and rig length are unchanged.'),
+  "hookupsConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact is unchanged.'),
+  "overnightConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date for permission or refusal, never inferred from a listing. Unknown must have no confirmation date.'),
   "maxRigLengthFeet": zod.number().int().min(1).max(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneMaxRigLengthFeetMax).nullable(),
   "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
 }).and(zod.object({
@@ -353,6 +359,9 @@ export const GetFestivalCrewLocationResponse = zod.object({
   "rigFit": zod.enum(['unknown', 'yes', 'no']),
   "hookups": zod.enum(['unknown', 'yes', 'no']),
   "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "rigFitConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact and rig length are unchanged.'),
+  "hookupsConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact is unchanged.'),
+  "overnightConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date for permission or refusal, never inferred from a listing. Unknown must have no confirmation date.'),
   "maxRigLengthFeet": zod.number().int().min(1).max(getFestivalCrewLocationResponseStopsItemOneMaxRigLengthFeetMax).nullable(),
   "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
 }).and(zod.object({
@@ -444,6 +453,9 @@ export const SaveFestivalVenuePinResponse = zod.object({
   "rigFit": zod.enum(['unknown', 'yes', 'no']),
   "hookups": zod.enum(['unknown', 'yes', 'no']),
   "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "rigFitConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact and rig length are unchanged.'),
+  "hookupsConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact is unchanged.'),
+  "overnightConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date for permission or refusal, never inferred from a listing. Unknown must have no confirmation date.'),
   "maxRigLengthFeet": zod.number().int().min(1).max(saveFestivalVenuePinResponseStopsItemOneMaxRigLengthFeetMax).nullable(),
   "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
 }).and(zod.object({
@@ -571,6 +583,9 @@ export const CreateFestivalCrewStopBody = zod.object({
   "rigFit": zod.enum(['unknown', 'yes', 'no']),
   "hookups": zod.enum(['unknown', 'yes', 'no']),
   "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "rigFitConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact and rig length are unchanged.'),
+  "hookupsConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact is unchanged.'),
+  "overnightConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date for permission or refusal, never inferred from a listing. Unknown must have no confirmation date.'),
   "maxRigLengthFeet": zod.number().int().min(1).max(createFestivalCrewStopBodyMaxRigLengthFeetMax).nullable(),
   "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
 })
@@ -613,6 +628,9 @@ export const CreateFestivalCrewStopResponse = zod.object({
   "rigFit": zod.enum(['unknown', 'yes', 'no']),
   "hookups": zod.enum(['unknown', 'yes', 'no']),
   "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "rigFitConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact and rig length are unchanged.'),
+  "hookupsConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact is unchanged.'),
+  "overnightConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date for permission or refusal, never inferred from a listing. Unknown must have no confirmation date.'),
   "maxRigLengthFeet": zod.number().int().min(1).max(createFestivalCrewStopResponseOneMaxRigLengthFeetMax).nullable(),
   "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
 }).and(zod.object({
@@ -670,6 +688,9 @@ export const UpdateFestivalCrewStopBody = zod.object({
   "rigFit": zod.enum(['unknown', 'yes', 'no']),
   "hookups": zod.enum(['unknown', 'yes', 'no']),
   "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "rigFitConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact and rig length are unchanged.'),
+  "hookupsConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact is unchanged.'),
+  "overnightConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date for permission or refusal, never inferred from a listing. Unknown must have no confirmation date.'),
   "maxRigLengthFeet": zod.number().int().min(1).max(updateFestivalCrewStopBodyMaxRigLengthFeetMax).nullable(),
   "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
 })
@@ -712,6 +733,9 @@ export const UpdateFestivalCrewStopResponse = zod.object({
   "rigFit": zod.enum(['unknown', 'yes', 'no']),
   "hookups": zod.enum(['unknown', 'yes', 'no']),
   "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "rigFitConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact and rig length are unchanged.'),
+  "hookupsConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact is unchanged.'),
+  "overnightConfirmedOn": zod.string().date().nullish().describe('Staff-confirmed calendar date for permission or refusal, never inferred from a listing. Unknown must have no confirmation date.'),
   "maxRigLengthFeet": zod.number().int().min(1).max(updateFestivalCrewStopResponseOneMaxRigLengthFeetMax).nullable(),
   "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
 }).and(zod.object({

@@ -368,6 +368,18 @@ components:
         rigFit: { $ref: "#/components/schemas/FestivalCrewFact" }
         hookups: { $ref: "#/components/schemas/FestivalCrewFact" }
         overnight: { $ref: "#/components/schemas/FestivalCrewFact" }
+        rigFitConfirmedOn:
+          type: [string, "null"]
+          format: date
+          description: Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact and rig length are unchanged.
+        hookupsConfirmedOn:
+          type: [string, "null"]
+          format: date
+          description: Staff-confirmed calendar date, never a provider lookup time. Null clears confirmation; omitted preserves it only when the fact is unchanged.
+        overnightConfirmedOn:
+          type: [string, "null"]
+          format: date
+          description: Staff-confirmed calendar date for permission or refusal, never inferred from a listing. Unknown must have no confirmation date.
         maxRigLengthFeet: { type: [integer, "null"], minimum: 1, maximum: 150 }
         expectedUpdatedAt: { type: [string, "null"], format: date-time }
     FestivalCrewStop:

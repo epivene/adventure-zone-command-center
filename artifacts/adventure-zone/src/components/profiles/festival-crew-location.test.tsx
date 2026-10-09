@@ -46,7 +46,7 @@ describe("year-scoped crew location composition", () => {
     expect(crewApi.savePin).not.toHaveBeenCalled();
   });
   it("never converts an OSM Walmart result into overnight permission", () => {
-    expect(suggestionToInput(suggestion)).toMatchObject({ rigFit: "unknown", hookups: "unknown", overnight: "unknown" });
+    expect(suggestionToInput(suggestion)).toMatchObject({ rigFit: "unknown", hookups: "unknown", overnight: "unknown", rigFitConfirmedOn: null, hookupsConfirmedOn: null, overnightConfirmedOn: null });
     expect(directionsUrl(suggestion)).toBe("https://www.google.com/maps/dir/?api=1&destination=43.7,-116.35");
     expect(directionsUrl({ latitude: null, longitude: null, address: "" })).toBeNull();
   });

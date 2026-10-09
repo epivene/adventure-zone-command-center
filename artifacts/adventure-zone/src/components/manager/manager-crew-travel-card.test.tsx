@@ -21,6 +21,17 @@ const ok = (name: string) => ({ bookingId: "b", year: 2026, crewLocation: { venu
 beforeEach(() => { vi.clearAllMocks(); auth.legId = "leg-a"; vi.mocked(getCrewSnapshot).mockResolvedValue(null); Object.defineProperty(navigator, "onLine", { configurable: true, value: true }); });
 afterEach(() => { cleanup(); Object.defineProperty(navigator, "onLine", { configurable: true, value: true }); });
 describe("ManagerCrewTravelCard", () => {
+  it("shows distinct staff dates read-only without treating load times as confirmation", async () => {
+    const data = ok("Confirmed venue");
+    data.crewLocation.stops = [{ ...stop, rigFit: "yes", hookups: "no", rigFitConfirmedOn: "2026-10-01", hookupsConfirmedOn: "2026-09-30", overnightConfirmedOn: null } as typeof stop];
+    vi.mocked(crewApi.getForManager).mockResolvedValue(data as never);
+    render(<ManagerCrewTravelCard bookingId="b" />);
+    await screen.findByText(/Staff confirmed 2026-10-01/);
+    expect(screen.getByText(/Staff confirmed 2026-09-30/)).toBeTruthy();
+    expect(screen.getByText("Not confirmed by staff")).toBeTruthy();
+    expect(screen.queryByLabelText(/staff-confirmed date/)).toBeNull();
+    expect(screen.queryByText(/Staff confirmed 2026-10-09/)).toBeNull();
+  });
   it("shows saved facts read-only with unknown preserved and unsafe links dropped", async () => {
     vi.mocked(crewApi.getForManager).mockResolvedValue(ok("Venue A") as never);
     render(<ManagerCrewTravelCard bookingId="b" />);
