@@ -8,12 +8,14 @@
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "test": "vitest run --config vitest.config.ts",
+    "test:crew-offline": "pnpm run build && playwright test --config tests/crew-offline/playwright.config.mjs",
     "test:preview-dependencies": "node --test scripts/preview-dependencies.node-test.mjs",
     "test:boss": "vitest run --config vitest.config.ts src/App.boss-workspace.test.tsx src/App.office-routing.test.tsx src/components/office/office-shell.test.tsx src/lib/boss-auth-context.test.tsx src/components/boss/leg-record-picker.test.tsx src/pages/BossAssignmentsPage.test.tsx src/pages/BossHomePage.test.tsx src/pages/BossLegOperationalRecords.test.tsx src/pages/BossTemplatesFilesPage.test.tsx",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "@playwright/test": "^1.64.0",
     "@radix-ui/react-accordion": "^1.2.4",
     "@radix-ui/react-alert-dialog": "^1.1.7",
     "@radix-ui/react-aspect-ratio": "^1.1.3",
