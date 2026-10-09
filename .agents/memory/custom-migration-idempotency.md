@@ -14,3 +14,9 @@ Keep tracked SQL filenames stable when correcting migration order; represent pre
 **Why:** Same-date alphabetical names can put dependent upgrades before the tables they require. Renaming an already tracked file would give it a new identity and could reapply historical data changes.
 
 **How to apply:** Preserve independent migrations’ existing order, run prerequisite files first, and reject missing or cyclic dependencies. A business-data safeguard failure is separate from schema ordering; do not fabricate prerequisite records or mark a failed backfill applied.
+
+Automatic merge setup must distinguish schema upgrades from one-time business imports. Keep guarded imports pending for an explicit run; extract any necessary shared audit DDL into a repeat-safe schema migration.
+
+**Why:** Replaying a historical directory dataset during an unrelated merge failed its convention-edition safeguard. Treating that as success, weakening the guard or fabricating its expected records would risk importing into the wrong business data.
+
+**How to apply:** Classify one-off imports deliberately, never by swallowing arbitrary migration errors. Explicit/manual runs retain their original safeguards and failure behavior; automatic mode still applies new schema upgrades and fails on their real errors.

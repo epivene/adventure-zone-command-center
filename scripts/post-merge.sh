@@ -26,10 +26,10 @@ fi
 # Rebuild shared db declarations so both artifacts pick up schema changes.
 pnpm --filter @workspace/db run build
 
-# Apply any pending custom-DDL migrations (lib/db/migrations/*.sql).
+# Apply pending custom-DDL migrations, not one-time business-data imports.
 # These cover schema changes drizzle-kit push cannot express, such as deferrable
 # constraints. The runner is idempotent and skips gracefully when DATABASE_URL
 # is not configured (code-only environments).
 if [ "${DB_SCHEMA_READY}" = true ]; then
-  pnpm --filter @workspace/db run run-migrations
+  pnpm --filter @workspace/db run run-migrations --automatic
 fi

@@ -14,6 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { orderMigrations } from "./migration-order";
+import { shouldApplyMigration } from "./migration-scope";
 
 const raw = process.env.RENDER_DATABASE_URL ?? process.env.DATABASE_URL;
 
@@ -61,6 +62,10 @@ try {
     console.log("run-migrations: nothing to apply");
   } else {
     for (const file of pending) {
+      if (!shouldApplyMigration(file, process.argv.includes("--automatic"))) {
+        console.log(`run-migrations: manual business import left unapplied: ${file}`);
+        continue;
+      }
       const sql = fs.readFileSync(path.join(migrationsDir, file), "utf8");
       console.log(`run-migrations: applying ${file}`);
       await client.query("BEGIN");
