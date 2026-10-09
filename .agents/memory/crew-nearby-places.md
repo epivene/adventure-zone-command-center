@@ -32,3 +32,9 @@ Use a provider whose policy allows this commercial CRM; do not default to the ma
 **Why:** The [OSM instance directory](https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances) says commercial apps should use hosted/paid service and restricts fast AI-deployment platforms on the main instance. Private.coffee explicitly welcomes any project, but public hosting still has no uptime guarantee.
 
 **How to apply:** Recheck current operator policies when changing providers. The chosen public provider remains replaceable; failures must preserve manual entry and saved crew records.
+
+The user chose to keep manual crew-stop entry for now instead of adding a managed place-search subscription.
+
+**Why:** After reviewing the paid provider options, the user selected “Keep manual stop entry for now.”
+
+**How to apply:** Do not provision a paid nearby-search service without renewed approval. This deferral does not mean automatic nearby searches are reliable or that the user ruled out a subscription permanently.
