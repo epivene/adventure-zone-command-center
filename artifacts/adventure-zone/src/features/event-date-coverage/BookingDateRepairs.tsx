@@ -56,7 +56,7 @@ export function BookingDateRepairs(){
   try{
    const result=await previewDateRepair({bookingId,reason:draft.reason,endpoints,clearFields,reconcileConfirmedWindow});
    if(generation.current===epoch&&selectedRef.current===bookingId&&draftRef.current[bookingId]?.revision===version)setPreview(result);
-  }catch(cause){if(generation.current===epoch)setError(cause instanceof Error?cause.message:"Preview could not be created.");}
+  }catch(cause){if(generation.current===epoch)setError(cause instanceof Error&&cause.message.includes("DATE_NOT_IN_SAVED_SOURCE")?"The selected source does not establish this endpoint. Check the saved event year, public versus access dates, and inclusive versus exclusive end. Choose the exact saved evidence; leave unsupported dates unresolved.":cause instanceof Error?cause.message:"Preview could not be created.");}
   finally{if(generation.current===epoch){pending.current=false;setBusy(false);}}
  }
  async function apply(){
@@ -93,6 +93,8 @@ export function BookingDateRepairs(){
    <div className="break-words text-sm"><p>Booking: {record.bookingId} · Profile: {record.profileId??"Unlinked"} · Commercial status: {record.status}</p><p>Assigned resources: {record.assignments.map(a=>a.resource_id).join(", ")||"Not recorded"}</p>
     <p>Raw public: {display(record.dateProvenance.rawPublic.start)} → {display(record.dateProvenance.rawPublic.end)}</p><p>Raw reservation: {display(record.dateProvenance.rawReservation.start)} → {display(record.dateProvenance.rawReservation.end)}</p>
     <p>Date state: {record.dateProvenance.evidenceState} · {record.dateProvenance.reviewReasons.join(", ")}</p>
+    {!record.dateProvenance.publicWindow?<p>Public dates need evidence for both endpoints and the event year. A sales deadline or imported placeholder cannot establish event dates.</p>:null}
+    {!record.dateProvenance.reservationWindow?<p>Reservation dates are not verified. Save separate setup/access evidence when equipment or crew must be reserved; public dates alone do not establish that window.</p>:null}
     {record.dateProvenance.endpointEvidence.map((e,i)=><p key={i}>{labels[e.field]}: {e.kind} · {e.semantics} · {e.sourceRef.type}:{e.sourceRef.id} · revision {e.sourceRef.revision}</p>)}
     {record.profileId?<a className="underline" href={"/event-profiles/"+encodeURIComponent(record.profileId)}>Create a separate season booking</a>:null}
    </div>
@@ -125,7 +127,14 @@ export function BookingDateRepairs(){
      <p>Review the proposed dates and saved source revisions above. Commercial status is preserved. Remaining hold, crew, equipment, committed-plan or trip obligations: {preview.impacts.confirmedWindowReview.obligationIds.join(", ")||"None"}. Resolve those obligations through their existing owner controls before reconciliation.</p>
      {preview.impacts.confirmedWindowReview.acknowledged?<p>Signed-window correction explicitly reconciled in this preview. Apply revalidates the exact windows, evidence and obligations.</p>:preview.impacts.confirmedWindowReview.canReconcile!==false&&preview.impacts.confirmedWindowReview.obligationIds.length===0?<button type="button" disabled={busy} onClick={event=>createPreview(event,true)}>Reconcile signed window and preview again</button>:null}
     </div>:null}
-    {preview.impacts.reasons.map(reason=><p className="text-sm text-amber-800" key={reason}>{reason}</p>)}
+    {preview.impacts.reasons.includes("OTHER_COMMITMENT_DATE_REVIEW_REQUIRED")?<p className="text-sm text-amber-800">Other bookings still need date evidence. You can save this booking’s verified dates if there are no blocking conflicts. Capacity and operational readiness remain unverified until those bookings are reviewed.</p>:null}
+    {preview.impacts.reasons.filter(reason=>reason!=="OTHER_COMMITMENT_DATE_REVIEW_REQUIRED").map(reason=><p className="text-sm text-amber-800" key={reason}>{reason}</p>)}
+    {!preview.afterResolved.publicWindow||!preview.afterResolved.reservationWindow?<div className="rounded-lg border p-3 text-sm" aria-label="Remaining date evidence">
+     <p className="font-semibold">Remaining date evidence</p>
+     {!preview.afterResolved.publicWindow?<p>Public event dates are still incomplete or unverified. Save evidence for both endpoints and the correct year.</p>:null}
+     {!preview.afterResolved.reservationWindow?<p>Setup/access reservation is still unverified. Public event dates do not reserve equipment or crew. Save separate access evidence when a reservation is needed.</p>:null}
+     <p>Saving this repair preserves those unresolved checks.</p>
+    </div>:null}
     <button className="button-primary" type="button" disabled={busy||preview.impacts.blocked} onClick={apply}>Apply reviewed repair</button>
    </section>:null}
   </div>:null}

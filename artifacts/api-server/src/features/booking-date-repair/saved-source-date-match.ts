@@ -12,7 +12,17 @@ export function savedSourceProvesDate(content: string, endpoint: SelectedEndpoin
   if(new RegExp("(?<![\\dA-Za-z])"+escaped+"(?![\\dA-Za-z])").test(content))return true;
   if(endpoint.semantics!=="inclusive_date"||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
 
-  const lines=content.replace(/\r\n?/g,"\n").split("\n");
+  // Normalize explicit US numeric dates and day-first named dates only.
+  // A missing year remains missing; the requested endpoint supplies no context.
+  const monthLabels=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const normalized=content
+    .replace(/\b(\d{1,2})\/(\d{1,2})\/((?:19|20|21)\d{2})\b/g,(text,month,day,year)=>{
+      const label=monthLabels[Number(month)-1];
+      return label?label+" "+day+", "+year:text;
+    })
+    .replace(/\b(\d{1,2})(?:st|nd|rd|th)?(?:\s*([-–—]|to|through)\s*(\d{1,2})(?:st|nd|rd|th)?)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+((?:19|20|21)\d{2})\b/gi,
+      (_text,start,separator,end,month,year)=>month+" "+start+(end?separator+end:"")+", "+year);
+  const lines=normalized.replace(/\r\n?/g,"\n").split("\n");
   const first=lines.find(line=>line.trim())?.trim()??"";
   // An explicit agreement/season heading can scope later undated clauses.
   // Never borrow the requested date's year, booking year or note creation year.
@@ -29,7 +39,7 @@ export function savedSourceProvesDate(content: string, endpoint: SelectedEndpoin
   const publicDates=/\b(?:public|(?:event|show|rodeo|fair)(?: dates?)?)\b/i;
 
   for(const line of lines){
-    for(const clause of line.split(/[;•|]/)){
+    for(const clause of line.split(/(?<=[.!?])\s+(?=[A-Z])|[;•|]/)){
       const years=[...new Set(clause.match(/\b(?:19|20|21)\d{2}\b/g)??[])];
       if(years.length>1)continue;
       const explicitYear=years.length===1?Number(years[0]):headingYear;

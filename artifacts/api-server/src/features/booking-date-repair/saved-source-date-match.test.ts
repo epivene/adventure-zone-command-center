@@ -48,3 +48,19 @@ it("does not promote payment, reminder or insurance dates to public event dates"
 it("rejects human clauses mixing public and access ranges without separate labels",()=>{
  expect(savedSourceProvesDate("Event July 14–18, 2026 with access July 12–19",endpoint("reservation_start","2026-07-14"))).toBe(false);
 });
+
+it.each([
+ ["Reviewed the full 2022 email thread before the September 1, 2026 reply. Known details: the 2026 event runs weekends August 29-October 18; the booking is Possible; proposed in 2022.","2026-08-29","2026-10-18"],
+ ["The Gmail invitation says the 2026 showcase application deadline is Sept. 1. Current HAFFE information confirms the Nov. 19-21, 2026 Minot convention includes showcases and associate/vendor activity.","2026-11-19","2026-11-21"],
+ ["Event dates 11/19/2026–11/21/2026","2026-11-19","2026-11-21"],
+ ["Event 19–21 November 2026","2026-11-19","2026-11-21"],
+])("recognizes local event evidence despite other sentences and formats: %s",(text,start,end)=>{
+ expect(savedSourceProvesDate(text,endpoint("public_start",start))).toBe(true);
+ expect(savedSourceProvesDate(text,endpoint("public_end",end))).toBe(true);
+});
+it("keeps normalized access, missing years, impossible dates and ambiguous years separate",()=>{
+ expect(savedSourceProvesDate("Access 11/18/2026–11/22/2026",endpoint("reservation_start","2026-11-18"))).toBe(true);
+ expect(savedSourceProvesDate("Access 11/18/2026–11/22/2026",endpoint("public_start","2026-11-18"))).toBe(false);
+ for(const text of ["Event 11/19–11/21","Event 11/31/2026","Event 19–21 November","Event 19–21 November 2026 or 2027","Deposit paid 11/19/2026"])
+  expect(savedSourceProvesDate(text,endpoint("public_start","2026-11-19"))).toBe(false);
+});

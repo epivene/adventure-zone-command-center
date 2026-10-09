@@ -128,7 +128,11 @@ export class BookingDateRepairService {
        const b=rows("bookings").find(b=>b.id===r.booking_id);if(!b||!committed(b))return false;
        const dates=b.date_provenance;
        const w=(dates.rawReservation.start||dates.rawReservation.end)&&!dates.reservationWindow?null:dates.reservationWindow??dates.publicWindow;
-       return !w||Date.parse(w.start)<=end&&Date.parse(w.end)-((dates.reservationWindow?dates.reservationEndExclusive:dates.publicEndExclusive)?1:0)>=Date.parse(target.start);
+       // Unknown dates remain a review warning, never a proved overlap.
+       // Allocation/readiness still evaluates all unresolved commitments.
+       if(!w)return false;
+       const start=Date.parse(w.start),finish=Date.parse(w.end)-((dates.reservationWindow?dates.reservationEndExclusive:dates.publicEndExclusive)?1:0);
+       return Number.isFinite(start)&&Number.isFinite(finish)&&new Date(finish).getUTCFullYear()<9999&&start<=end&&finish>=Date.parse(target.start);
       });
       const template=rows("package_templates").find(r=>r.id===packageId);
       if(!template||overlapping.length+1>Math.max(0,Number(template.normal_capacity)-Number(template.temporary_unavailable_quantity??0))){
