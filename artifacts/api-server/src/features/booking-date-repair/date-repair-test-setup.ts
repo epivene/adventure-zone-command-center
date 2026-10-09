@@ -7,6 +7,7 @@ export const orgId="10000000-0000-4000-8000-000000000002";
 export const repairFixtureSql=`
 ALTER TABLE bookings ADD COLUMN organization_id uuid, ADD COLUMN notes text;
 ALTER TABLE booking_operational_windows ADD COLUMN updated_at timestamptz DEFAULT now();
+ALTER TABLE booking_operational_windows ADD CONSTRAINT booking_operational_windows_source_valid CHECK (source IN ('app','google_calendar','manual'));
 CREATE TABLE act_source_records(id uuid PRIMARY KEY,source_database_key text,stream_type text,act_record_id text);
 CREATE TABLE act_source_record_versions(id uuid PRIMARY KEY,source_record_id uuid,source_database_key text,raw_snapshot jsonb,fingerprint text);
 CREATE TABLE act_external_links(entity_type text,entity_id uuid,source_record_id uuid,source_database_key text,source_entity_type text,act_record_id text);

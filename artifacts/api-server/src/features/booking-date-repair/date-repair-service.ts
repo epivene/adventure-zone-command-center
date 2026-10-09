@@ -186,8 +186,11 @@ export class BookingDateRepairService {
    await tx.execute(sql`UPDATE bookings SET starts_at=${after.rawPublic.start}::timestamptz,ends_at=${after.rawPublic.end}::timestamptz,updated_at=now() WHERE id=${p.bookingId}::uuid`);
    if(p.clearFields.includes("reservation_start"))await tx.execute(sql`DELETE FROM booking_operational_windows WHERE booking_id=${p.bookingId}::uuid`);
    else if(p.endpoints.some(e=>e.field.startsWith("reservation_")&&e.kind==="verified_reservation")){
+    // Persist an owner-reviewed window under the schema's manual source.
+    // Exact inclusive/exclusive semantics remain in booking_date_evidence;
+    // reviewed_timestamp is a derived projection tag, not a stored source.
     await tx.execute(sql`INSERT INTO booking_operational_windows(booking_id,starts_at,ends_at,source)
-     VALUES(${p.bookingId}::uuid,${after.rawReservation.start}::timestamptz,${after.rawReservation.end}::timestamptz,'reviewed_timestamp')
+     VALUES(${p.bookingId}::uuid,${after.rawReservation.start}::timestamptz,${after.rawReservation.end}::timestamptz,'manual')
      ON CONFLICT(booking_id) DO UPDATE SET starts_at=excluded.starts_at,ends_at=excluded.ends_at,source=excluded.source,updated_at=now()`);
    }
    const appended=after.evidence.slice(snapshot.input.evidence.length);
