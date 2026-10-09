@@ -71,3 +71,20 @@ it("requires explicit signed-window reconciliation on the exact preview and clea
  fireEvent.click(screen.getByRole("button",{name:"Preview repair"}));
  await waitFor(()=>expect(api.previewDateRepair).toHaveBeenLastCalledWith(expect.objectContaining({reconcileConfirmedWindow:false})));
 });
+
+it("allows a fact repair with unknown commitment warnings and keeps missing access evidence visible",async()=>{
+ vi.mocked(api.previewDateRepair).mockResolvedValue({...preview,impacts:{...preview.impacts,reasons:["OTHER_COMMITMENT_DATE_REVIEW_REQUIRED"]}} as never);
+ setup();await choose();fill();fireEvent.click(screen.getByRole("button",{name:"Preview repair"}));
+ await screen.findByRole("heading",{name:"Repair preview"});
+ expect(screen.getByRole("button",{name:"Apply reviewed repair"})).not.toBeDisabled();
+ expect(screen.getByText(/Other bookings still need date evidence/)).toBeInTheDocument();
+ expect(screen.getByText(/Setup\/access reservation is still unverified/)).toBeInTheDocument();
+ fireEvent.click(screen.getByRole("button",{name:"Apply reviewed repair"}));
+ await waitFor(()=>expect(api.applyDateRepair).toHaveBeenCalledOnce());
+});
+it("explains rejected source evidence without discarding the draft",async()=>{
+ vi.mocked(api.previewDateRepair).mockRejectedValue(new Error("DATE_NOT_IN_SAVED_SOURCE"));
+ setup();await choose();fill();fireEvent.click(screen.getByRole("button",{name:"Preview repair"}));
+ await screen.findByText(/The selected source does not establish this endpoint/);
+ expect(screen.getByLabelText("Value for public_start")).toHaveValue("2027-07-21");
+});
