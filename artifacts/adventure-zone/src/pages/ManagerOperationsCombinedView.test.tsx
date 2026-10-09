@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/manager-auth-context", () => ({
+  useOptionalManagerAuth: () => ({ manager: { legId: "leg-a" }, managerApi: mocks.api }),
   useManagerAuth: () => ({ manager: { legId: "leg-a" }, managerApi: mocks.api }),
 }));
 vi.mock("@/lib/manager-sync-queue", () => ({

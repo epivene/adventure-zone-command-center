@@ -39,6 +39,7 @@ import type {
   HealthStatus,
   LeadLegInput,
   ListFestivalEditions200,
+  ManagerFestivalCrewLocation,
   PreviewFestivalNetPdfParams,
   SearchFestivalNearbyStops200,
   SearchFestivalVenue200
@@ -70,6 +71,148 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetManagerFestivalCrewLocationUrl = (id: string,) => {
+
+
+
+
+  return `/api/manager/bookings/${id}/crew-location`
+}
+
+export const getManagerFestivalCrewLocation = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<ManagerFestivalCrewLocation> => {
+
+  return customFetch<ManagerFestivalCrewLocation>(getGetManagerFestivalCrewLocationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetManagerFestivalCrewLocationQueryKey = (id: string,) => {
+    return [
+    `/api/manager/bookings/${id}/crew-location`
+    ] as const;
+    }
+
+
+export const getGetManagerFestivalCrewLocationQueryOptions = <TData = Awaited<ReturnType<typeof getManagerFestivalCrewLocation>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getManagerFestivalCrewLocation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetManagerFestivalCrewLocationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getManagerFestivalCrewLocation>>> = ({ signal }) => getManagerFestivalCrewLocation(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getManagerFestivalCrewLocation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetManagerFestivalCrewLocationQueryResult = NonNullable<Awaited<ReturnType<typeof getManagerFestivalCrewLocation>>>
+export type GetManagerFestivalCrewLocationQueryError = ErrorType<void>
+
+
+
+export function useGetManagerFestivalCrewLocation<TData = Awaited<ReturnType<typeof getManagerFestivalCrewLocation>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getManagerFestivalCrewLocation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetManagerFestivalCrewLocationQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBossFestivalCrewLocationUrl = (id: string,) => {
+
+
+
+
+  return `/api/boss/bookings/${id}/crew-location`
+}
+
+export const getBossFestivalCrewLocation = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<ManagerFestivalCrewLocation> => {
+
+  return customFetch<ManagerFestivalCrewLocation>(getGetBossFestivalCrewLocationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBossFestivalCrewLocationQueryKey = (id: string,) => {
+    return [
+    `/api/boss/bookings/${id}/crew-location`
+    ] as const;
+    }
+
+
+export const getGetBossFestivalCrewLocationQueryOptions = <TData = Awaited<ReturnType<typeof getBossFestivalCrewLocation>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBossFestivalCrewLocation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBossFestivalCrewLocationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBossFestivalCrewLocation>>> = ({ signal }) => getBossFestivalCrewLocation(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBossFestivalCrewLocation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBossFestivalCrewLocationQueryResult = NonNullable<Awaited<ReturnType<typeof getBossFestivalCrewLocation>>>
+export type GetBossFestivalCrewLocationQueryError = ErrorType<void>
+
+
+
+export function useGetBossFestivalCrewLocation<TData = Awaited<ReturnType<typeof getBossFestivalCrewLocation>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBossFestivalCrewLocation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBossFestivalCrewLocationQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getMatchFestivalNetDraftUrl = () => {
 

@@ -1,4 +1,4 @@
-import type { FestivalCrewLocation, FestivalCrewStop, FestivalCrewStopInput, FestivalNearbySuggestion, FestivalStopCategory, FestivalVenuePin, SearchFestivalNearbyStops200, SearchFestivalVenue200 } from "@workspace/api-client-react";
+import type { FestivalCrewLocation, FestivalCrewStop, FestivalCrewStopInput, FestivalNearbySuggestion, FestivalStopCategory, FestivalVenuePin, SearchFestivalNearbyStops200, SearchFestivalVenue200, ManagerFestivalCrewLocation } from "@workspace/api-client-react";
 import { apiFetch } from "@/lib/auth-token";
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -11,8 +11,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
+export type ManagerCrewLocationResponse = ManagerFestivalCrewLocation;
 const base = (id: string, year: number) => `/event-profiles/${id}/editions/${year}`;
 export const crewApi = {
+  getForManager: (bookingId: string, managerApi: <T>(path: string) => Promise<T>) => managerApi<ManagerCrewLocationResponse>(`/manager/bookings/${encodeURIComponent(bookingId)}/crew-location`),
   get: (id: string, year: number) => request<FestivalCrewLocation>("GET", `${base(id, year)}/crew-location`),
   searchVenue: (id: string, year: number, query: string) => request<SearchFestivalVenue200>("POST", `${base(id, year)}/crew-location/search`, { query }),
   savePin: (id: string, year: number, pin: FestivalVenuePin, expectedUpdatedAt: string) => request<FestivalCrewLocation>("PUT", `${base(id, year)}/crew-location`, { ...pin, expectedUpdatedAt }),

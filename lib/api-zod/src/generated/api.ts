@@ -8,6 +8,154 @@
 import * as zod from 'zod';
 
 
+export const GetManagerFestivalCrewLocationParams = zod.object({
+  "id": zod.string().uuid()
+})
+
+export const getManagerFestivalCrewLocationResponseYearMin = 1900;
+export const getManagerFestivalCrewLocationResponseYearMax = 2200;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneLocationOneLatitudeMin = -90;
+export const getManagerFestivalCrewLocationResponseCrewLocationOneLocationOneLatitudeMax = 90;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneLocationOneLongitudeMin = -180;
+export const getManagerFestivalCrewLocationResponseCrewLocationOneLocationOneLongitudeMax = 180;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneLocationOneDisplayNameMax = 2000;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneNameMax = 200;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneAddressMax = 500;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneLatitudeMin = -90;
+export const getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneLatitudeMax = 90;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneLongitudeMin = -180;
+export const getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneLongitudeMax = 180;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneSourceKeyMax = 80;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneSourceUrlMax = 2000;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOnePhoneMax = 80;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneWebsiteMax = 2000;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneNotesMax = 2000;
+
+export const getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneMaxRigLengthFeetMax = 150;
+
+
+
+export const GetManagerFestivalCrewLocationResponse = zod.object({
+  "bookingId": zod.string().uuid(),
+  "year": zod.number().int().min(getManagerFestivalCrewLocationResponseYearMin).max(getManagerFestivalCrewLocationResponseYearMax).nullable(),
+  "crewLocation": zod.union([zod.object({
+  "venue": zod.string(),
+  "editionUpdatedAt": zod.string().datetime({"offset":true}).nullable(),
+  "location": zod.union([zod.object({
+  "latitude": zod.number().min(getManagerFestivalCrewLocationResponseCrewLocationOneLocationOneLatitudeMin).max(getManagerFestivalCrewLocationResponseCrewLocationOneLocationOneLatitudeMax),
+  "longitude": zod.number().min(getManagerFestivalCrewLocationResponseCrewLocationOneLocationOneLongitudeMin).max(getManagerFestivalCrewLocationResponseCrewLocationOneLocationOneLongitudeMax),
+  "displayName": zod.string().max(getManagerFestivalCrewLocationResponseCrewLocationOneLocationOneDisplayNameMax)
+}),zod.null()]),
+  "stops": zod.array(zod.object({
+  "name": zod.string().min(1).max(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneNameMax),
+  "category": zod.enum(['rv_park', 'walmart', 'mechanic', 'tires', 'oil_change', 'hardware', 'bathroom', 'fuel']),
+  "address": zod.string().max(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneAddressMax),
+  "latitude": zod.number().min(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneLatitudeMin).max(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneLatitudeMax).nullable(),
+  "longitude": zod.number().min(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneLongitudeMin).max(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneLongitudeMax).nullable(),
+  "sourceKey": zod.string().max(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneSourceKeyMax).nullable(),
+  "sourceUrl": zod.string().max(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneSourceUrlMax),
+  "phone": zod.string().max(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOnePhoneMax),
+  "website": zod.string().max(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneWebsiteMax),
+  "notes": zod.string().max(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneNotesMax),
+  "rigFit": zod.enum(['unknown', 'yes', 'no']),
+  "hookups": zod.enum(['unknown', 'yes', 'no']),
+  "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "maxRigLengthFeet": zod.number().int().min(1).max(getManagerFestivalCrewLocationResponseCrewLocationOneStopsItemOneMaxRigLengthFeetMax).nullable(),
+  "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "updatedAt": zod.string().datetime({"offset":true})
+})))
+}),zod.null()])
+})
+
+
+export const GetBossFestivalCrewLocationParams = zod.object({
+  "id": zod.string().uuid()
+})
+
+export const getBossFestivalCrewLocationResponseYearMin = 1900;
+export const getBossFestivalCrewLocationResponseYearMax = 2200;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneLocationOneLatitudeMin = -90;
+export const getBossFestivalCrewLocationResponseCrewLocationOneLocationOneLatitudeMax = 90;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneLocationOneLongitudeMin = -180;
+export const getBossFestivalCrewLocationResponseCrewLocationOneLocationOneLongitudeMax = 180;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneLocationOneDisplayNameMax = 2000;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneNameMax = 200;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneAddressMax = 500;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneLatitudeMin = -90;
+export const getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneLatitudeMax = 90;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneLongitudeMin = -180;
+export const getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneLongitudeMax = 180;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneSourceKeyMax = 80;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneSourceUrlMax = 2000;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOnePhoneMax = 80;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneWebsiteMax = 2000;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneNotesMax = 2000;
+
+export const getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneMaxRigLengthFeetMax = 150;
+
+
+
+export const GetBossFestivalCrewLocationResponse = zod.object({
+  "bookingId": zod.string().uuid(),
+  "year": zod.number().int().min(getBossFestivalCrewLocationResponseYearMin).max(getBossFestivalCrewLocationResponseYearMax).nullable(),
+  "crewLocation": zod.union([zod.object({
+  "venue": zod.string(),
+  "editionUpdatedAt": zod.string().datetime({"offset":true}).nullable(),
+  "location": zod.union([zod.object({
+  "latitude": zod.number().min(getBossFestivalCrewLocationResponseCrewLocationOneLocationOneLatitudeMin).max(getBossFestivalCrewLocationResponseCrewLocationOneLocationOneLatitudeMax),
+  "longitude": zod.number().min(getBossFestivalCrewLocationResponseCrewLocationOneLocationOneLongitudeMin).max(getBossFestivalCrewLocationResponseCrewLocationOneLocationOneLongitudeMax),
+  "displayName": zod.string().max(getBossFestivalCrewLocationResponseCrewLocationOneLocationOneDisplayNameMax)
+}),zod.null()]),
+  "stops": zod.array(zod.object({
+  "name": zod.string().min(1).max(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneNameMax),
+  "category": zod.enum(['rv_park', 'walmart', 'mechanic', 'tires', 'oil_change', 'hardware', 'bathroom', 'fuel']),
+  "address": zod.string().max(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneAddressMax),
+  "latitude": zod.number().min(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneLatitudeMin).max(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneLatitudeMax).nullable(),
+  "longitude": zod.number().min(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneLongitudeMin).max(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneLongitudeMax).nullable(),
+  "sourceKey": zod.string().max(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneSourceKeyMax).nullable(),
+  "sourceUrl": zod.string().max(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneSourceUrlMax),
+  "phone": zod.string().max(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOnePhoneMax),
+  "website": zod.string().max(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneWebsiteMax),
+  "notes": zod.string().max(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneNotesMax),
+  "rigFit": zod.enum(['unknown', 'yes', 'no']),
+  "hookups": zod.enum(['unknown', 'yes', 'no']),
+  "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "maxRigLengthFeet": zod.number().int().min(1).max(getBossFestivalCrewLocationResponseCrewLocationOneStopsItemOneMaxRigLengthFeetMax).nullable(),
+  "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "updatedAt": zod.string().datetime({"offset":true})
+})))
+}),zod.null()])
+})
+
+
 export const matchFestivalNetDraftBodyNameMax = 250;
 
 export const matchFestivalNetDraftBodyYearMin = 1900;

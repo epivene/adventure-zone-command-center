@@ -20,18 +20,6 @@ export interface FestivalVenuePin {
   displayName: string;
 }
 
-export interface FestivalVenueSearchInput {
-  /**
-     * @minLength 3
-     * @maxLength 400
-     */
-  query: string;
-}
-
-export type FestivalVenuePinInput = FestivalVenuePin & {
-  expectedUpdatedAt: string;
-};
-
 export type FestivalStopCategory = typeof FestivalStopCategory[keyof typeof FestivalStopCategory];
 
 
@@ -114,6 +102,29 @@ export interface FestivalCrewLocation {
   location: FestivalVenuePin | null;
   stops: FestivalCrewStop[];
 }
+
+export interface ManagerFestivalCrewLocation {
+  bookingId: string;
+  /**
+     * @minimum 1900
+     * @maximum 2200
+     * @nullable
+     */
+  year: number | null;
+  crewLocation: FestivalCrewLocation | null;
+}
+
+export interface FestivalVenueSearchInput {
+  /**
+     * @minLength 3
+     * @maxLength 400
+     */
+  query: string;
+}
+
+export type FestivalVenuePinInput = FestivalVenuePin & {
+  expectedUpdatedAt: string;
+};
 
 export type FestivalNearbySearchInputRadiusMiles = typeof FestivalNearbySearchInputRadiusMiles[keyof typeof FestivalNearbySearchInputRadiusMiles];
 

@@ -38,3 +38,9 @@ The user chose to keep manual crew-stop entry for now instead of adding a manage
 **Why:** After reviewing the paid provider options, the user selected “Keep manual stop entry for now.”
 
 **How to apply:** Do not provision a paid nearby-search service without renewed approval. This deferral does not mean automatic nearby searches are reliable or that the user ruled out a subscription permanently.
+
+Manager crew travel is read-only and scoped through a currently assigned booking; its annual edition follows the booking's resolved public-event season, not reservation/setup dates or a caller-selected year. Boss crew reads also require an existing leg assignment.
+
+**Why:** Crew logistics must not expose unrelated annual records or organizer CRM information, and Boss must not bypass Desie's initial assignment.
+
+**How to apply:** Resolve profile and season on the server after checking assignment. Reuse saved annual venue/stops; keep staff editing in the owner profile workflow.

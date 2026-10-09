@@ -36,6 +36,9 @@ import needsAnswerRouter from "./needs-answer";
 import eventProfilesRouter from "./event-profiles";
 import festivalEditionsRouter from "./festival-editions";
 import festivalCrewRouter from "./festival-crew";
+import { createAssignedFestivalCrewRouter } from "./assigned-festival-crew";
+import { AssignedCrewService } from "@/features/festival-crew/assigned-crew-service";
+import { BookingLegOperationsRepository } from "@/features/bookings/booking-leg-operations-repository";
 import festivalNetImportRouter from "./festivalnet-import";
 import leadLegAssignmentRouter from "./lead-leg-assignment";
 import earlyBirdPromoRouter from "./early-bird-promo";
@@ -245,6 +248,11 @@ router.use(managerEventChecklistsRouter);
 router.use(managerEventChecklistAttachmentsRouter);
 router.use(managerYearEndInspectionsRouter);
 router.use(managerTravelRouter);
+router.use(createAssignedFestivalCrewRouter({
+  service: new AssignedCrewService(new BookingLegOperationsRepository(pool)),
+  requireManager: createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db)),
+  requireBoss: createRequireBossMiddleware(new DrizzleBossAccountRepository(db)),
+}));
 router.use(managerWrapUpsRouter);
 router.use(managerCommunicationsRouter);
 router.use(managerMeetupsRouter);

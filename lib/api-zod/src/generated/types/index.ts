@@ -39,6 +39,7 @@ export * from './festivalVenueSearchInput';
 export * from './healthStatus';
 export * from './leadLegInput';
 export * from './listFestivalEditions200';
+export * from './managerFestivalCrewLocation';
 export * from './previewFestivalNetPdfParams';
 export * from './searchFestivalNearbyStops200';
 export * from './searchFestivalVenue200';

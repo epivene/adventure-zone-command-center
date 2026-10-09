@@ -5,6 +5,7 @@ import { BookingLegOperationsCard } from '@/components/bookings/leg-operations-p
 import { createOperationsReadClient } from '@/features/bookings/booking-leg-operations-client';
 import { ManagerScopedMap } from "@/components/manager/manager-scoped-map";
 import { ManagerTravelPlanningPanel } from "@/components/manager/manager-travel-planning-panel";
+import { ManagerCrewTravelCard } from "@/components/manager/manager-crew-travel-card";
 import { MileageForm } from "@/components/manager/mileage-form";
 import { MaintenanceForm } from "@/components/manager/maintenance-form";
 import { useManagerScopedMap } from "@/features/manager/use-manager-scoped-map";
@@ -68,6 +69,7 @@ export default function ManagerOperationsPage() {
           </select>
         </label>
         {bookingId ? <BookingLegOperationsCard bookingId={bookingId} client={operationsClient} role="manager" /> : null}
+        {bookingId ? <ManagerCrewTravelCard key={bookingId} bookingId={bookingId} /> : null}
       </section> : null}
       {map.data ? (
         <ManagerScopedMap data={map.data} variant="operations" mode="on-road" />
