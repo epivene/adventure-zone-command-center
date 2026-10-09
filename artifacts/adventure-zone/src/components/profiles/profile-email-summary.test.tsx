@@ -64,6 +64,18 @@ beforeEach(() => {
         state: "scheduled",
       },
       {
+        id: "draft-2",
+        subject: "Follow-up after the fair",
+        recipientEmail: "gm@example.com",
+        state: "draft",
+      },
+      {
+        id: "draft-3",
+        subject: "Needs a revision",
+        recipientEmail: "gm@example.com",
+        state: "needs_changes",
+      },
+      {
         id: "sent-1",
         subject: "Already sent",
         recipientEmail: "gm@example.com",
@@ -94,6 +106,16 @@ describe("ProfileEmailSummary", () => {
       screen.getAllByRole("button", { name: /Open conversation/ }),
     ).toHaveLength(3);
     expect(await screen.findByText("Scheduled")).toBeVisible();
+    expect(screen.getByText("Not editable here")).toBeVisible();
+    expect(screen.getByTestId("link-open-email-draft-draft-2")).toHaveAttribute(
+      "href",
+      "/profiles/org-1?section=emails&draftId=draft-2",
+    );
+    expect(screen.getByTestId("link-open-email-draft-draft-3")).toHaveAttribute(
+      "href",
+      "/profiles/org-1?section=emails&draftId=draft-3",
+    );
+    expect(screen.queryByTestId("link-open-email-draft-draft-1")).not.toBeInTheDocument();
     expect(screen.queryByText("Already sent")).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "View all emails" }),

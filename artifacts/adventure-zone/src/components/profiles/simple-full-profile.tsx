@@ -8,7 +8,7 @@ import { ProfileWorkspaceActions } from "./profile-workspace-actions";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { ProfileLatestNote } from "./profile-latest-note";
 import { useSearch, useLocation } from "wouter";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import {
   ArrowLeft,
@@ -185,13 +185,24 @@ export function SimpleFullProfile({
   const gmail = profileEmails ?? localEmails;
   const emailConversations = gmail.conversations;
   const search = useSearch();
-  const [,navigate] = useLocation();
+  const [profileLocation,navigate] = useLocation();
   useEffect(() => { onSectionChange?.(openSection); }, [openSection, onSectionChange]);
   useEffect(() => { const section=new URLSearchParams(search).get("section"); if(section && ["contacts","events","notes","emails","documents"].includes(section)) setOpenSection(section as OpenSection); }, [search]);
   useEffect(() => { if(openSection) document.getElementById("profile-section-content")?.scrollIntoView?.({block:"start"}); }, [openSection]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [primaryContactOpen, setPrimaryContactOpen] = useState(false);
   const isEditing = editing ?? internalEditing;
+  const openDraftId = new URLSearchParams(search).get("draftId") ?? undefined;
+  const openProfileDraft = useCallback((draft: ProfileEmailDraft) => {
+    setEmailDraft(draft);
+    setEmailSaved(false);
+    setEmailComposerOpen(true);
+  }, []);
+  const clearOpenDraftId = useCallback(() => {
+    const params = new URLSearchParams(search);
+    params.delete("draftId");
+    navigate(`${profileLocation}${params.size ? `?${params.toString()}` : ""}`, { replace: true });
+  }, [navigate, profileLocation, search]);
 
   useEffect(() => {
     setOptimisticActivities([]);
@@ -910,7 +921,7 @@ export function SimpleFullProfile({
       {!boss && emailComposerOpen ? <ProfileEmailComposer key={`${profile.id}:${emailDraft?.id ?? "new"}`} organizationId={profile.id} profileName={profile.place.name} contacts={profile.contacts} draft={emailDraft} onClose={() => setEmailComposerOpen(false)} onSaved={() => { setEmailComposerOpen(false); setOpenSection("emails"); setDraftRevision((value) => value + 1); setEmailSaved(true); }} /> : null}
       {emailSaved ? <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Email draft saved. Nothing was sent. Find it in Emails below.</p> : null}
       {openSection === "emails" || activityOpen ? <div className="grid gap-4">
-        <ProfileEmailDrafts readOnly={boss} getDrafts={boss ? getBossProfileDrafts : undefined} organizationId={profile.id} revision={draftRevision} onCreate={createEmail} onEdit={(draft) => { setEmailDraft(draft); setEmailSaved(false); setEmailComposerOpen(true); }} />
+        <ProfileEmailDrafts readOnly={boss} getDrafts={boss ? getBossProfileDrafts : undefined} organizationId={profile.id} revision={draftRevision} onCreate={createEmail} onEdit={openProfileDraft} openDraftId={boss ? undefined : openDraftId} onDraftOpened={clearOpenDraftId} />
         <ProfileGoogleEmailPanel organizationId={profile.id} state={gmail} readOnly={boss} getThread={boss ? getBossThread : undefined} />
       </div> : null}
 

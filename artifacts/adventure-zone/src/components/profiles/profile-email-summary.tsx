@@ -33,6 +33,7 @@ const ACTIVE_DRAFT_STATES = new Set([
   "needs_changes",
   "failed",
 ]);
+const EDITABLE_DRAFT_STATES = new Set(["draft", "needs_changes"]);
 
 const STATE_LABELS: Record<string, string> = {
   draft: "Saved draft",
@@ -201,11 +202,30 @@ export function ProfileEmailSummary({
                 key={draft.id}
               >
                 <Mail className="h-4 w-4 shrink-0 text-[#157d78]" />
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#182225]">
-                  {draft.subject || "(No subject)"}
-                </span>
-                <span className="shrink-0 text-xs font-bold text-[#536064]">
+                <div className="min-w-0 flex-1">
+                  {EDITABLE_DRAFT_STATES.has(draft.state) ? (
+                    <Link
+                      className="block truncate text-sm font-semibold text-[#182225] hover:text-[#157d78] hover:underline"
+                      data-testid={`link-open-email-draft-${draft.id}`}
+                      href={`/profiles/${organizationId}?section=emails&draftId=${encodeURIComponent(draft.id)}`}
+                    >
+                      {draft.subject || "(No subject)"}
+                      <span className="sr-only"> — Open draft to edit</span>
+                    </Link>
+                  ) : (
+                    <span className="block truncate text-sm font-semibold text-[#182225]">
+                      {draft.subject || "(No subject)"}
+                    </span>
+                  )}
+                </div>
+                <span
+                  className="shrink-0 text-right text-xs font-bold text-[#536064]"
+                  data-testid={`status-email-draft-${draft.id}`}
+                >
                   {STATE_LABELS[draft.state] ?? draft.state}
+                  {!EDITABLE_DRAFT_STATES.has(draft.state) ? (
+                    <span className="block font-normal">Not editable here</span>
+                  ) : null}
                 </span>
               </li>
             ))}

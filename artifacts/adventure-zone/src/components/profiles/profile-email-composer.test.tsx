@@ -33,6 +33,58 @@ describe("Booking email composer", () => {
     await waitFor(() => expect(api.apiPatch).toHaveBeenCalledWith("/office-admin/email-drafts/draft-1", { subject: draft.subject, body: "Updated" }));
     expect(api.apiPost).not.toHaveBeenCalled();
   });
+  it("opens the requested active draft from a profile email deep link", async () => {
+    const onEdit = vi.fn();
+    const onDraftOpened = vi.fn();
+    const view = render(
+      <ProfileEmailDrafts
+        organizationId="profile-1"
+        revision={0}
+        onCreate={vi.fn()}
+        onEdit={onEdit}
+        openDraftId={draft.id}
+        onDraftOpened={onDraftOpened}
+      />,
+    );
+
+    await waitFor(() => expect(onEdit).toHaveBeenCalledWith(draft));
+    expect(onDraftOpened).toHaveBeenCalledOnce();
+  });
+  it("does not offer editing when a linked draft is no longer editable", async () => {
+    const scheduledDraft = { ...draft, state: "scheduled" };
+    api.apiGet.mockResolvedValue({ drafts: [scheduledDraft] });
+    const onEdit = vi.fn();
+    const onDraftOpened = vi.fn();
+    const view = render(
+      <ProfileEmailDrafts
+        organizationId="profile-1"
+        revision={0}
+        onCreate={vi.fn()}
+        onEdit={onEdit}
+        openDraftId={scheduledDraft.id}
+        onDraftOpened={onDraftOpened}
+      />,
+    );
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "This draft is no longer editable from the profile.",
+    );
+    expect(onEdit).not.toHaveBeenCalled();
+    expect(onDraftOpened).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: /Next year's fair/ })).not.toBeInTheDocument();
+    view.rerender(
+      <ProfileEmailDrafts
+        organizationId="profile-1"
+        revision={0}
+        onCreate={vi.fn()}
+        onEdit={onEdit}
+        onDraftOpened={onDraftOpened}
+      />,
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "This draft is no longer editable from the profile.",
+    );
+  });
   it("explains missing recipient emails and preserves text after save errors", async () => {
     const view = render(<ProfileEmailComposer {...props} contacts={[]} />);
     expect(screen.getByRole("status").textContent).toContain("Add an email address");

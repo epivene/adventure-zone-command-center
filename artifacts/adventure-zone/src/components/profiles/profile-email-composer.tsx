@@ -79,33 +79,55 @@ export function ProfileEmailComposer({ organizationId, profileName, contacts, dr
 }
 
 const getProfileDrafts = (organizationId: string) => apiGet<{ drafts: ProfileEmailDraft[] }>(`/office-admin/profile-email-drafts/${organizationId}`);
-export function ProfileEmailDrafts({ organizationId, revision, onCreate, onEdit, readOnly = false, getDrafts = getProfileDrafts }: {
+export function ProfileEmailDrafts({ organizationId, revision, onCreate, onEdit, readOnly = false, getDrafts = getProfileDrafts, openDraftId, onDraftOpened }: {
   organizationId: string;
   revision: number;
   onCreate(): void;
   onEdit(draft: ProfileEmailDraft): void;
   readOnly?: boolean;
   getDrafts?: typeof getProfileDrafts;
+  openDraftId?: string;
+  onDraftOpened?(): void;
 }) {
   const [drafts, setDrafts] = useState<ProfileEmailDraft[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [openDraftMessage, setOpenDraftMessage] = useState("");
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError("");
+    if (openDraftId) setOpenDraftMessage("");
     setDrafts([]);
     getDrafts(organizationId)
-      .then((result) => { if (active) setDrafts(result.drafts.filter((draft) => ["draft", "needs_changes"].includes(draft.state))); })
+      .then((result) => {
+        if (!active) return;
+        const editableDrafts = result.drafts.filter((draft) => ["draft", "needs_changes"].includes(draft.state));
+        setDrafts(editableDrafts);
+        if (openDraftId) {
+          const requestedDraft = result.drafts.find((draft) => draft.id === openDraftId);
+          if (requestedDraft && editableDrafts.includes(requestedDraft) && !readOnly) {
+            onEdit(requestedDraft);
+          } else {
+            setOpenDraftMessage(
+              requestedDraft
+                ? "This draft is no longer editable from the profile."
+                : "This draft is no longer available on this profile.",
+            );
+          }
+          onDraftOpened?.();
+        }
+      })
       .catch(() => { if (active) setError("Could not load saved email drafts. Reopen Emails to try again."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [organizationId, revision, getDrafts]);
+  }, [organizationId, revision, getDrafts, openDraftId, onDraftOpened, onEdit, readOnly]);
   return <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950/20">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-lg font-bold">Email drafts</h2>
       {!readOnly ? <button type="button" className="button-primary inline-flex items-center gap-2" onClick={onCreate}><Mail className="h-4 w-4" />Create Email</button> : null}
     </div>
+    {openDraftMessage ? <p className="mt-3 text-sm text-amber-800" role="status">{openDraftMessage}</p> : null}
     {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : loading ? <p className="mt-3 text-sm">Loading drafts…</p> : !drafts.length ? <p className="mt-3 text-sm text-slate-500">No saved drafts yet. Create an email for a contact on this profile.</p> : <ul className="mt-3 grid gap-2">
       {drafts.map((draft) => <li key={draft.id}><button type="button" className="w-full rounded-lg border p-3 text-left hover:bg-slate-50 dark:hover:bg-slate-900" onClick={() => { if (!readOnly) onEdit(draft); }}>
         <span className="block font-semibold">{draft.subject}</span><span className="text-sm text-slate-500">Draft · {draft.recipientEmail} · {readOnly ? "Saved draft" : "Open to edit"}</span>

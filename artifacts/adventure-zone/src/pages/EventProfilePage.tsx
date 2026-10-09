@@ -48,7 +48,12 @@ export default function EventProfilePage() {
   const { openProfile } = useWorkspaceSession();
   const [data, setData] = useState<any>(null);
   const profileEmails = useProfileGoogleEmail(profileId ?? "", undefined, undefined, Boolean(data?.id && data.id === profileId));
-  const [profileSection, setProfileSection] = useState<OpenSection>(null);
+  const [profileSection, setProfileSection] = useState<OpenSection>(() => {
+    const section = new URLSearchParams(search).get("section");
+    return ["contacts", "events", "notes", "emails", "documents"].includes(section ?? "")
+      ? section as OpenSection
+      : null;
+  });
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
