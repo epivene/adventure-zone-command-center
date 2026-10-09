@@ -58,4 +58,39 @@ describe("FestivalNet import endpoints", () => {
     const response = await request(app()).post("/festivalnet-import/apply").set("Authorization", "Bearer owner-test").send({ draft, organizationId: null });
     expect(response.status).toBe(200); expect(mocks.apply).toHaveBeenCalledWith(draft, null);
   });
+  it("requires explicit batch confirmation, unique IDs and owner authorization", async () => {
+    const entries = [{ entryId: "first", draft, organizationId: null }];
+    expect((await request(app()).post("/festivalnet-import/apply-batch").send({ confirmed: true, entries })).status).toBe(401);
+    for (const body of [{ confirmed: false, entries }, { entries }, { confirmed: true, entries: [...entries, ...entries] },
+      { confirmed: true, entries: Array.from({ length: 26 }, (_, index) => ({ ...entries[0], entryId: String(index) })) }]) {
+      expect((await request(app()).post("/festivalnet-import/apply-batch").set("Authorization", "Bearer owner-test").send(body)).status).toBe(400);
+    }
+    expect(mocks.apply).not.toHaveBeenCalled();
+  });
+  it("returns partial completion without hiding other successes or validation errors", async () => {
+    mocks.apply.mockRejectedValueOnce(new Error("database private detail"));
+    const response = await request(app()).post("/festivalnet-import/apply-batch").set("Authorization", "Bearer owner-test").send({
+      confirmed: true, entries: [
+        { entryId: "failed", draft, organizationId: null },
+        { entryId: "invalid", draft: { ...draft, contactEmail: "bad" }, organizationId: null },
+        { entryId: "invalid-year", draft: { ...draft, year: 1800 }, organizationId: null },
+        { entryId: "saved", draft, organizationId: null },
+      ],
+    });
+    expect(response.status).toBe(200);
+    expect(response.body.outcomes).toHaveLength(4);
+    expect(response.body.outcomes[0]).toMatchObject({ entryId: "failed", result: null });
+    expect(response.body.outcomes[1]).toMatchObject({ entryId: "invalid", result: null });
+    expect(response.body.outcomes[2]).toMatchObject({ entryId: "invalid-year", result: null });
+    expect(response.body.outcomes[3].result.created).toBe(true);
+    expect(JSON.stringify(response.body)).not.toContain("database private detail");
+    expect(mocks.apply).toHaveBeenCalledTimes(2);
+    expect(mocks.apply).toHaveBeenCalledWith(draft, null, true);
+  });
+  it("rechecks edited draft matches without saving", async () => {
+    const response = await request(app()).post("/festivalnet-import/matches").set("Authorization", "Bearer owner-test").send({ ...draft, year: 2027 });
+    expect(response.status).toBe(200); expect(response.body.candidates).toEqual([]);
+    expect(mocks.candidates).toHaveBeenCalledWith({}, expect.objectContaining({ year: 2027 }));
+    expect(mocks.apply).not.toHaveBeenCalled();
+  });
 });

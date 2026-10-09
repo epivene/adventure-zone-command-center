@@ -1,280 +1,233 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Input } from "@workspace/avz-crm/components/ui/input";
 import { Label } from "@workspace/avz-crm/components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@workspace/avz-crm/components/ui/alert";
-import { RadioGroup, RadioGroupItem } from "@workspace/avz-crm/components/ui/radio-group";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/avz-crm/components/ui/dialog";
+import { Alert, AlertDescription } from "@workspace/avz-crm/components/ui/alert";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@workspace/avz-crm/components/ui/dialog";
 import { apiFetch, apiPost } from "@/lib/auth-token";
-import { editionGroups } from "./festival-edition-fields";
-import type {
-  FestivalNetDraft as Draft, FestivalNetPreview as Preview,
-  FestivalNetImportResult as Result,
-} from "@workspace/api-client-react";
+import { FestivalNetEntryEditor, cleanDraft, fieldLabel } from "./festivalnet-entry-editor";
+import type { FestivalNetDraft as Draft, FestivalNetPreview as Preview, FestivalNetImportResult as Result,
+  FestivalNetBatchResult, FestivalNetMatches } from "@workspace/api-client-react";
+export { fieldLabel } from "./festivalnet-entry-editor";
 
 export const MAX_PDF_BYTES = 10 * 1024 * 1024;
-
-const topFields = [
-  ["city", "City"], ["region", "State / region"], ["address1", "Address"], ["postalCode", "Postal code"],
-  ["phone", "Phone"], ["website", "Website"], ["contactName", "Contact name"],
-  ["contactEmail", "Contact email"], ["contactPhone", "Contact phone"],
-] as const;
-
-const fieldLabels: Record<string, string> = {
-  name: "Name", year: "Year", sourceUrl: "FestivalNet link", sourceFilename: "Source file",
-  importFileSha256: "Source fingerprint",
-  ...Object.fromEntries(topFields),
-  ...Object.fromEntries(editionGroups.flatMap((g) => g.fields.map((f) => [f.key, f.label]))),
+export const MAX_BATCH_FILES = 25;
+type Entry = {
+  id: string; file: File; preview: Preview | null; draft: Draft | null;
+  target: string | null; excluded: boolean; busy: boolean; error: string | null; result: Result | null; matchesStale: boolean;
 };
-export function fieldLabel(key: string): string {
-  const bare = key.replace(/^details\./, "");
-  return fieldLabels[bare] ?? bare.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
-}
+const valid = (entry: Entry) => !!entry.draft?.name.trim() && Number.isInteger(entry.draft.year)
+  && entry.draft.year >= 1900 && entry.draft.year <= 2200 && !!entry.target && !entry.matchesStale;
 
 async function errorMessage(res: Response): Promise<string> {
   if (res.status === 401) return "Your session expired. Sign in again, then retry.";
   if (res.status === 413) return "That PDF is larger than 10 MB.";
-  const body = (await res.json().catch(() => ({}))) as { error?: string };
-  if (body?.error) return body.error;
-  if (res.status === 400) return "This PDF could not be read. Scanned or damaged PDFs are not supported.";
-  return `Request failed (${res.status}).`;
+  const body = await res.json().catch(() => ({})) as { error?: string };
+  return body.error ?? `Request failed (${res.status}).`;
 }
 
-export function FestivalNetImportDialog({
-  open, onOpenChange, onImported,
-}: { open: boolean; onOpenChange(open: boolean): void; onImported?: () => void | Promise<void> }) {
-  const [preview, setPreview] = useState<Preview | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [target, setTarget] = useState<string | null>(null); // candidate id | "new" | null
-  const [parsing, setParsing] = useState(false);
+export function FestivalNetImportDialog({ open, onOpenChange, onImported }: {
+  open: boolean; onOpenChange(open: boolean): void; onImported?: () => void | Promise<void>;
+}) {
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<Result | null>(null);
-  const runId = useRef(0);
-  const abortRef = useRef<AbortController | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const generation = useRef(0);
+  const controllers = useRef(new Set<AbortController>());
+  // Ref guards cover double clicks before React renders and queued parsing.
+  const working = useRef(false);
+  const parsing = useRef(false);
+  const idCounter = useRef(0);
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
 
+  const patch = (id: string, change: Partial<Entry>) => setEntries(rows => rows.map(row => row.id === id ? { ...row, ...change } : row));
   function reset() {
-    abortRef.current?.abort();
-    runId.current += 1;
-    setPreview(null); setDraft(null); setTarget(null); setParsing(false);
-    setApplying(false); setError(null); setResult(null);
+    generation.current++;
+    controllers.current.forEach(controller => controller.abort());
+    controllers.current.clear();
+    setEntries([]); setSelected(null); setNotice(null);
+    parsing.current = false;
   }
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => () => {
+    generation.current++;
+    controllers.current.forEach(controller => controller.abort());
+  }, []);
+  // Also handle a parent closing the dialog directly.
+  useEffect(() => { if (!open && !working.current) reset(); }, [open]);
 
-  function handleOpenChange(next: boolean) {
-    if (applying) return;
+  function close(next: boolean) {
+    if (working.current) return;
     if (!next) reset();
     onOpenChange(next);
   }
 
-  async function choose(file: File | undefined) {
-    if (!file || applying) return;
-    abortRef.current?.abort();
-    const id = ++runId.current;
-    setParsing(false);
-    setError(null); setResult(null); setPreview(null); setDraft(null); setTarget(null);
-    if (file.size > MAX_PDF_BYTES) { setError("That PDF is larger than 10 MB."); return; }
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setError("Choose a PDF file."); return;
-    }
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-    setParsing(true);
+  async function parseEntry(entry: Entry, run: number) {
+    patch(entry.id, { busy: true, error: null });
+    const controller = new AbortController();
+    controllers.current.add(controller);
     try {
-      const res = await apiFetch(`/festivalnet-import/preview?filename=${encodeURIComponent(file.name)}`, {
-        method: "POST", headers: { "Content-Type": "application/pdf" }, body: file, signal: ctrl.signal,
+      if (entry.file.size > MAX_PDF_BYTES) throw new Error("That PDF is larger than 10 MB.");
+      if (!entry.file.name.toLowerCase().endsWith(".pdf")) throw new Error("Choose a PDF file.");
+      const res = await apiFetch(`/festivalnet-import/preview?filename=${encodeURIComponent(entry.file.name)}`, {
+        method: "POST", headers: { "Content-Type": "application/pdf" }, body: entry.file, signal: controller.signal,
       });
-      if (id !== runId.current) return;
       if (!res.ok) throw new Error(await errorMessage(res));
-      const data = (await res.json()) as Preview;
-      if (id !== runId.current) return;
-      setPreview(data); setDraft(data.draft);
-      setTarget(data.candidates.length === 0 ? "new" : null);
-    } catch (e: any) {
-      if (id !== runId.current || e?.name === "AbortError") return;
-      setError(e?.message ?? "Could not read this PDF.");
-    } finally {
-      if (id === runId.current) setParsing(false);
-    }
-  }
-
-  const candidate = preview?.candidates.find((c) => c.id === target) ?? null;
-
-  const conflicts = useMemo(() => {
-    if (!candidate || !draft) return [] as { key: string; incoming: string; saved: string }[];
-    const incoming: Record<string, string> = { ...draft.details, name: draft.name, sourceUrl: draft.sourceUrl, sourceFilename: draft.sourceFilename };
-    for (const [k] of topFields) { const v = (draft as any)[k]; if (v) incoming[k] = String(v); }
-    const savedFields = { ...candidate.existingFields, ...(draft.year === preview?.draft.year ? candidate.details : {}) };
-    return Object.entries(savedFields)
-      .filter(([k, saved]) => saved && incoming[k] && incoming[k].trim() !== saved.trim())
-      .map(([key, saved]) => ({ key, incoming: incoming[key], saved }));
-  }, [candidate, draft]);
-
-  const nameOk = !!draft?.name.trim();
-  const yearOk = !!draft && Number.isInteger(draft.year) && draft.year >= 1900 && draft.year <= 2200;
-  const canApply = !!draft && !!target && nameOk && yearOk && !applying && !parsing;
-
-  function setTop(key: string, value: string) {
-    setDraft((d) => (d ? { ...d, [key]: value } : d));
-  }
-  function setDetail(key: string, value: string) {
-    setDraft((d) => (d ? { ...d, details: { ...d.details, [key]: value } } : d));
-  }
-
-  async function apply() {
-    if (!draft || !target || !canApply) return;
-    const clean: Draft = { ...draft, name: draft.name.trim(), details: {} };
-    for (const [k] of topFields) {
-      const v = (draft as any)[k]?.trim?.();
-      if (v) (clean as any)[k] = v; else delete (clean as any)[k];
-    }
-    for (const [k, v] of Object.entries(draft.details)) if (v.trim()) clean.details[k] = v.trim();
-    setApplying(true); setError(null);
-    try {
-      const r = await apiPost<Result>("/festivalnet-import/apply", {
-        draft: clean, organizationId: target === "new" ? null : target,
+      const preview = await res.json() as Preview;
+      if (run !== generation.current) return;
+      patch(entry.id, { preview, draft: preview.draft, target: preview.candidates.length ? null : "new", error: null, matchesStale: false });
+    } catch (error) {
+      if (run === generation.current && !controller.signal.aborted) patch(entry.id, {
+        error: error instanceof Error ? error.message : "Could not read this PDF.",
       });
-      setResult(r);
-      try { await onImported?.(); } catch { /* directory refresh is best effort */ }
-    } catch (e: any) {
-      setError(e?.message ?? "Could not save the import. Your review is kept; try again.");
-    } finally { setApplying(false); }
+    } finally {
+      controllers.current.delete(controller);
+      if (run === generation.current) patch(entry.id, { busy: false });
+    }
   }
 
-  const detailKeys = new Set(Object.keys(draft?.details ?? {}).filter(key => key !== "importFileSha256"));
-  const known = new Set(editionGroups.flatMap((g) => g.fields.map((f) => f.key)));
-  const groups = [
-    ...editionGroups.map((g) => ({ title: g.title, keys: g.fields.map((f) => f.key).filter((k) => detailKeys.has(k)) })),
-    { title: "Other details", keys: [...detailKeys].filter((k) => !known.has(k)) },
-  ].filter((g) => g.keys.length > 0);
+  async function choose(files: File[]) {
+    if (!files.length || working.current || parsing.current) return;
+    const available = MAX_BATCH_FILES - entriesRef.current.length;
+    if (files.length > available) {
+      setNotice(`Review up to ${MAX_BATCH_FILES} PDFs at a time. Choose ${available} or fewer additional files.`);
+      return;
+    }
+    setNotice(null);
+    const added: Entry[] = files.map(file => ({
+      id: `pdf-${++idCounter.current}`, file, preview: null, draft: null, target: null,
+      busy: true, excluded: false, error: null, result: null, matchesStale: false,
+    }));
+    const run = generation.current;
+    parsing.current = true;
+    setEntries(rows => [...rows, ...added]);
+    setSelected(current => current ?? added[0].id);
+    // Serial raw uploads keep memory bounded and respect the server's parser limit.
+    for (const entry of added) {
+      if (run !== generation.current) break;
+      await parseEntry(entry, run);
+    }
+    if (run === generation.current) parsing.current = false;
+  }
 
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto" data-testid="dialog-festivalnet-import">
-        <DialogHeader>
-          <DialogTitle>Import FestivalNet PDF</DialogTitle>
-          <DialogDescription>
-            Review what was found. Only missing information is filled in; existing values are never overwritten. The PDF itself is not stored.
-          </DialogDescription>
-        </DialogHeader>
+  async function retry(entry: Entry) {
+    if (working.current || parsing.current || entry.busy || entry.result) return;
+    const run = generation.current;
+    parsing.current = true;
+    if (!entry.draft) {
+      await parseEntry(entry, run);
+    } else {
+      // A save failure or edited year must not discard the user's reviewed fields.
+      patch(entry.id, { busy: true, error: null });
+      try {
+        const matches = await apiPost<FestivalNetMatches>("/festivalnet-import/matches", cleanDraft(entry.draft));
+        if (run === generation.current) {
+          const target = matches.candidates.some(candidate => candidate.id === entry.target) ? entry.target :
+            matches.candidates.length ? null : "new";
+          patch(entry.id, { preview: { ...entry.preview!, draft: entry.draft, candidates: matches.candidates }, target, matchesStale: false });
+        }
+      } catch (error) {
+        if (run === generation.current) patch(entry.id, { error: error instanceof Error ? error.message : "Could not check matches." });
+      } finally { if (run === generation.current) patch(entry.id, { busy: false }); }
+    }
+    if (run === generation.current) parsing.current = false;
+  }
 
-        {result ? (
-          <div className="grid gap-3 text-sm" data-testid="festivalnet-result">
-            <p className="font-semibold">{result.created ? "New profile created." : "Profile updated."}</p>
-            <p><span className="font-semibold">Filled:</span> {result.filledFields.length ? result.filledFields.map(fieldLabel).join(", ") : "nothing new"}</p>
-            <p><span className="font-semibold">Kept as saved:</span> {result.preservedFields.length ? result.preservedFields.map(fieldLabel).join(", ") : "none"}</p>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => handleOpenChange(false)} type="button">Close</Button>
-              <Button asChild><Link href={`/profiles/${result.organizationId}`} data-testid="link-imported-profile">Open profile</Link></Button>
-            </DialogFooter>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="festivalnet-file">PDF file (max 10 MB)</Label>
-              <Input id="festivalnet-file" type="file" accept="application/pdf,.pdf" disabled={applying}
-                onChange={(e) => { void choose(e.target.files?.[0]); e.target.value = ""; }} data-testid="input-festivalnet-file" />
-              {parsing ? <p className="text-sm text-muted-foreground" role="status">Reading PDF…</p> : null}
-            </div>
+  const pending = entries.filter(entry => !entry.excluded && !entry.result);
+  const busy = entries.some(entry => entry.busy);
+  const canApply = pending.length > 0 && pending.every(valid) && !busy && !applying;
+  const active = entries.find(entry => entry.id === selected);
 
-            {error ? <Alert variant="destructive" data-testid="text-festivalnet-error"><AlertDescription>{error}</AlertDescription></Alert> : null}
+  async function apply(only?: Entry) {
+    const rows = only ? [only] : pending;
+    if (working.current || parsing.current || busy || !rows.length || !rows.every(valid) ||
+        rows.some(row => row.result || row.excluded)) return;
+    working.current = true; setApplying(true); setNotice(null);
+    const run = generation.current;
+    try {
+      const response = await apiPost<FestivalNetBatchResult>("/festivalnet-import/apply-batch", {
+        confirmed: true,
+        entries: rows.map(row => ({ entryId: row.id, draft: cleanDraft(row.draft!), organizationId: row.target === "new" ? null : row.target })),
+      });
+      if (run !== generation.current) return;
+      let completed = false;
+      for (const row of rows) {
+        const outcome = response.outcomes.find(outcome => outcome.entryId === row.id);
+        if (outcome?.result) {
+          completed = true;
+          patch(row.id, { result: outcome.result, error: null });
+        } else patch(row.id, { error: outcome?.error ?? "No completion was received for this file. Keep the review and retry." });
+      }
+      if (completed) {
+        try { await onImported?.(); }
+        catch { setNotice("Imports were saved, but the profile list could not refresh. Reload it to see the saved profiles."); }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save. Keep this review and retry.";
+      rows.forEach(row => patch(row.id, { error: `${message} If the response was lost, retrying will reuse the same source profile.` }));
+    } finally { working.current = false; setApplying(false); }
+  }
 
-            {preview && draft ? (
-              <>
-                {preview.warnings.length > 0 ? (
-                  <Alert data-testid="list-festivalnet-warnings">
-                    <AlertTitle>Review before importing</AlertTitle>
-                    <AlertDescription><ul className="grid gap-1 text-sm">
-                      {preview.warnings.map((w, i) => <li key={i}>{w}</li>)}
-                    </ul></AlertDescription>
-                  </Alert>
-                ) : null}
-
-                <fieldset className="grid gap-2">
-                  <legend className="mb-1 text-sm font-semibold">Save to</legend>
-                  <RadioGroup value={target ?? ""} onValueChange={setTarget} disabled={applying} aria-label="Existing profile">
-                  {preview.candidates.map((c) => (
-                    <label key={c.id} className="flex items-start gap-2 rounded-md border p-2 text-sm">
-                      <RadioGroupItem value={c.id} className="mt-1" data-testid={`radio-target-${c.id}`} />
-                      <span><span className="font-semibold">{c.name}</span>{[c.city, c.region].filter(Boolean).length ? <span className="text-muted-foreground"> · {[c.city, c.region].filter(Boolean).join(", ")}</span> : null}</span>
-                    </label>
-                  ))}
-                  </RadioGroup>
-                  {preview.candidates.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No matching profile found. A new profile will be created.</p>
-                  ) : <p className="text-sm text-muted-foreground">Possible matches found. Choose the profile to update.</p>}
-                </fieldset>
-
-                {conflicts.length > 0 ? (
-                  <div className="rounded-md border p-3 text-sm" data-testid="list-festivalnet-conflicts">
-                    <p className="mb-2 font-semibold">Already saved — these stay as they are</p>
-                    <ul className="grid gap-2">
-                      {conflicts.map((c) => (
-                        <li key={c.key}><span className="font-semibold">{fieldLabel(c.key)}</span>
-                          <div className="text-muted-foreground">Saved: {c.saved}</div>
-                          <div className="text-muted-foreground">Incoming (ignored): {c.incoming}</div></li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="grid gap-1">
-                    <Label htmlFor="fn-name">Name</Label>
-                    <Input id="fn-name" value={draft.name} onChange={(e) => setTop("name", e.target.value)} aria-invalid={!nameOk} disabled={applying} />
-                  </div>
-                  <div className="grid gap-1">
-                    <Label htmlFor="fn-year">Year</Label>
-                    <Input id="fn-year" type="number" value={Number.isFinite(draft.year) ? draft.year : ""} onChange={(e) => setDraft({ ...draft, year: e.target.value === "" ? NaN : Number(e.target.value) })} aria-invalid={!yearOk} disabled={applying} />
-                  </div>
-                  {topFields.filter(([k]) => k in draft || true).map(([k, label]) => (
-                    <div className="grid gap-1" key={k}>
-                      <Label htmlFor={`fn-${k}`}>{label} <span className="text-muted-foreground">(optional)</span></Label>
-                      <Input id={`fn-${k}`} value={(draft as any)[k] ?? ""} onChange={(e) => setTop(k, e.target.value)} disabled={applying} />
-                    </div>
-                  ))}
-                  <div className="grid gap-1 sm:col-span-2">
-                    <Label htmlFor="fn-source">Source (read-only)</Label>
-                    <Input id="fn-source" readOnly value={draft.sourceUrl || draft.sourceFilename} />
-                  </div>
-                </div>
-
-                {groups.map((g) => (
-                  <section key={g.title} className="grid gap-2">
-                    <h3 className="text-sm font-semibold">{g.title}</h3>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {g.keys.map((k) => (
-                        <div className="grid gap-1" key={k}>
-                          <Label htmlFor={`fn-d-${k}`}>{fieldLabel(k)}</Label>
-                          <Input id={`fn-d-${k}`} value={draft.details[k] ?? ""} onChange={(e) => setDetail(k, e.target.value)} disabled={applying} />
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                ))}
-                <p className="text-sm text-muted-foreground">Clear any optional value to leave it out of the import.</p>
-              </>
-            ) : null}
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={applying} type="button">Cancel</Button>
-              {draft ? (
-                <Button onClick={() => void apply()} disabled={!canApply} type="button" data-testid="button-festivalnet-apply">
-                  {applying ? "Saving…" : "Import missing information"}
+  return <Dialog open={open} onOpenChange={close}>
+    <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto" data-testid="dialog-festivalnet-import">
+      <DialogHeader>
+        <DialogTitle>Import FestivalNet PDFs</DialogTitle>
+        <DialogDescription>Review each file, then confirm the included entries. Only missing information is filled; saved values and primary contacts are protected. PDFs are not stored or scanned with OCR.</DialogDescription>
+      </DialogHeader>
+      <div className="grid gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="festivalnet-file">PDF files (max 10 MB each, 25 per review)</Label>
+          <Input id="festivalnet-file" type="file" multiple accept="application/pdf,.pdf" disabled={applying || busy}
+            onChange={event => { void choose(Array.from(event.target.files ?? [])); event.target.value = ""; }} data-testid="input-festivalnet-file" />
+        </div>
+        {notice && <Alert><AlertDescription>{notice}</AlertDescription></Alert>}
+        {entries.length > 0 && <>
+          <p className="text-sm" role="status">{entries.filter(row => row.result).length} saved · {pending.length} remaining · {entries.filter(row => row.excluded).length} excluded</p>
+          <ul className="grid gap-2" aria-label="PDF review rows">
+            {entries.map(entry => <li key={entry.id} className="grid gap-2 rounded-md border p-3 text-sm" data-testid={`festivalnet-row-${entry.id}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Button variant="ghost" className="h-auto whitespace-normal text-left" onClick={() => setSelected(entry.id)} disabled={applying}>
+                  {entry.file.name}
                 </Button>
-              ) : null}
-            </DialogFooter>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
+                <span>{entry.result ? "Saved" : entry.excluded ? "Excluded" : entry.busy ? "Reading / checking…" : entry.error ? "Needs attention" : "Review"}</span>
+              </div>
+              {entry.draft && <p>{entry.draft.name} · Year {Number.isFinite(entry.draft.year) ? entry.draft.year : "required"} · {entry.result ? (entry.result.created ? "New profile" : "Existing profile") : entry.target === "new" ? "New profile" : entry.target ? "Existing profile" : "Choose a matched profile"}</p>}
+              {entry.preview && <p className="text-muted-foreground">Matched profiles: {entry.preview.candidates.map(candidate => candidate.name).join(", ") || "none"}</p>}
+              {entry.matchesStale && <p className="text-sm text-muted-foreground">Name, location or year changed. Recheck matches before confirming this file.</p>}
+              {entry.error && <Alert variant="destructive" data-testid="text-festivalnet-error"><AlertDescription>{entry.error}</AlertDescription></Alert>}
+              {entry.result ? <div data-testid="festivalnet-result" className="grid gap-1">
+                <p>{entry.result.created ? "New profile created." : "Profile updated."}</p>
+                <p>Filled: {entry.result.filledFields.map(fieldLabel).join(", ") || "nothing new"}</p>
+                <p>Kept as saved: {entry.result.preservedFields.map(fieldLabel).join(", ") || "none"}</p>
+                <Button asChild variant="outline"><Link href={`/profiles/${entry.result.organizationId}`}>Open profile</Link></Button>
+              </div> : <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" disabled={applying || entry.busy} onClick={() => patch(entry.id, { excluded: !entry.excluded })}>{entry.excluded ? "Include" : "Exclude"}</Button>
+                <Button variant="outline" size="sm" disabled={applying || busy} onClick={() => void retry(entry)}>{entry.draft ? "Recheck matches" : "Retry PDF"}</Button>
+                {entry.draft && <Button variant="outline" size="sm" disabled={applying || entry.excluded || entry.busy} onClick={() => setSelected(entry.id)}>Edit review</Button>}
+                {entry.error && entry.draft && <Button size="sm" disabled={!valid(entry) || entry.excluded || applying || busy} onClick={() => void apply(entry)}>Confirm retry of this file</Button>}
+              </div>}
+            </li>)}
+          </ul>
+          {active?.preview && active.draft && !active.result && !active.excluded &&
+            <FestivalNetEntryEditor key={active.id} preview={active.preview} draft={active.draft} target={active.target}
+              disabled={applying || active.busy}
+              onDraft={draft => {
+                const identityChanged = ["name", "year", "city", "region"].some(key =>
+                  draft[key as keyof Draft] !== active.draft![key as keyof Draft]);
+                patch(active.id, { draft, ...(identityChanged ? { matchesStale: true, target: null } : {}) });
+              }}
+              onTarget={target => patch(active.id, { target })} />}
+          <p className="text-sm text-muted-foreground">Unreadable files must be retried or excluded. Completed files are never sent again. Failed entries keep your edits and can be confirmed separately.</p>
+        </>}
+      </div>
+      <DialogFooter>
+        <Button variant="outline" disabled={applying} onClick={() => close(false)}>Close</Button>
+        {pending.length > 0 && <Button disabled={!canApply} onClick={() => void apply()} data-testid="button-festivalnet-apply">
+          {applying ? "Saving…" : `Confirm import of ${pending.length} ${pending.length === 1 ? "file" : "files"}`}
+        </Button>}
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>;
 }

@@ -11,6 +11,36 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /festivalnet-import/matches:
+    post:
+      operationId: matchFestivalNetDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/FestivalNetDraft"}
+      responses:
+        "200":
+          description: Recheck profiles for an edited review without saving
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FestivalNetMatches"}
+        "400": {description: Invalid reviewed draft}
+  /festivalnet-import/apply-batch:
+    post:
+      operationId: applyFestivalNetBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/FestivalNetBatchInput"}
+      responses:
+        "200":
+          description: Independent atomic saves with a result or error for every entry
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FestivalNetBatchResult"}
+        "400": {description: Confirmation or valid batch entries required}
   /event-profiles/{id}/editions/{year}/crew-location:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -361,6 +391,47 @@ components:
       properties:
         draft: {$ref: "#/components/schemas/FestivalNetDraft"}
         organizationId: {type: [string, "null"], format: uuid}
+    FestivalNetMatches:
+      type: object
+      required: [candidates]
+      properties:
+        candidates:
+          type: array
+          items: {$ref: "#/components/schemas/FestivalNetCandidate"}
+    FestivalNetBatchEntry:
+      type: object
+      required: [entryId, draft, organizationId]
+      properties:
+        entryId: {type: string, minLength: 1, maxLength: 100}
+        draft: {$ref: "#/components/schemas/FestivalNetDraft"}
+        organizationId: {type: [string, "null"], format: uuid}
+    FestivalNetBatchInput:
+      type: object
+      required: [confirmed, entries]
+      properties:
+        confirmed: {type: boolean, enum: [true]}
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 25
+          items: {$ref: "#/components/schemas/FestivalNetBatchEntry"}
+    FestivalNetBatchOutcome:
+      type: object
+      required: [entryId, result, error]
+      properties:
+        entryId: {type: string}
+        result:
+          oneOf:
+            - {$ref: "#/components/schemas/FestivalNetImportResult"}
+            - {type: "null"}
+        error: {type: [string, "null"]}
+    FestivalNetBatchResult:
+      type: object
+      required: [outcomes]
+      properties:
+        outcomes:
+          type: array
+          items: {$ref: "#/components/schemas/FestivalNetBatchOutcome"}
     FestivalNetImportResult:
       type: object
       required: [organizationId, created, filledFields, preservedFields]

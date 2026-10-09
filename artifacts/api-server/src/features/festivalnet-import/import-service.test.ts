@@ -72,6 +72,29 @@ describe("non-destructive FestivalNet import", () => {
     await expect(applyFestivalNetDraft(draft(), null)).rejects.toBeInstanceOf(ImportConflict);
     expect(await database.select().from(organizations)).toHaveLength(1);
   });
+  it("resumes same-source batch entries after a lost response without duplicating profiles or contacts", async () => {
+    const first = await applyFestivalNetDraft(draft(), null, true);
+    const retry = draft(); retry.sourceFilename = "second-copy.pdf";
+    const again = await applyFestivalNetDraft(retry, null, true);
+    expect(again.organizationId).toBe(first.organizationId);
+    expect(again.created).toBe(false);
+    expect(await database.select().from(organizations)).toHaveLength(1);
+    expect(await database.select().from(contacts)).toHaveLength(1);
+    expect(await database.select().from(organizationContacts)).toHaveLength(1);
+    expect(await database.select().from(festivalEditions)).toMatchObject([{ details: {
+      sourceFilename: "festival.pdf", sourceUrl: draft().sourceUrl,
+    } }]);
+    const nextYear = draft(); nextYear.year = 2027; nextYear.details = { attendance: "2,000" };
+    await applyFestivalNetDraft(nextYear, null, true);
+    expect(await database.select().from(organizations)).toHaveLength(1);
+    expect(await database.select().from(festivalEditions)).toHaveLength(2);
+  });
+  it("does not resume a fuzzy name match as a same-source batch retry", async () => {
+    await applyFestivalNetDraft(draft(), null, true);
+    const unrelated = draft(); unrelated.sourceUrl = "https://festivalnet.com/999999002/Other";
+    await expect(applyFestivalNetDraft(unrelated, null, true)).rejects.toBeInstanceOf(ImportConflict);
+    expect(await database.select().from(organizations)).toHaveLength(1);
+  });
   it("rolls back the entire import when a later contact operation fails", async () => {
     await client.exec("drop table act_contact_sync_states");
     await expect(applyFestivalNetDraft(draft(), null)).rejects.toThrow();

@@ -29,12 +29,12 @@ describe("FestivalNet import review", () => {
     await upload();
     mocks.post.mockRejectedValue(new Error("No partial changes were committed."));
     fireEvent.click(screen.getByTestId("button-festivalnet-apply"));
-    await screen.findByText("No partial changes were committed.");
+    await screen.findByText(/No partial changes were committed\./);
     expect(screen.getByDisplayValue("Example festival")).toBeTruthy();
   });
   it("refreshes the list and provides a real saved-profile link on success", async () => {
     mocks.fetch.mockResolvedValue(new Response(JSON.stringify({ draft, candidates: [], warnings: [] }), { status: 200 }));
-    mocks.post.mockResolvedValue({ organizationId: candidate.id, created: true, filledFields: ["name"], preservedFields: [] });
+    mocks.post.mockResolvedValue({ outcomes: [{ entryId: "pdf-1", result: { organizationId: candidate.id, created: true, filledFields: ["name"], preservedFields: [] }, error: null }] });
     const refresh = vi.fn();
     render(<FestivalNetImportDialog open onOpenChange={vi.fn()} onImported={refresh} />);
     fireEvent.change(screen.getByLabelText(/PDF file/i), { target: { files: [new File(["%PDF"], "example.pdf", { type: "application/pdf" })] } });
@@ -42,5 +42,50 @@ describe("FestivalNet import review", () => {
     fireEvent.click(screen.getByTestId("button-festivalnet-apply"));
     await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
     expect(screen.getByRole("link").getAttribute("href")).toBe(`/profiles/${candidate.id}`);
+  });
+  it("reviews multiple PDFs, excludes a parse failure and retries only unsaved rows", async () => {
+    mocks.fetch.mockImplementation(async (url: string) => {
+      if (url.includes("broken.pdf")) return new Response(JSON.stringify({ error: "This PDF is scanned." }), { status: 400 });
+      return new Response(JSON.stringify({ draft: { ...draft, sourceFilename: url.includes("second.pdf") ? "second.pdf" : "example.pdf" }, candidates: [], warnings: [] }));
+    });
+    const refresh = vi.fn();
+    render(<FestivalNetImportDialog open onOpenChange={vi.fn()} onImported={refresh} />);
+    fireEvent.change(screen.getByLabelText(/PDF files/i), { target: { files: ["example.pdf", "second.pdf", "broken.pdf"].map(name => new File(["%PDF"], name, { type: "application/pdf" })) } });
+    await screen.findByText("This PDF is scanned.");
+    expect(screen.getAllByTestId(/festivalnet-row/)).toHaveLength(3);
+    expect(mocks.post).not.toHaveBeenCalled();
+    expect((screen.getByTestId("button-festivalnet-apply") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getAllByRole("button", { name: "Exclude" })[2]);
+    mocks.post.mockResolvedValueOnce({ outcomes: [
+      { entryId: "pdf-1", result: { organizationId: candidate.id, created: true, filledFields: ["name"], preservedFields: [] }, error: null },
+      { entryId: "pdf-2", result: null, error: "No partial changes were committed." },
+    ] });
+    fireEvent.click(screen.getByTestId("button-festivalnet-apply"));
+    await screen.findByText("No partial changes were committed.");
+    expect(screen.getByRole("status").textContent).toBe("1 saved · 1 remaining · 1 excluded");
+    expect(refresh).toHaveBeenCalledOnce();
+    mocks.post.mockResolvedValueOnce({ outcomes: [
+      { entryId: "pdf-2", result: { organizationId: candidate.id, created: false, filledFields: [], preservedFields: [] }, error: null },
+    ] });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm retry of this file" }));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("2 saved · 0 remaining · 1 excluded"));
+    expect(mocks.post.mock.calls[1][1].entries.map((entry: { entryId: string }) => entry.entryId)).toEqual(["pdf-2"]);
+  });
+  it("retries unreadable files and retains edits when checking an edited year", async () => {
+    mocks.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: "This PDF could not be read." }), { status: 400 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ draft, candidates: [], warnings: [] })));
+    render(<FestivalNetImportDialog open onOpenChange={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/PDF files/i), { target: { files: [new File(["%PDF"], "example.pdf", { type: "application/pdf" })] } });
+    await screen.findByText("This PDF could not be read.");
+    fireEvent.click(screen.getByRole("button", { name: "Retry PDF" }));
+    await screen.findByDisplayValue("Example festival");
+    fireEvent.change(screen.getByLabelText("Year"), { target: { value: "2027" } });
+    fireEvent.change(screen.getByLabelText(/^Phone/), { target: { value: "reviewed phone" } });
+    mocks.post.mockResolvedValueOnce({ candidates: [candidate] });
+    fireEvent.click(screen.getByRole("button", { name: "Recheck matches" }));
+    await screen.findByRole("radio");
+    expect(screen.getByDisplayValue("2027")).toBeTruthy();
+    expect(screen.getByDisplayValue("reviewed phone")).toBeTruthy();
+    expect(mocks.post).toHaveBeenCalledWith("/festivalnet-import/matches", expect.objectContaining({ year: 2027, phone: "reviewed phone" }));
   });
 });

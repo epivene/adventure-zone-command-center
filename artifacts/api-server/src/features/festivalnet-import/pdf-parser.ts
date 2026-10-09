@@ -168,7 +168,8 @@ export async function parseFestivalNetPdf(bytes: Uint8Array, filename: string) {
     throw new Error("Choose a valid PDF no larger than 10 MB.");
   }
   ensurePromiseResolvers();
-  const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true, disableFontFace: true, isEvalSupported: false });
+  // PDF.js 6 removed eval support and its isEvalSupported option.
+  const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true, disableFontFace: true });
   const timer = setTimeout(() => { void task.destroy(); }, 20_000);
   try {
     const pdf = await task.promise;

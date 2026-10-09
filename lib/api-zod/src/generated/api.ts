@@ -8,6 +8,139 @@
 import * as zod from 'zod';
 
 
+export const matchFestivalNetDraftBodyNameMax = 250;
+
+export const matchFestivalNetDraftBodyYearMin = 1900;
+export const matchFestivalNetDraftBodyYearMax = 2200;
+
+export const matchFestivalNetDraftBodySourceUrlMax = 1000;
+
+export const matchFestivalNetDraftBodySourceFilenameMax = 255;
+
+export const matchFestivalNetDraftBodyCityMax = 250;
+
+export const matchFestivalNetDraftBodyRegionMax = 100;
+
+export const matchFestivalNetDraftBodyAddress1Max = 500;
+
+export const matchFestivalNetDraftBodyPostalCodeMax = 30;
+
+export const matchFestivalNetDraftBodyPhoneMax = 100;
+
+export const matchFestivalNetDraftBodyWebsiteMax = 1000;
+
+export const matchFestivalNetDraftBodyContactNameMax = 250;
+
+export const matchFestivalNetDraftBodyContactEmailMax = 320;
+
+export const matchFestivalNetDraftBodyContactPhoneMax = 100;
+
+export const matchFestivalNetDraftBodyDetailsMaxOne = 4000;
+
+
+
+export const MatchFestivalNetDraftBody = zod.object({
+  "name": zod.string().min(1).max(matchFestivalNetDraftBodyNameMax),
+  "year": zod.number().int().min(matchFestivalNetDraftBodyYearMin).max(matchFestivalNetDraftBodyYearMax),
+  "sourceUrl": zod.string().max(matchFestivalNetDraftBodySourceUrlMax),
+  "sourceFilename": zod.string().min(1).max(matchFestivalNetDraftBodySourceFilenameMax),
+  "city": zod.string().max(matchFestivalNetDraftBodyCityMax).optional(),
+  "region": zod.string().max(matchFestivalNetDraftBodyRegionMax).optional(),
+  "address1": zod.string().max(matchFestivalNetDraftBodyAddress1Max).optional(),
+  "postalCode": zod.string().max(matchFestivalNetDraftBodyPostalCodeMax).optional(),
+  "phone": zod.string().max(matchFestivalNetDraftBodyPhoneMax).optional(),
+  "website": zod.string().max(matchFestivalNetDraftBodyWebsiteMax).optional(),
+  "contactName": zod.string().max(matchFestivalNetDraftBodyContactNameMax).optional(),
+  "contactEmail": zod.string().max(matchFestivalNetDraftBodyContactEmailMax).optional(),
+  "contactPhone": zod.string().max(matchFestivalNetDraftBodyContactPhoneMax).optional(),
+  "details": zod.record(zod.string(), zod.string().max(matchFestivalNetDraftBodyDetailsMaxOne))
+})
+
+export const MatchFestivalNetDraftResponse = zod.object({
+  "candidates": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "city": zod.string().nullish(),
+  "region": zod.string().nullish(),
+  "details": zod.record(zod.string(), zod.string()),
+  "existingFields": zod.record(zod.string(), zod.string())
+}))
+})
+
+
+export const applyFestivalNetBatchBodyEntriesItemEntryIdMax = 100;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftNameMax = 250;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftYearMin = 1900;
+export const applyFestivalNetBatchBodyEntriesItemDraftYearMax = 2200;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftSourceUrlMax = 1000;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftSourceFilenameMax = 255;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftCityMax = 250;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftRegionMax = 100;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftAddress1Max = 500;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftPostalCodeMax = 30;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftPhoneMax = 100;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftWebsiteMax = 1000;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftContactNameMax = 250;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftContactEmailMax = 320;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftContactPhoneMax = 100;
+
+export const applyFestivalNetBatchBodyEntriesItemDraftDetailsMaxOne = 4000;
+
+export const applyFestivalNetBatchBodyEntriesMax = 25;
+
+
+
+export const ApplyFestivalNetBatchBody = zod.object({
+  "confirmed": zod.literal(true),
+  "entries": zod.array(zod.object({
+  "entryId": zod.string().min(1).max(applyFestivalNetBatchBodyEntriesItemEntryIdMax),
+  "draft": zod.object({
+  "name": zod.string().min(1).max(applyFestivalNetBatchBodyEntriesItemDraftNameMax),
+  "year": zod.number().int().min(applyFestivalNetBatchBodyEntriesItemDraftYearMin).max(applyFestivalNetBatchBodyEntriesItemDraftYearMax),
+  "sourceUrl": zod.string().max(applyFestivalNetBatchBodyEntriesItemDraftSourceUrlMax),
+  "sourceFilename": zod.string().min(1).max(applyFestivalNetBatchBodyEntriesItemDraftSourceFilenameMax),
+  "city": zod.string().max(applyFestivalNetBatchBodyEntriesItemDraftCityMax).optional(),
+  "region": zod.string().max(applyFestivalNetBatchBodyEntriesItemDraftRegionMax).optional(),
+  "address1": zod.string().max(applyFestivalNetBatchBodyEntriesItemDraftAddress1Max).optional(),
+  "postalCode": zod.string().max(applyFestivalNetBatchBodyEntriesItemDraftPostalCodeMax).optional(),
+  "phone": zod.string().max(applyFestivalNetBatchBodyEntriesItemDraftPhoneMax).optional(),
+  "website": zod.string().max(applyFestivalNetBatchBodyEntriesItemDraftWebsiteMax).optional(),
+  "contactName": zod.string().max(applyFestivalNetBatchBodyEntriesItemDraftContactNameMax).optional(),
+  "contactEmail": zod.string().max(applyFestivalNetBatchBodyEntriesItemDraftContactEmailMax).optional(),
+  "contactPhone": zod.string().max(applyFestivalNetBatchBodyEntriesItemDraftContactPhoneMax).optional(),
+  "details": zod.record(zod.string(), zod.string().max(applyFestivalNetBatchBodyEntriesItemDraftDetailsMaxOne))
+}),
+  "organizationId": zod.string().uuid().nullable()
+})).min(1).max(applyFestivalNetBatchBodyEntriesMax)
+})
+
+export const ApplyFestivalNetBatchResponse = zod.object({
+  "outcomes": zod.array(zod.object({
+  "entryId": zod.string(),
+  "result": zod.union([zod.object({
+  "organizationId": zod.string().uuid(),
+  "created": zod.boolean(),
+  "filledFields": zod.array(zod.string()),
+  "preservedFields": zod.array(zod.string())
+}),zod.null()]),
+  "error": zod.string().nullable()
+}))
+})
+
+
 export const getFestivalCrewLocationPathYearMin = 1900;
 export const getFestivalCrewLocationPathYearMax = 2200;
 

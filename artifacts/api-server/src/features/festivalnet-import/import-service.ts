@@ -65,7 +65,7 @@ export async function findFestivalNetCandidates(database: Database, draft: Festi
   return candidates;
 }
 
-export async function applyFestivalNetDraft(draft: FestivalNetDraft, organizationId: string | null): Promise<FestivalNetImportResult> {
+export async function applyFestivalNetDraft(draft: FestivalNetDraft, organizationId: string | null, resumeSameSource = false): Promise<FestivalNetImportResult> {
   return db.transaction(async tx => {
     // Both identity locks prevent double-clicks/reimports/concurrent uploads creating duplicates.
     const eventId = new URL(draft.sourceUrl).pathname.split("/")[1];
@@ -73,6 +73,17 @@ export async function applyFestivalNetDraft(draft: FestivalNetDraft, organizatio
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
     }
     const candidates = await findFestivalNetCandidates(tx, draft);
+    // Batch retries can arrive after a response was lost. Resolve only exact source
+    // identities under the same lock, never fuzzy/name matches.
+    if (!organizationId && resumeSameSource) {
+      const sourceProfiles = await tx.select({ organizationId: festivalEditions.organizationId }).from(festivalEditions)
+        .innerJoin(organizations, eq(organizations.id, festivalEditions.organizationId))
+        .where(and(isNull(organizations.consolidatedIntoId),
+          sql`substring(${festivalEditions.details}->>'sourceUrl' from 'festivalnet[.]com/([0-9]+)') = ${eventId}`));
+      const ids = [...new Set(sourceProfiles.map(row => row.organizationId))];
+      if (ids.length > 1) throw new ImportConflict("This source is linked to several profiles. Recheck matches and choose the correct profile.");
+      organizationId = ids[0] ?? null;
+    }
     if (!organizationId && candidates.length) throw new ImportConflict("An existing profile may match this festival. Preview the PDF again and choose that profile instead of creating a duplicate.");
     let organization;
     let created = false;

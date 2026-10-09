@@ -27,8 +27,12 @@ import type {
   FestivalEdition,
   FestivalEditionInput,
   FestivalNearbySearchInput,
+  FestivalNetBatchInput,
+  FestivalNetBatchResult,
+  FestivalNetDraft,
   FestivalNetImportInput,
   FestivalNetImportResult,
+  FestivalNetMatches,
   FestivalNetPreview,
   FestivalVenuePinInput,
   FestivalVenueSearchInput,
@@ -66,6 +70,154 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getMatchFestivalNetDraftUrl = () => {
+
+
+
+
+  return `/api/festivalnet-import/matches`
+}
+
+export const matchFestivalNetDraft = async (festivalNetDraft: FestivalNetDraft, options?: Parameters<typeof customFetch>[1]): Promise<FestivalNetMatches> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<FestivalNetMatches>(getMatchFestivalNetDraftUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(festivalNetDraft)
+  }
+);}
+
+
+
+
+
+export const getMatchFestivalNetDraftMutationKey = () => ['matchFestivalNetDraft'] as const;
+
+export const getMatchFestivalNetDraftMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof matchFestivalNetDraft>>, TError,MatchFestivalNetDraftMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof matchFestivalNetDraft>>, TError,MatchFestivalNetDraftMutationVariables, TContext> => {
+
+const mutationKey = getMatchFestivalNetDraftMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof matchFestivalNetDraft>>, MatchFestivalNetDraftMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  matchFestivalNetDraft(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MatchFestivalNetDraftMutationResult = NonNullable<Awaited<ReturnType<typeof matchFestivalNetDraft>>>
+    export type MatchFestivalNetDraftMutationBody = BodyType<FestivalNetDraft>
+    export type MatchFestivalNetDraftMutationError = ErrorType<void>
+    export type MatchFestivalNetDraftMutationVariables = {data: BodyType<FestivalNetDraft>}
+
+    export const useMatchFestivalNetDraft = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof matchFestivalNetDraft>>, TError,MatchFestivalNetDraftMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof matchFestivalNetDraft>>,
+        TError,
+        MatchFestivalNetDraftMutationVariables,
+        TContext
+      > => {
+      return useMutation(getMatchFestivalNetDraftMutationOptions(options));
+    }
+
+export const getApplyFestivalNetBatchUrl = () => {
+
+
+
+
+  return `/api/festivalnet-import/apply-batch`
+}
+
+export const applyFestivalNetBatch = async (festivalNetBatchInput: FestivalNetBatchInput, options?: Parameters<typeof customFetch>[1]): Promise<FestivalNetBatchResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<FestivalNetBatchResult>(getApplyFestivalNetBatchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(festivalNetBatchInput)
+  }
+);}
+
+
+
+
+
+export const getApplyFestivalNetBatchMutationKey = () => ['applyFestivalNetBatch'] as const;
+
+export const getApplyFestivalNetBatchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyFestivalNetBatch>>, TError,ApplyFestivalNetBatchMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyFestivalNetBatch>>, TError,ApplyFestivalNetBatchMutationVariables, TContext> => {
+
+const mutationKey = getApplyFestivalNetBatchMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyFestivalNetBatch>>, ApplyFestivalNetBatchMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  applyFestivalNetBatch(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyFestivalNetBatchMutationResult = NonNullable<Awaited<ReturnType<typeof applyFestivalNetBatch>>>
+    export type ApplyFestivalNetBatchMutationBody = BodyType<FestivalNetBatchInput>
+    export type ApplyFestivalNetBatchMutationError = ErrorType<void>
+    export type ApplyFestivalNetBatchMutationVariables = {data: BodyType<FestivalNetBatchInput>}
+
+    export const useApplyFestivalNetBatch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyFestivalNetBatch>>, TError,ApplyFestivalNetBatchMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyFestivalNetBatch>>,
+        TError,
+        ApplyFestivalNetBatchMutationVariables,
+        TContext
+      > => {
+      return useMutation(getApplyFestivalNetBatchMutationOptions(options));
+    }
 
 export const getGetFestivalCrewLocationUrl = (id: string,
     year: number,) => {

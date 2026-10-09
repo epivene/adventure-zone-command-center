@@ -218,11 +218,46 @@ export interface FestivalNetImportInput {
   organizationId: string | null;
 }
 
+export interface FestivalNetMatches {
+  candidates: FestivalNetCandidate[];
+}
+
+export interface FestivalNetBatchEntry {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  entryId: string;
+  draft: FestivalNetDraft;
+  /** @nullable */
+  organizationId: string | null;
+}
+
+export interface FestivalNetBatchInput {
+  confirmed: true;
+  /**
+     * @minItems 1
+     * @maxItems 25
+     */
+  entries: FestivalNetBatchEntry[];
+}
+
 export interface FestivalNetImportResult {
   organizationId: string;
   created: boolean;
   filledFields: string[];
   preservedFields: string[];
+}
+
+export interface FestivalNetBatchOutcome {
+  entryId: string;
+  result: FestivalNetImportResult | null;
+  /** @nullable */
+  error: string | null;
+}
+
+export interface FestivalNetBatchResult {
+  outcomes: FestivalNetBatchOutcome[];
 }
 
 export type FestivalEditionDetails = {[key: string]: string};
