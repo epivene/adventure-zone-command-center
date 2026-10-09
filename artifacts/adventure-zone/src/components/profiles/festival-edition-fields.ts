@@ -26,6 +26,8 @@ export const editionGroups: { title: string; fields: EditionField[] }[] = [
   ] },
   { title: "Event description, images & visitor FAQs", fields: [
     { key: "description", label: "Edition description", type: "long" }, { key: "photoGalleryUrl", label: "Photo gallery link", type: "url" },
+    { key: "promoter", label: "Promoter listed for this event" }, { key: "mainEmail", label: "Event listing email" },
+    { key: "sourceUrl", label: "FestivalNet source link", type: "url" }, { key: "sourceFilename", label: "Imported source file" },
     { key: "weather", label: "Weather / rain policy" }, { key: "pets", label: "Pet policy" },
     { key: "accessibility", label: "Accessibility", type: "long" }, { key: "ages", label: "Age restrictions" },
     { key: "childPrices", label: "Child admission prices" },

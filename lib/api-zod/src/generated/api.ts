@@ -8,6 +8,133 @@
 import * as zod from 'zod';
 
 
+export const previewFestivalNetPdfQueryFilenameMax = 255;
+
+
+
+export const PreviewFestivalNetPdfQueryParams = zod.object({
+  "filename": zod.coerce.string().max(previewFestivalNetPdfQueryFilenameMax)
+})
+
+export const previewFestivalNetPdfResponseDraftNameMax = 250;
+
+export const previewFestivalNetPdfResponseDraftYearMin = 1900;
+export const previewFestivalNetPdfResponseDraftYearMax = 2200;
+
+export const previewFestivalNetPdfResponseDraftSourceUrlMax = 1000;
+
+export const previewFestivalNetPdfResponseDraftSourceFilenameMax = 255;
+
+export const previewFestivalNetPdfResponseDraftCityMax = 250;
+
+export const previewFestivalNetPdfResponseDraftRegionMax = 100;
+
+export const previewFestivalNetPdfResponseDraftAddress1Max = 500;
+
+export const previewFestivalNetPdfResponseDraftPostalCodeMax = 30;
+
+export const previewFestivalNetPdfResponseDraftPhoneMax = 100;
+
+export const previewFestivalNetPdfResponseDraftWebsiteMax = 1000;
+
+export const previewFestivalNetPdfResponseDraftContactNameMax = 250;
+
+export const previewFestivalNetPdfResponseDraftContactEmailMax = 320;
+
+export const previewFestivalNetPdfResponseDraftContactPhoneMax = 100;
+
+export const previewFestivalNetPdfResponseDraftDetailsMaxOne = 4000;
+
+
+
+export const PreviewFestivalNetPdfResponse = zod.object({
+  "draft": zod.object({
+  "name": zod.string().min(1).max(previewFestivalNetPdfResponseDraftNameMax),
+  "year": zod.number().int().min(previewFestivalNetPdfResponseDraftYearMin).max(previewFestivalNetPdfResponseDraftYearMax),
+  "sourceUrl": zod.string().max(previewFestivalNetPdfResponseDraftSourceUrlMax),
+  "sourceFilename": zod.string().min(1).max(previewFestivalNetPdfResponseDraftSourceFilenameMax),
+  "city": zod.string().max(previewFestivalNetPdfResponseDraftCityMax).optional(),
+  "region": zod.string().max(previewFestivalNetPdfResponseDraftRegionMax).optional(),
+  "address1": zod.string().max(previewFestivalNetPdfResponseDraftAddress1Max).optional(),
+  "postalCode": zod.string().max(previewFestivalNetPdfResponseDraftPostalCodeMax).optional(),
+  "phone": zod.string().max(previewFestivalNetPdfResponseDraftPhoneMax).optional(),
+  "website": zod.string().max(previewFestivalNetPdfResponseDraftWebsiteMax).optional(),
+  "contactName": zod.string().max(previewFestivalNetPdfResponseDraftContactNameMax).optional(),
+  "contactEmail": zod.string().max(previewFestivalNetPdfResponseDraftContactEmailMax).optional(),
+  "contactPhone": zod.string().max(previewFestivalNetPdfResponseDraftContactPhoneMax).optional(),
+  "details": zod.record(zod.string(), zod.string().max(previewFestivalNetPdfResponseDraftDetailsMaxOne))
+}),
+  "candidates": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "city": zod.string().nullish(),
+  "region": zod.string().nullish(),
+  "details": zod.record(zod.string(), zod.string()),
+  "existingFields": zod.record(zod.string(), zod.string())
+})),
+  "warnings": zod.array(zod.string())
+})
+
+
+export const applyFestivalNetImportBodyDraftNameMax = 250;
+
+export const applyFestivalNetImportBodyDraftYearMin = 1900;
+export const applyFestivalNetImportBodyDraftYearMax = 2200;
+
+export const applyFestivalNetImportBodyDraftSourceUrlMax = 1000;
+
+export const applyFestivalNetImportBodyDraftSourceFilenameMax = 255;
+
+export const applyFestivalNetImportBodyDraftCityMax = 250;
+
+export const applyFestivalNetImportBodyDraftRegionMax = 100;
+
+export const applyFestivalNetImportBodyDraftAddress1Max = 500;
+
+export const applyFestivalNetImportBodyDraftPostalCodeMax = 30;
+
+export const applyFestivalNetImportBodyDraftPhoneMax = 100;
+
+export const applyFestivalNetImportBodyDraftWebsiteMax = 1000;
+
+export const applyFestivalNetImportBodyDraftContactNameMax = 250;
+
+export const applyFestivalNetImportBodyDraftContactEmailMax = 320;
+
+export const applyFestivalNetImportBodyDraftContactPhoneMax = 100;
+
+export const applyFestivalNetImportBodyDraftDetailsMaxOne = 4000;
+
+
+
+export const ApplyFestivalNetImportBody = zod.object({
+  "draft": zod.object({
+  "name": zod.string().min(1).max(applyFestivalNetImportBodyDraftNameMax),
+  "year": zod.number().int().min(applyFestivalNetImportBodyDraftYearMin).max(applyFestivalNetImportBodyDraftYearMax),
+  "sourceUrl": zod.string().max(applyFestivalNetImportBodyDraftSourceUrlMax),
+  "sourceFilename": zod.string().min(1).max(applyFestivalNetImportBodyDraftSourceFilenameMax),
+  "city": zod.string().max(applyFestivalNetImportBodyDraftCityMax).optional(),
+  "region": zod.string().max(applyFestivalNetImportBodyDraftRegionMax).optional(),
+  "address1": zod.string().max(applyFestivalNetImportBodyDraftAddress1Max).optional(),
+  "postalCode": zod.string().max(applyFestivalNetImportBodyDraftPostalCodeMax).optional(),
+  "phone": zod.string().max(applyFestivalNetImportBodyDraftPhoneMax).optional(),
+  "website": zod.string().max(applyFestivalNetImportBodyDraftWebsiteMax).optional(),
+  "contactName": zod.string().max(applyFestivalNetImportBodyDraftContactNameMax).optional(),
+  "contactEmail": zod.string().max(applyFestivalNetImportBodyDraftContactEmailMax).optional(),
+  "contactPhone": zod.string().max(applyFestivalNetImportBodyDraftContactPhoneMax).optional(),
+  "details": zod.record(zod.string(), zod.string().max(applyFestivalNetImportBodyDraftDetailsMaxOne))
+}),
+  "organizationId": zod.string().uuid().nullable()
+})
+
+export const ApplyFestivalNetImportResponse = zod.object({
+  "organizationId": zod.string().uuid(),
+  "created": zod.boolean(),
+  "filledFields": zod.array(zod.string()),
+  "preservedFields": zod.array(zod.string())
+})
+
+
 export const ListFestivalEditionsParams = zod.object({
   "id": zod.string().uuid()
 })

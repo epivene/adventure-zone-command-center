@@ -5,6 +5,86 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Raw PDF bytes sent as application/pdf, not JSON or base64
+ */
+export type FestivalNetPdfFile = string;
+
+export type FestivalNetDraftDetails = {[key: string]: string};
+
+export interface FestivalNetDraft {
+  /**
+     * @minLength 1
+     * @maxLength 250
+     */
+  name: string;
+  /**
+     * @minimum 1900
+     * @maximum 2200
+     */
+  year: number;
+  /** @maxLength 1000 */
+  sourceUrl: string;
+  /**
+     * @minLength 1
+     * @maxLength 255
+     */
+  sourceFilename: string;
+  /** @maxLength 250 */
+  city?: string;
+  /** @maxLength 100 */
+  region?: string;
+  /** @maxLength 500 */
+  address1?: string;
+  /** @maxLength 30 */
+  postalCode?: string;
+  /** @maxLength 100 */
+  phone?: string;
+  /** @maxLength 1000 */
+  website?: string;
+  /** @maxLength 250 */
+  contactName?: string;
+  /** @maxLength 320 */
+  contactEmail?: string;
+  /** @maxLength 100 */
+  contactPhone?: string;
+  details: FestivalNetDraftDetails;
+}
+
+export type FestivalNetCandidateDetails = {[key: string]: string};
+
+export type FestivalNetCandidateExistingFields = {[key: string]: string};
+
+export interface FestivalNetCandidate {
+  id: string;
+  name: string;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  region?: string | null;
+  details: FestivalNetCandidateDetails;
+  existingFields: FestivalNetCandidateExistingFields;
+}
+
+export interface FestivalNetPreview {
+  draft: FestivalNetDraft;
+  candidates: FestivalNetCandidate[];
+  warnings: string[];
+}
+
+export interface FestivalNetImportInput {
+  draft: FestivalNetDraft;
+  /** @nullable */
+  organizationId: string | null;
+}
+
+export interface FestivalNetImportResult {
+  organizationId: string;
+  created: boolean;
+  filledFields: string[];
+  preservedFields: string[];
+}
+
 export type FestivalEditionDetails = {[key: string]: string};
 
 export interface FestivalEdition {
@@ -32,6 +112,13 @@ export interface LeadLegInput {
 export interface HealthStatus {
   status: string;
 }
+
+export type PreviewFestivalNetPdfParams = {
+/**
+ * @maxLength 255
+ */
+filename: string;
+};
 
 export type ListFestivalEditions200 = {
   editions: FestivalEdition[];

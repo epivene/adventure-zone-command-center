@@ -9,7 +9,9 @@ import { hideRetiredProfileResults } from "@/features/organizations/hide-retired
 import { EventFamilySuggestions } from "@/components/event-families/event-family-suggestions";
 import { EventFamilyCard } from "@/components/event-families/event-family-card";
 import { ManualEventFamilyDialog } from "@/components/event-families/manual-event-family-dialog";
+import { FestivalNetImportDialog } from "@/components/profiles/festivalnet-import-dialog";
 import { ContactDirectoryView } from "@/components/profiles/contact-directory-view";
+import { Button } from "@workspace/avz-crm/components/ui/button";
 
 type ProfileDirectoryView = "profiles" | "contacts";
 
@@ -51,6 +53,7 @@ export default function OrganizationsPage() {
   const [dupError, setDupError] = useState<string | null>(null);
   const [dupGroups, setDupGroups] = useState<DuplicateGroup[] | null>(null);
   const [eventFamilyOpen, setEventFamilyOpen] = useState(false);
+  const [festivalNetOpen, setFestivalNetOpen] = useState(false);
 
   const loadProfiles = useCallback(async () => {
     if (view === "contacts") {
@@ -181,11 +184,13 @@ export default function OrganizationsPage() {
             <div className="flex flex-wrap items-center gap-2">
               <EventFamilySuggestions compact onChanged={loadProfiles} />
               <button className="button-secondary text-sm" onClick={openDuplicates} type="button">Find duplicates</button>
+              <Button variant="outline" onClick={() => setFestivalNetOpen(true)} type="button">Import FestivalNet PDF</Button>
             </div>
           </section>
         </div>
       )}
 
+      <FestivalNetImportDialog onImported={loadProfiles} onOpenChange={setFestivalNetOpen} open={festivalNetOpen} />
       <ManualEventFamilyDialog onChanged={loadProfiles} onOpenChange={setEventFamilyOpen} open={eventFamilyOpen} />
     </div>
   );

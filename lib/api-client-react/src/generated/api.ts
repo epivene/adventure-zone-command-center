@@ -22,9 +22,13 @@ import type {
 import type {
   FestivalEdition,
   FestivalEditionInput,
+  FestivalNetImportInput,
+  FestivalNetImportResult,
+  FestivalNetPreview,
   HealthStatus,
   LeadLegInput,
-  ListFestivalEditions200
+  ListFestivalEditions200,
+  PreviewFestivalNetPdfParams
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -53,6 +57,162 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getPreviewFestivalNetPdfUrl = (params: PreviewFestivalNetPdfParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/festivalnet-import/preview?${stringifiedParams}` : `/api/festivalnet-import/preview`
+}
+
+export const previewFestivalNetPdf = async (previewFestivalNetPdfBody: Blob,
+    params: PreviewFestivalNetPdfParams, options?: Parameters<typeof customFetch>[1]): Promise<FestivalNetPreview> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<FestivalNetPreview>(getPreviewFestivalNetPdfUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/pdf', ...getHeaders(options?.headers) },
+    body: previewFestivalNetPdfBody
+  }
+);}
+
+
+
+
+
+export const getPreviewFestivalNetPdfMutationKey = () => ['previewFestivalNetPdf'] as const;
+
+export const getPreviewFestivalNetPdfMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewFestivalNetPdf>>, TError,PreviewFestivalNetPdfMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewFestivalNetPdf>>, TError,PreviewFestivalNetPdfMutationVariables, TContext> => {
+
+const mutationKey = getPreviewFestivalNetPdfMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewFestivalNetPdf>>, PreviewFestivalNetPdfMutationVariables> = (props) => {
+          const {data,params} = props ?? {};
+
+          return  previewFestivalNetPdf(data,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewFestivalNetPdfMutationResult = NonNullable<Awaited<ReturnType<typeof previewFestivalNetPdf>>>
+    export type PreviewFestivalNetPdfMutationBody = BodyType<Blob>
+    export type PreviewFestivalNetPdfMutationError = ErrorType<void>
+    export type PreviewFestivalNetPdfMutationVariables = {data: BodyType<Blob>;params: PreviewFestivalNetPdfParams}
+
+    export const usePreviewFestivalNetPdf = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewFestivalNetPdf>>, TError,PreviewFestivalNetPdfMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewFestivalNetPdf>>,
+        TError,
+        PreviewFestivalNetPdfMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPreviewFestivalNetPdfMutationOptions(options));
+    }
+
+export const getApplyFestivalNetImportUrl = () => {
+
+
+
+
+  return `/api/festivalnet-import/apply`
+}
+
+export const applyFestivalNetImport = async (festivalNetImportInput: FestivalNetImportInput, options?: Parameters<typeof customFetch>[1]): Promise<FestivalNetImportResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<FestivalNetImportResult>(getApplyFestivalNetImportUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(festivalNetImportInput)
+  }
+);}
+
+
+
+
+
+export const getApplyFestivalNetImportMutationKey = () => ['applyFestivalNetImport'] as const;
+
+export const getApplyFestivalNetImportMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyFestivalNetImport>>, TError,ApplyFestivalNetImportMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyFestivalNetImport>>, TError,ApplyFestivalNetImportMutationVariables, TContext> => {
+
+const mutationKey = getApplyFestivalNetImportMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyFestivalNetImport>>, ApplyFestivalNetImportMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  applyFestivalNetImport(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyFestivalNetImportMutationResult = NonNullable<Awaited<ReturnType<typeof applyFestivalNetImport>>>
+    export type ApplyFestivalNetImportMutationBody = BodyType<FestivalNetImportInput>
+    export type ApplyFestivalNetImportMutationError = ErrorType<void>
+    export type ApplyFestivalNetImportMutationVariables = {data: BodyType<FestivalNetImportInput>}
+
+    export const useApplyFestivalNetImport = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyFestivalNetImport>>, TError,ApplyFestivalNetImportMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyFestivalNetImport>>,
+        TError,
+        ApplyFestivalNetImportMutationVariables,
+        TContext
+      > => {
+      return useMutation(getApplyFestivalNetImportMutationOptions(options));
+    }
 
 export const getListFestivalEditionsUrl = (id: string,) => {
 

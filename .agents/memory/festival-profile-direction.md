@@ -28,3 +28,9 @@ The user prefers importing FestivalNet PDFs instead of spreadsheet exports.
 **Why:** The user said PDFs are cheaper for them.
 
 **How to apply:** Make PDFs a supported primary FestivalNet import format; do not require an Excel or CSV export.
+
+Extract embedded hyperlink destinations as well as visible PDF text; never guess a shortened application URL.
+
+**Why:** The user's FestivalNet print sample shortened the visible application link but retained its complete destination in the PDF annotation.
+
+**How to apply:** Use complete http/https annotation URLs for imported links. If a link cannot be recovered, flag it for review rather than saving the truncated text as a URL.

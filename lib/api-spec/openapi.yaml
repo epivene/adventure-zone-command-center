@@ -11,6 +11,40 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /festivalnet-import/preview:
+    post:
+      operationId: previewFestivalNetPdf
+      parameters:
+        - {name: filename, in: query, required: true, schema: {type: string, maxLength: 255}}
+      requestBody:
+        required: true
+        content:
+          application/pdf:
+            schema: {$ref: "#/components/schemas/FestivalNetPdfFile"}
+      responses:
+        "200":
+          description: Extracted fields and possible existing profiles; no records are written
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FestivalNetPreview"}
+        "400": {description: "Invalid, scanned, or unsupported PDF"}
+        "413": {description: PDF exceeds the 10 MB limit}
+  /festivalnet-import/apply:
+    post:
+      operationId: applyFestivalNetImport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/FestivalNetImportInput"}
+      responses:
+        "200":
+          description: Missing information saved atomically without overwriting existing values
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FestivalNetImportResult"}
+        "400": {description: Review the extracted fields}
+        "409": {description: A possible duplicate requires selecting an existing profile}
   /event-profiles/{id}/editions:
     get:
       operationId: listFestivalEditions
@@ -77,6 +111,64 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
 components:
   schemas:
+    FestivalNetPdfFile:
+      type: string
+      description: Raw PDF bytes sent as application/pdf, not JSON or base64
+    FestivalNetDraft:
+      type: object
+      required: [name, year, sourceUrl, sourceFilename, details]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 250}
+        year: {type: integer, minimum: 1900, maximum: 2200}
+        sourceUrl: {type: string, maxLength: 1000}
+        sourceFilename: {type: string, minLength: 1, maxLength: 255}
+        city: {type: string, maxLength: 250}
+        region: {type: string, maxLength: 100}
+        address1: {type: string, maxLength: 500}
+        postalCode: {type: string, maxLength: 30}
+        phone: {type: string, maxLength: 100}
+        website: {type: string, maxLength: 1000}
+        contactName: {type: string, maxLength: 250}
+        contactEmail: {type: string, maxLength: 320}
+        contactPhone: {type: string, maxLength: 100}
+        details:
+          type: object
+          additionalProperties: {type: string, maxLength: 4000}
+    FestivalNetCandidate:
+      type: object
+      required: [id, name, details, existingFields]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        city: {type: [string, "null"]}
+        region: {type: [string, "null"]}
+        details: {type: object, additionalProperties: {type: string}}
+        existingFields: {type: object, additionalProperties: {type: string}}
+    FestivalNetPreview:
+      type: object
+      required: [draft, candidates, warnings]
+      properties:
+        draft: {$ref: "#/components/schemas/FestivalNetDraft"}
+        candidates:
+          type: array
+          items: {$ref: "#/components/schemas/FestivalNetCandidate"}
+        warnings:
+          type: array
+          items: {type: string}
+    FestivalNetImportInput:
+      type: object
+      required: [draft, organizationId]
+      properties:
+        draft: {$ref: "#/components/schemas/FestivalNetDraft"}
+        organizationId: {type: [string, "null"], format: uuid}
+    FestivalNetImportResult:
+      type: object
+      required: [organizationId, created, filledFields, preservedFields]
+      properties:
+        organizationId: {type: string, format: uuid}
+        created: {type: boolean}
+        filledFields: {type: array, items: {type: string}}
+        preservedFields: {type: array, items: {type: string}}
     FestivalEdition:
       type: object
       required: [id, organizationId, year, details, updatedAt]
