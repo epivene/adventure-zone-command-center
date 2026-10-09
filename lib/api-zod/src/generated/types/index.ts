@@ -6,10 +6,18 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './festivalCrewFact';
+export * from './festivalCrewLocation';
+export * from './festivalCrewStop';
+export * from './festivalCrewStopInput';
+export * from './festivalCrewStopRemoveInput';
 export * from './festivalEdition';
 export * from './festivalEditionDetails';
 export * from './festivalEditionInput';
 export * from './festivalEditionInputDetails';
+export * from './festivalNearbySearchInput';
+export * from './festivalNearbySearchInputRadiusMiles';
+export * from './festivalNearbySuggestion';
 export * from './festivalNetCandidate';
 export * from './festivalNetCandidateDetails';
 export * from './festivalNetCandidateExistingFields';
@@ -19,7 +27,13 @@ export * from './festivalNetImportInput';
 export * from './festivalNetImportResult';
 export * from './festivalNetPdfFile';
 export * from './festivalNetPreview';
+export * from './festivalStopCategory';
+export * from './festivalVenuePin';
+export * from './festivalVenuePinInput';
+export * from './festivalVenueSearchInput';
 export * from './healthStatus';
 export * from './leadLegInput';
 export * from './listFestivalEditions200';
 export * from './previewFestivalNetPdfParams';
+export * from './searchFestivalNearbyStops200';
+export * from './searchFestivalVenue200';

@@ -20,6 +20,7 @@ import {
 
 import { sql } from "drizzle-orm";
 export * from "./festival-editions";
+export * from "./festival-crew-stops";
 
 // Inlined type constants (originally from features/)
 const bookingStatusValues = [

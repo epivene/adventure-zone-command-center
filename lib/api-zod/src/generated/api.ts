@@ -8,6 +8,455 @@
 import * as zod from 'zod';
 
 
+export const getFestivalCrewLocationPathYearMin = 1900;
+export const getFestivalCrewLocationPathYearMax = 2200;
+
+
+
+export const GetFestivalCrewLocationParams = zod.object({
+  "id": zod.string().uuid(),
+  "year": zod.coerce.number().int().min(getFestivalCrewLocationPathYearMin).max(getFestivalCrewLocationPathYearMax)
+})
+
+export const getFestivalCrewLocationResponseLocationOneLatitudeMin = -90;
+export const getFestivalCrewLocationResponseLocationOneLatitudeMax = 90;
+
+export const getFestivalCrewLocationResponseLocationOneLongitudeMin = -180;
+export const getFestivalCrewLocationResponseLocationOneLongitudeMax = 180;
+
+export const getFestivalCrewLocationResponseLocationOneDisplayNameMax = 2000;
+
+export const getFestivalCrewLocationResponseStopsItemOneNameMax = 200;
+
+export const getFestivalCrewLocationResponseStopsItemOneAddressMax = 500;
+
+export const getFestivalCrewLocationResponseStopsItemOneLatitudeMin = -90;
+export const getFestivalCrewLocationResponseStopsItemOneLatitudeMax = 90;
+
+export const getFestivalCrewLocationResponseStopsItemOneLongitudeMin = -180;
+export const getFestivalCrewLocationResponseStopsItemOneLongitudeMax = 180;
+
+export const getFestivalCrewLocationResponseStopsItemOneSourceKeyMax = 80;
+
+export const getFestivalCrewLocationResponseStopsItemOneSourceUrlMax = 2000;
+
+export const getFestivalCrewLocationResponseStopsItemOnePhoneMax = 80;
+
+export const getFestivalCrewLocationResponseStopsItemOneWebsiteMax = 2000;
+
+export const getFestivalCrewLocationResponseStopsItemOneNotesMax = 2000;
+
+export const getFestivalCrewLocationResponseStopsItemOneMaxRigLengthFeetMax = 150;
+
+
+
+export const GetFestivalCrewLocationResponse = zod.object({
+  "venue": zod.string(),
+  "editionUpdatedAt": zod.string().datetime({"offset":true}).nullable(),
+  "location": zod.union([zod.object({
+  "latitude": zod.number().min(getFestivalCrewLocationResponseLocationOneLatitudeMin).max(getFestivalCrewLocationResponseLocationOneLatitudeMax),
+  "longitude": zod.number().min(getFestivalCrewLocationResponseLocationOneLongitudeMin).max(getFestivalCrewLocationResponseLocationOneLongitudeMax),
+  "displayName": zod.string().max(getFestivalCrewLocationResponseLocationOneDisplayNameMax)
+}),zod.null()]),
+  "stops": zod.array(zod.object({
+  "name": zod.string().min(1).max(getFestivalCrewLocationResponseStopsItemOneNameMax),
+  "category": zod.enum(['rv_park', 'walmart', 'mechanic', 'tires', 'oil_change', 'hardware', 'bathroom', 'fuel']),
+  "address": zod.string().max(getFestivalCrewLocationResponseStopsItemOneAddressMax),
+  "latitude": zod.number().min(getFestivalCrewLocationResponseStopsItemOneLatitudeMin).max(getFestivalCrewLocationResponseStopsItemOneLatitudeMax).nullable(),
+  "longitude": zod.number().min(getFestivalCrewLocationResponseStopsItemOneLongitudeMin).max(getFestivalCrewLocationResponseStopsItemOneLongitudeMax).nullable(),
+  "sourceKey": zod.string().max(getFestivalCrewLocationResponseStopsItemOneSourceKeyMax).nullable(),
+  "sourceUrl": zod.string().max(getFestivalCrewLocationResponseStopsItemOneSourceUrlMax),
+  "phone": zod.string().max(getFestivalCrewLocationResponseStopsItemOnePhoneMax),
+  "website": zod.string().max(getFestivalCrewLocationResponseStopsItemOneWebsiteMax),
+  "notes": zod.string().max(getFestivalCrewLocationResponseStopsItemOneNotesMax),
+  "rigFit": zod.enum(['unknown', 'yes', 'no']),
+  "hookups": zod.enum(['unknown', 'yes', 'no']),
+  "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "maxRigLengthFeet": zod.number().int().min(1).max(getFestivalCrewLocationResponseStopsItemOneMaxRigLengthFeetMax).nullable(),
+  "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "updatedAt": zod.string().datetime({"offset":true})
+})))
+})
+
+
+export const saveFestivalVenuePinPathYearMin = 1900;
+export const saveFestivalVenuePinPathYearMax = 2200;
+
+
+
+export const SaveFestivalVenuePinParams = zod.object({
+  "id": zod.string().uuid(),
+  "year": zod.coerce.number().int().min(saveFestivalVenuePinPathYearMin).max(saveFestivalVenuePinPathYearMax)
+})
+
+export const saveFestivalVenuePinBodyOneLatitudeMin = -90;
+export const saveFestivalVenuePinBodyOneLatitudeMax = 90;
+
+export const saveFestivalVenuePinBodyOneLongitudeMin = -180;
+export const saveFestivalVenuePinBodyOneLongitudeMax = 180;
+
+export const saveFestivalVenuePinBodyOneDisplayNameMax = 2000;
+
+
+
+export const SaveFestivalVenuePinBody = zod.object({
+  "latitude": zod.number().min(saveFestivalVenuePinBodyOneLatitudeMin).max(saveFestivalVenuePinBodyOneLatitudeMax),
+  "longitude": zod.number().min(saveFestivalVenuePinBodyOneLongitudeMin).max(saveFestivalVenuePinBodyOneLongitudeMax),
+  "displayName": zod.string().max(saveFestivalVenuePinBodyOneDisplayNameMax)
+}).and(zod.object({
+  "expectedUpdatedAt": zod.string().datetime({"offset":true})
+}))
+
+export const saveFestivalVenuePinResponseLocationOneLatitudeMin = -90;
+export const saveFestivalVenuePinResponseLocationOneLatitudeMax = 90;
+
+export const saveFestivalVenuePinResponseLocationOneLongitudeMin = -180;
+export const saveFestivalVenuePinResponseLocationOneLongitudeMax = 180;
+
+export const saveFestivalVenuePinResponseLocationOneDisplayNameMax = 2000;
+
+export const saveFestivalVenuePinResponseStopsItemOneNameMax = 200;
+
+export const saveFestivalVenuePinResponseStopsItemOneAddressMax = 500;
+
+export const saveFestivalVenuePinResponseStopsItemOneLatitudeMin = -90;
+export const saveFestivalVenuePinResponseStopsItemOneLatitudeMax = 90;
+
+export const saveFestivalVenuePinResponseStopsItemOneLongitudeMin = -180;
+export const saveFestivalVenuePinResponseStopsItemOneLongitudeMax = 180;
+
+export const saveFestivalVenuePinResponseStopsItemOneSourceKeyMax = 80;
+
+export const saveFestivalVenuePinResponseStopsItemOneSourceUrlMax = 2000;
+
+export const saveFestivalVenuePinResponseStopsItemOnePhoneMax = 80;
+
+export const saveFestivalVenuePinResponseStopsItemOneWebsiteMax = 2000;
+
+export const saveFestivalVenuePinResponseStopsItemOneNotesMax = 2000;
+
+export const saveFestivalVenuePinResponseStopsItemOneMaxRigLengthFeetMax = 150;
+
+
+
+export const SaveFestivalVenuePinResponse = zod.object({
+  "venue": zod.string(),
+  "editionUpdatedAt": zod.string().datetime({"offset":true}).nullable(),
+  "location": zod.union([zod.object({
+  "latitude": zod.number().min(saveFestivalVenuePinResponseLocationOneLatitudeMin).max(saveFestivalVenuePinResponseLocationOneLatitudeMax),
+  "longitude": zod.number().min(saveFestivalVenuePinResponseLocationOneLongitudeMin).max(saveFestivalVenuePinResponseLocationOneLongitudeMax),
+  "displayName": zod.string().max(saveFestivalVenuePinResponseLocationOneDisplayNameMax)
+}),zod.null()]),
+  "stops": zod.array(zod.object({
+  "name": zod.string().min(1).max(saveFestivalVenuePinResponseStopsItemOneNameMax),
+  "category": zod.enum(['rv_park', 'walmart', 'mechanic', 'tires', 'oil_change', 'hardware', 'bathroom', 'fuel']),
+  "address": zod.string().max(saveFestivalVenuePinResponseStopsItemOneAddressMax),
+  "latitude": zod.number().min(saveFestivalVenuePinResponseStopsItemOneLatitudeMin).max(saveFestivalVenuePinResponseStopsItemOneLatitudeMax).nullable(),
+  "longitude": zod.number().min(saveFestivalVenuePinResponseStopsItemOneLongitudeMin).max(saveFestivalVenuePinResponseStopsItemOneLongitudeMax).nullable(),
+  "sourceKey": zod.string().max(saveFestivalVenuePinResponseStopsItemOneSourceKeyMax).nullable(),
+  "sourceUrl": zod.string().max(saveFestivalVenuePinResponseStopsItemOneSourceUrlMax),
+  "phone": zod.string().max(saveFestivalVenuePinResponseStopsItemOnePhoneMax),
+  "website": zod.string().max(saveFestivalVenuePinResponseStopsItemOneWebsiteMax),
+  "notes": zod.string().max(saveFestivalVenuePinResponseStopsItemOneNotesMax),
+  "rigFit": zod.enum(['unknown', 'yes', 'no']),
+  "hookups": zod.enum(['unknown', 'yes', 'no']),
+  "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "maxRigLengthFeet": zod.number().int().min(1).max(saveFestivalVenuePinResponseStopsItemOneMaxRigLengthFeetMax).nullable(),
+  "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "updatedAt": zod.string().datetime({"offset":true})
+})))
+})
+
+
+export const searchFestivalVenuePathYearMin = 1900;
+export const searchFestivalVenuePathYearMax = 2200;
+
+
+
+export const SearchFestivalVenueParams = zod.object({
+  "id": zod.string().uuid(),
+  "year": zod.coerce.number().int().min(searchFestivalVenuePathYearMin).max(searchFestivalVenuePathYearMax)
+})
+
+export const searchFestivalVenueBodyQueryMin = 3;
+export const searchFestivalVenueBodyQueryMax = 400;
+
+
+
+export const SearchFestivalVenueBody = zod.object({
+  "query": zod.string().min(searchFestivalVenueBodyQueryMin).max(searchFestivalVenueBodyQueryMax)
+})
+
+export const searchFestivalVenueResponseCandidatesItemLatitudeMin = -90;
+export const searchFestivalVenueResponseCandidatesItemLatitudeMax = 90;
+
+export const searchFestivalVenueResponseCandidatesItemLongitudeMin = -180;
+export const searchFestivalVenueResponseCandidatesItemLongitudeMax = 180;
+
+export const searchFestivalVenueResponseCandidatesItemDisplayNameMax = 2000;
+
+
+
+export const SearchFestivalVenueResponse = zod.object({
+  "candidates": zod.array(zod.object({
+  "latitude": zod.number().min(searchFestivalVenueResponseCandidatesItemLatitudeMin).max(searchFestivalVenueResponseCandidatesItemLatitudeMax),
+  "longitude": zod.number().min(searchFestivalVenueResponseCandidatesItemLongitudeMin).max(searchFestivalVenueResponseCandidatesItemLongitudeMax),
+  "displayName": zod.string().max(searchFestivalVenueResponseCandidatesItemDisplayNameMax)
+}))
+})
+
+
+export const searchFestivalNearbyStopsPathYearMin = 1900;
+export const searchFestivalNearbyStopsPathYearMax = 2200;
+
+
+
+export const SearchFestivalNearbyStopsParams = zod.object({
+  "id": zod.string().uuid(),
+  "year": zod.coerce.number().int().min(searchFestivalNearbyStopsPathYearMin).max(searchFestivalNearbyStopsPathYearMax)
+})
+
+export const SearchFestivalNearbyStopsBody = zod.object({
+  "radiusMiles": zod.union([zod.literal(10),zod.literal(25),zod.literal(50)])
+})
+
+export const SearchFestivalNearbyStopsResponse = zod.object({
+  "suggestions": zod.array(zod.object({
+  "sourceKey": zod.string(),
+  "name": zod.string(),
+  "category": zod.enum(['rv_park', 'walmart', 'mechanic', 'tires', 'oil_change', 'hardware', 'bathroom', 'fuel']),
+  "address": zod.string(),
+  "latitude": zod.number(),
+  "longitude": zod.number(),
+  "sourceUrl": zod.string(),
+  "phone": zod.string(),
+  "website": zod.string(),
+  "distanceMiles": zod.number()
+})),
+  "searchedAt": zod.string().datetime({"offset":true}),
+  "radiusMiles": zod.number().int()
+})
+
+
+export const createFestivalCrewStopPathYearMin = 1900;
+export const createFestivalCrewStopPathYearMax = 2200;
+
+
+
+export const CreateFestivalCrewStopParams = zod.object({
+  "id": zod.string().uuid(),
+  "year": zod.coerce.number().int().min(createFestivalCrewStopPathYearMin).max(createFestivalCrewStopPathYearMax)
+})
+
+export const createFestivalCrewStopBodyNameMax = 200;
+
+export const createFestivalCrewStopBodyAddressMax = 500;
+
+export const createFestivalCrewStopBodyLatitudeMin = -90;
+export const createFestivalCrewStopBodyLatitudeMax = 90;
+
+export const createFestivalCrewStopBodyLongitudeMin = -180;
+export const createFestivalCrewStopBodyLongitudeMax = 180;
+
+export const createFestivalCrewStopBodySourceKeyMax = 80;
+
+export const createFestivalCrewStopBodySourceUrlMax = 2000;
+
+export const createFestivalCrewStopBodyPhoneMax = 80;
+
+export const createFestivalCrewStopBodyWebsiteMax = 2000;
+
+export const createFestivalCrewStopBodyNotesMax = 2000;
+
+export const createFestivalCrewStopBodyMaxRigLengthFeetMax = 150;
+
+
+
+export const CreateFestivalCrewStopBody = zod.object({
+  "name": zod.string().min(1).max(createFestivalCrewStopBodyNameMax),
+  "category": zod.enum(['rv_park', 'walmart', 'mechanic', 'tires', 'oil_change', 'hardware', 'bathroom', 'fuel']),
+  "address": zod.string().max(createFestivalCrewStopBodyAddressMax),
+  "latitude": zod.number().min(createFestivalCrewStopBodyLatitudeMin).max(createFestivalCrewStopBodyLatitudeMax).nullable(),
+  "longitude": zod.number().min(createFestivalCrewStopBodyLongitudeMin).max(createFestivalCrewStopBodyLongitudeMax).nullable(),
+  "sourceKey": zod.string().max(createFestivalCrewStopBodySourceKeyMax).nullable(),
+  "sourceUrl": zod.string().max(createFestivalCrewStopBodySourceUrlMax),
+  "phone": zod.string().max(createFestivalCrewStopBodyPhoneMax),
+  "website": zod.string().max(createFestivalCrewStopBodyWebsiteMax),
+  "notes": zod.string().max(createFestivalCrewStopBodyNotesMax),
+  "rigFit": zod.enum(['unknown', 'yes', 'no']),
+  "hookups": zod.enum(['unknown', 'yes', 'no']),
+  "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "maxRigLengthFeet": zod.number().int().min(1).max(createFestivalCrewStopBodyMaxRigLengthFeetMax).nullable(),
+  "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
+})
+
+export const createFestivalCrewStopResponseOneNameMax = 200;
+
+export const createFestivalCrewStopResponseOneAddressMax = 500;
+
+export const createFestivalCrewStopResponseOneLatitudeMin = -90;
+export const createFestivalCrewStopResponseOneLatitudeMax = 90;
+
+export const createFestivalCrewStopResponseOneLongitudeMin = -180;
+export const createFestivalCrewStopResponseOneLongitudeMax = 180;
+
+export const createFestivalCrewStopResponseOneSourceKeyMax = 80;
+
+export const createFestivalCrewStopResponseOneSourceUrlMax = 2000;
+
+export const createFestivalCrewStopResponseOnePhoneMax = 80;
+
+export const createFestivalCrewStopResponseOneWebsiteMax = 2000;
+
+export const createFestivalCrewStopResponseOneNotesMax = 2000;
+
+export const createFestivalCrewStopResponseOneMaxRigLengthFeetMax = 150;
+
+
+
+export const CreateFestivalCrewStopResponse = zod.object({
+  "name": zod.string().min(1).max(createFestivalCrewStopResponseOneNameMax),
+  "category": zod.enum(['rv_park', 'walmart', 'mechanic', 'tires', 'oil_change', 'hardware', 'bathroom', 'fuel']),
+  "address": zod.string().max(createFestivalCrewStopResponseOneAddressMax),
+  "latitude": zod.number().min(createFestivalCrewStopResponseOneLatitudeMin).max(createFestivalCrewStopResponseOneLatitudeMax).nullable(),
+  "longitude": zod.number().min(createFestivalCrewStopResponseOneLongitudeMin).max(createFestivalCrewStopResponseOneLongitudeMax).nullable(),
+  "sourceKey": zod.string().max(createFestivalCrewStopResponseOneSourceKeyMax).nullable(),
+  "sourceUrl": zod.string().max(createFestivalCrewStopResponseOneSourceUrlMax),
+  "phone": zod.string().max(createFestivalCrewStopResponseOnePhoneMax),
+  "website": zod.string().max(createFestivalCrewStopResponseOneWebsiteMax),
+  "notes": zod.string().max(createFestivalCrewStopResponseOneNotesMax),
+  "rigFit": zod.enum(['unknown', 'yes', 'no']),
+  "hookups": zod.enum(['unknown', 'yes', 'no']),
+  "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "maxRigLengthFeet": zod.number().int().min(1).max(createFestivalCrewStopResponseOneMaxRigLengthFeetMax).nullable(),
+  "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "updatedAt": zod.string().datetime({"offset":true})
+}))
+
+
+export const updateFestivalCrewStopPathYearMin = 1900;
+export const updateFestivalCrewStopPathYearMax = 2200;
+
+
+
+export const UpdateFestivalCrewStopParams = zod.object({
+  "id": zod.string().uuid(),
+  "year": zod.coerce.number().int().min(updateFestivalCrewStopPathYearMin).max(updateFestivalCrewStopPathYearMax),
+  "stopId": zod.string().uuid()
+})
+
+export const updateFestivalCrewStopBodyNameMax = 200;
+
+export const updateFestivalCrewStopBodyAddressMax = 500;
+
+export const updateFestivalCrewStopBodyLatitudeMin = -90;
+export const updateFestivalCrewStopBodyLatitudeMax = 90;
+
+export const updateFestivalCrewStopBodyLongitudeMin = -180;
+export const updateFestivalCrewStopBodyLongitudeMax = 180;
+
+export const updateFestivalCrewStopBodySourceKeyMax = 80;
+
+export const updateFestivalCrewStopBodySourceUrlMax = 2000;
+
+export const updateFestivalCrewStopBodyPhoneMax = 80;
+
+export const updateFestivalCrewStopBodyWebsiteMax = 2000;
+
+export const updateFestivalCrewStopBodyNotesMax = 2000;
+
+export const updateFestivalCrewStopBodyMaxRigLengthFeetMax = 150;
+
+
+
+export const UpdateFestivalCrewStopBody = zod.object({
+  "name": zod.string().min(1).max(updateFestivalCrewStopBodyNameMax),
+  "category": zod.enum(['rv_park', 'walmart', 'mechanic', 'tires', 'oil_change', 'hardware', 'bathroom', 'fuel']),
+  "address": zod.string().max(updateFestivalCrewStopBodyAddressMax),
+  "latitude": zod.number().min(updateFestivalCrewStopBodyLatitudeMin).max(updateFestivalCrewStopBodyLatitudeMax).nullable(),
+  "longitude": zod.number().min(updateFestivalCrewStopBodyLongitudeMin).max(updateFestivalCrewStopBodyLongitudeMax).nullable(),
+  "sourceKey": zod.string().max(updateFestivalCrewStopBodySourceKeyMax).nullable(),
+  "sourceUrl": zod.string().max(updateFestivalCrewStopBodySourceUrlMax),
+  "phone": zod.string().max(updateFestivalCrewStopBodyPhoneMax),
+  "website": zod.string().max(updateFestivalCrewStopBodyWebsiteMax),
+  "notes": zod.string().max(updateFestivalCrewStopBodyNotesMax),
+  "rigFit": zod.enum(['unknown', 'yes', 'no']),
+  "hookups": zod.enum(['unknown', 'yes', 'no']),
+  "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "maxRigLengthFeet": zod.number().int().min(1).max(updateFestivalCrewStopBodyMaxRigLengthFeetMax).nullable(),
+  "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
+})
+
+export const updateFestivalCrewStopResponseOneNameMax = 200;
+
+export const updateFestivalCrewStopResponseOneAddressMax = 500;
+
+export const updateFestivalCrewStopResponseOneLatitudeMin = -90;
+export const updateFestivalCrewStopResponseOneLatitudeMax = 90;
+
+export const updateFestivalCrewStopResponseOneLongitudeMin = -180;
+export const updateFestivalCrewStopResponseOneLongitudeMax = 180;
+
+export const updateFestivalCrewStopResponseOneSourceKeyMax = 80;
+
+export const updateFestivalCrewStopResponseOneSourceUrlMax = 2000;
+
+export const updateFestivalCrewStopResponseOnePhoneMax = 80;
+
+export const updateFestivalCrewStopResponseOneWebsiteMax = 2000;
+
+export const updateFestivalCrewStopResponseOneNotesMax = 2000;
+
+export const updateFestivalCrewStopResponseOneMaxRigLengthFeetMax = 150;
+
+
+
+export const UpdateFestivalCrewStopResponse = zod.object({
+  "name": zod.string().min(1).max(updateFestivalCrewStopResponseOneNameMax),
+  "category": zod.enum(['rv_park', 'walmart', 'mechanic', 'tires', 'oil_change', 'hardware', 'bathroom', 'fuel']),
+  "address": zod.string().max(updateFestivalCrewStopResponseOneAddressMax),
+  "latitude": zod.number().min(updateFestivalCrewStopResponseOneLatitudeMin).max(updateFestivalCrewStopResponseOneLatitudeMax).nullable(),
+  "longitude": zod.number().min(updateFestivalCrewStopResponseOneLongitudeMin).max(updateFestivalCrewStopResponseOneLongitudeMax).nullable(),
+  "sourceKey": zod.string().max(updateFestivalCrewStopResponseOneSourceKeyMax).nullable(),
+  "sourceUrl": zod.string().max(updateFestivalCrewStopResponseOneSourceUrlMax),
+  "phone": zod.string().max(updateFestivalCrewStopResponseOnePhoneMax),
+  "website": zod.string().max(updateFestivalCrewStopResponseOneWebsiteMax),
+  "notes": zod.string().max(updateFestivalCrewStopResponseOneNotesMax),
+  "rigFit": zod.enum(['unknown', 'yes', 'no']),
+  "hookups": zod.enum(['unknown', 'yes', 'no']),
+  "overnight": zod.enum(['unknown', 'yes', 'no']),
+  "maxRigLengthFeet": zod.number().int().min(1).max(updateFestivalCrewStopResponseOneMaxRigLengthFeetMax).nullable(),
+  "expectedUpdatedAt": zod.string().datetime({"offset":true}).nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "updatedAt": zod.string().datetime({"offset":true})
+}))
+
+
+export const removeFestivalCrewStopPathYearMin = 1900;
+export const removeFestivalCrewStopPathYearMax = 2200;
+
+
+
+export const RemoveFestivalCrewStopParams = zod.object({
+  "id": zod.string().uuid(),
+  "year": zod.coerce.number().int().min(removeFestivalCrewStopPathYearMin).max(removeFestivalCrewStopPathYearMax),
+  "stopId": zod.string().uuid()
+})
+
+export const RemoveFestivalCrewStopBody = zod.object({
+  "expectedUpdatedAt": zod.string().datetime({"offset":true})
+})
+
+export const RemoveFestivalCrewStopResponse = zod.void()
+
+
 export const previewFestivalNetPdfQueryFilenameMax = 255;
 
 

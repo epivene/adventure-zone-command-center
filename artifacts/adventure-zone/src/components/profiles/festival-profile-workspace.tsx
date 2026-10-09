@@ -12,6 +12,7 @@ import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 import { FestivalEditionEditor } from "./festival-edition-editor";
 import { editionGroups } from "./festival-edition-fields";
+import { FestivalCrewLocation } from "./festival-crew-location";
 import { ProfileLatestNote } from "./profile-latest-note";
 import { ProfileLatestEmail } from "./profile-latest-email";
 import type { ProfileGoogleEmailState } from "@/components/google-workspace/use-profile-google-email";
@@ -38,6 +39,7 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<{ edition: FestivalEdition | null; year: number } | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
+  const [stopEditing, setStopEditing] = useState(false);
   const [showTools, setShowTools] = useState(toolsOpen);
   useEffect(() => { if (toolsOpen) setShowTools(true); }, [toolsOpen]);
   const generation = useRef(0);
@@ -92,7 +94,7 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
           <CardHeader className="flex-col items-stretch gap-3 space-y-0 sm:flex-row sm:items-end sm:justify-between">
             <div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Festival edition</p><CardTitle className="mt-1">{year} event record</CardTitle></div>
             <div className="grid w-full gap-1 sm:w-52"><Label htmlFor="profile-event-year">Choose year</Label>
-              <Select value={String(year)} disabled={Boolean(editor) || loading} onValueChange={value => { setYear(Number(value)); setSavedNotice(false); }}>
+              <Select value={String(year)} disabled={Boolean(editor) || loading || stopEditing} onValueChange={value => { setYear(Number(value)); setSavedNotice(false); }}>
                 <SelectTrigger id="profile-event-year"><SelectValue /></SelectTrigger><SelectContent>{years.map(value => <SelectItem key={value} value={String(value)}>{value}</SelectItem>)}</SelectContent>
               </Select></div>
           </CardHeader>
@@ -107,7 +109,7 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
                 <div className="grid gap-4 sm:grid-cols-2"><Detail label="Venue & setting" value={[detail.venue, detail.setting].filter(Boolean).join(" · ")} /><Detail label="Category & attendance" value={[detail.category, detail.attendance].filter(Boolean).join(" · ")} /></div>
                 {!edition ? <p className="text-sm text-muted-foreground">No annual details have been added for {year}. Existing dates and bookings remain in the organizer’s CRM history below.</p> : null}
                 {!detail.startsOn && profile.effectiveEventDate ? <Detail label="Existing recorded event dates (CRM)" value={`${calendarLabel(profile.effectiveEventDate.startsOn)}${profile.effectiveEventDate.endsOn ? ` – ${calendarLabel(profile.effectiveEventDate.endsOn)}` : ""} · ${profile.effectiveEventDate.displayStatus}`} /> : null}
-                <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => { setSavedNotice(false); setEditor({ edition: edition ?? null, year }); }}>{edition ? "Edit event details" : "Add event details"}</Button><Button variant="ghost" size="sm" onClick={() => setEditor({ edition: null, year: Math.max(new Date().getFullYear(), ...editions.map(item => item.year)) + 1 })}>Add another year</Button></div>
+                <div className="flex flex-wrap gap-2"><Button disabled={stopEditing} variant="outline" size="sm" onClick={() => { setSavedNotice(false); setEditor({ edition: edition ?? null, year }); }}>{edition ? "Edit event details" : "Add event details"}</Button><Button disabled={stopEditing} variant="ghost" size="sm" onClick={() => setEditor({ edition: null, year: Math.max(new Date().getFullYear(), ...editions.map(item => item.year)) + 1 })}>Add another year</Button></div>
                 <Accordion type="multiple">{editionGroups.map(group => <AccordionItem value={group.title} key={group.title}><AccordionTrigger>{group.title}</AccordionTrigger><AccordionContent><div className="grid gap-4 sm:grid-cols-2">{group.fields.map(field => <Detail key={field.key} label={field.label} value={field.type === "date" && detail[field.key] ? calendarLabel(detail[field.key]) : detail[field.key]} url={field.type === "url"} />)}</div></AccordionContent></AccordionItem>)}</Accordion>
               </>}
           </CardContent>
@@ -128,6 +130,7 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
         </CardContent></Card>
       </aside>
     </div>
+    <FestivalCrewLocation key={`${profile.id}-${year}-${detail.venue ?? ""}`} organizationId={profile.id} year={year} onEditionChanged={() => void load()} onEditingChange={setStopEditing} onEditEvent={() => { setSavedNotice(false); setEditor({ edition: edition ?? null, year }); }} />
     <details className="rounded-md border border-border bg-card p-4" open={showTools} onToggle={event => setShowTools(event.currentTarget.open)}>
        <summary className="cursor-pointer font-semibold">Activity, records &amp; profile tools</summary>
       <div className="profile-modern">{legacyTools}</div>

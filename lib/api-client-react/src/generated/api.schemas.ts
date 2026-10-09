@@ -5,6 +5,146 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface FestivalVenuePin {
+  /**
+     * @minimum -90
+     * @maximum 90
+     */
+  latitude: number;
+  /**
+     * @minimum -180
+     * @maximum 180
+     */
+  longitude: number;
+  /** @maxLength 2000 */
+  displayName: string;
+}
+
+export interface FestivalVenueSearchInput {
+  /**
+     * @minLength 3
+     * @maxLength 400
+     */
+  query: string;
+}
+
+export type FestivalVenuePinInput = FestivalVenuePin & {
+  expectedUpdatedAt: string;
+};
+
+export type FestivalStopCategory = typeof FestivalStopCategory[keyof typeof FestivalStopCategory];
+
+
+export const FestivalStopCategory = {
+  rv_park: 'rv_park',
+  walmart: 'walmart',
+  mechanic: 'mechanic',
+  tires: 'tires',
+  oil_change: 'oil_change',
+  hardware: 'hardware',
+  bathroom: 'bathroom',
+  fuel: 'fuel',
+} as const;
+
+export type FestivalCrewFact = typeof FestivalCrewFact[keyof typeof FestivalCrewFact];
+
+
+export const FestivalCrewFact = {
+  unknown: 'unknown',
+  yes: 'yes',
+  no: 'no',
+} as const;
+
+export interface FestivalCrewStopInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name: string;
+  category: FestivalStopCategory;
+  /** @maxLength 500 */
+  address: string;
+  /**
+     * @minimum -90
+     * @maximum 90
+     * @nullable
+     */
+  latitude: number | null;
+  /**
+     * @minimum -180
+     * @maximum 180
+     * @nullable
+     */
+  longitude: number | null;
+  /**
+     * @maxLength 80
+     * @nullable
+     */
+  sourceKey: string | null;
+  /** @maxLength 2000 */
+  sourceUrl: string;
+  /** @maxLength 80 */
+  phone: string;
+  /** @maxLength 2000 */
+  website: string;
+  /** @maxLength 2000 */
+  notes: string;
+  rigFit: FestivalCrewFact;
+  hookups: FestivalCrewFact;
+  overnight: FestivalCrewFact;
+  /**
+     * @minimum 1
+     * @maximum 150
+     * @nullable
+     */
+  maxRigLengthFeet: number | null;
+  /** @nullable */
+  expectedUpdatedAt: string | null;
+}
+
+export type FestivalCrewStop = FestivalCrewStopInput & {
+  id: string;
+  updatedAt: string;
+};
+
+export interface FestivalCrewLocation {
+  venue: string;
+  /** @nullable */
+  editionUpdatedAt: string | null;
+  location: FestivalVenuePin | null;
+  stops: FestivalCrewStop[];
+}
+
+export type FestivalNearbySearchInputRadiusMiles = typeof FestivalNearbySearchInputRadiusMiles[keyof typeof FestivalNearbySearchInputRadiusMiles];
+
+
+export const FestivalNearbySearchInputRadiusMiles = {
+  NUMBER_10: 10,
+  NUMBER_25: 25,
+  NUMBER_50: 50,
+} as const;
+
+export interface FestivalNearbySearchInput {
+  radiusMiles: FestivalNearbySearchInputRadiusMiles;
+}
+
+export interface FestivalNearbySuggestion {
+  sourceKey: string;
+  name: string;
+  category: FestivalStopCategory;
+  address: string;
+  latitude: number;
+  longitude: number;
+  sourceUrl: string;
+  phone: string;
+  website: string;
+  distanceMiles: number;
+}
+
+export interface FestivalCrewStopRemoveInput {
+  expectedUpdatedAt: string;
+}
+
 /**
  * Raw PDF bytes sent as application/pdf, not JSON or base64
  */
@@ -112,6 +252,16 @@ export interface LeadLegInput {
 export interface HealthStatus {
   status: string;
 }
+
+export type SearchFestivalVenue200 = {
+  candidates: FestivalVenuePin[];
+};
+
+export type SearchFestivalNearbyStops200 = {
+  suggestions: FestivalNearbySuggestion[];
+  searchedAt: string;
+  radiusMiles: number;
+};
 
 export type PreviewFestivalNetPdfParams = {
 /**

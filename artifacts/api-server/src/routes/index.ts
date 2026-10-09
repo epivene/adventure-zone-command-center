@@ -35,6 +35,7 @@ import callsRouter from "./calls";
 import needsAnswerRouter from "./needs-answer";
 import eventProfilesRouter from "./event-profiles";
 import festivalEditionsRouter from "./festival-editions";
+import festivalCrewRouter from "./festival-crew";
 import festivalNetImportRouter from "./festivalnet-import";
 import leadLegAssignmentRouter from "./lead-leg-assignment";
 import earlyBirdPromoRouter from "./early-bird-promo";
@@ -348,6 +349,7 @@ router.use(createInboundComputerCallingRouter({
 router.use(needsAnswerRouter);
 router.use(eventProfilesRouter);
 router.use(festivalEditionsRouter);
+router.use(festivalCrewRouter);
 router.use(festivalNetImportRouter);
 router.use(leadLegAssignmentRouter);
 router.use(earlyBirdPromoRouter);

@@ -20,15 +20,24 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  FestivalCrewLocation,
+  FestivalCrewStop,
+  FestivalCrewStopInput,
+  FestivalCrewStopRemoveInput,
   FestivalEdition,
   FestivalEditionInput,
+  FestivalNearbySearchInput,
   FestivalNetImportInput,
   FestivalNetImportResult,
   FestivalNetPreview,
+  FestivalVenuePinInput,
+  FestivalVenueSearchInput,
   HealthStatus,
   LeadLegInput,
   ListFestivalEditions200,
-  PreviewFestivalNetPdfParams
+  PreviewFestivalNetPdfParams,
+  SearchFestivalNearbyStops200,
+  SearchFestivalVenue200
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -57,6 +66,548 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetFestivalCrewLocationUrl = (id: string,
+    year: number,) => {
+
+
+
+
+  return `/api/event-profiles/${id}/editions/${year}/crew-location`
+}
+
+export const getFestivalCrewLocation = async (id: string,
+    year: number, options?: Parameters<typeof customFetch>[1]): Promise<FestivalCrewLocation> => {
+
+  return customFetch<FestivalCrewLocation>(getGetFestivalCrewLocationUrl(id,year),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFestivalCrewLocationQueryKey = (id: string,
+    year: number,) => {
+    return [
+    `/api/event-profiles/${id}/editions/${year}/crew-location`
+    ] as const;
+    }
+
+
+export const getGetFestivalCrewLocationQueryOptions = <TData = Awaited<ReturnType<typeof getFestivalCrewLocation>>, TError = ErrorType<unknown>>(id: string,
+    year: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFestivalCrewLocation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFestivalCrewLocationQueryKey(id,year);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFestivalCrewLocation>>> = ({ signal }) => getFestivalCrewLocation(id,year, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && year !== null && year !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFestivalCrewLocation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFestivalCrewLocationQueryResult = NonNullable<Awaited<ReturnType<typeof getFestivalCrewLocation>>>
+export type GetFestivalCrewLocationQueryError = ErrorType<unknown>
+
+
+
+export function useGetFestivalCrewLocation<TData = Awaited<ReturnType<typeof getFestivalCrewLocation>>, TError = ErrorType<unknown>>(
+ id: string,
+    year: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFestivalCrewLocation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFestivalCrewLocationQueryOptions(id,year,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveFestivalVenuePinUrl = (id: string,
+    year: number,) => {
+
+
+
+
+  return `/api/event-profiles/${id}/editions/${year}/crew-location`
+}
+
+export const saveFestivalVenuePin = async (id: string,
+    year: number,
+    festivalVenuePinInput: FestivalVenuePinInput, options?: Parameters<typeof customFetch>[1]): Promise<FestivalCrewLocation> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<FestivalCrewLocation>(getSaveFestivalVenuePinUrl(id,year),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(festivalVenuePinInput)
+  }
+);}
+
+
+
+
+
+export const getSaveFestivalVenuePinMutationKey = () => ['saveFestivalVenuePin'] as const;
+
+export const getSaveFestivalVenuePinMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveFestivalVenuePin>>, TError,SaveFestivalVenuePinMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveFestivalVenuePin>>, TError,SaveFestivalVenuePinMutationVariables, TContext> => {
+
+const mutationKey = getSaveFestivalVenuePinMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveFestivalVenuePin>>, SaveFestivalVenuePinMutationVariables> = (props) => {
+          const {id,year,data} = props ?? {};
+
+          return  saveFestivalVenuePin(id,year,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveFestivalVenuePinMutationResult = NonNullable<Awaited<ReturnType<typeof saveFestivalVenuePin>>>
+    export type SaveFestivalVenuePinMutationBody = BodyType<FestivalVenuePinInput>
+    export type SaveFestivalVenuePinMutationError = ErrorType<unknown>
+    export type SaveFestivalVenuePinMutationVariables = {id: string;year: number;data: BodyType<FestivalVenuePinInput>}
+
+    export const useSaveFestivalVenuePin = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveFestivalVenuePin>>, TError,SaveFestivalVenuePinMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveFestivalVenuePin>>,
+        TError,
+        SaveFestivalVenuePinMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSaveFestivalVenuePinMutationOptions(options));
+    }
+
+export const getSearchFestivalVenueUrl = (id: string,
+    year: number,) => {
+
+
+
+
+  return `/api/event-profiles/${id}/editions/${year}/crew-location/search`
+}
+
+export const searchFestivalVenue = async (id: string,
+    year: number,
+    festivalVenueSearchInput: FestivalVenueSearchInput, options?: Parameters<typeof customFetch>[1]): Promise<SearchFestivalVenue200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<SearchFestivalVenue200>(getSearchFestivalVenueUrl(id,year),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(festivalVenueSearchInput)
+  }
+);}
+
+
+
+
+
+export const getSearchFestivalVenueMutationKey = () => ['searchFestivalVenue'] as const;
+
+export const getSearchFestivalVenueMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof searchFestivalVenue>>, TError,SearchFestivalVenueMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof searchFestivalVenue>>, TError,SearchFestivalVenueMutationVariables, TContext> => {
+
+const mutationKey = getSearchFestivalVenueMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof searchFestivalVenue>>, SearchFestivalVenueMutationVariables> = (props) => {
+          const {id,year,data} = props ?? {};
+
+          return  searchFestivalVenue(id,year,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SearchFestivalVenueMutationResult = NonNullable<Awaited<ReturnType<typeof searchFestivalVenue>>>
+    export type SearchFestivalVenueMutationBody = BodyType<FestivalVenueSearchInput>
+    export type SearchFestivalVenueMutationError = ErrorType<unknown>
+    export type SearchFestivalVenueMutationVariables = {id: string;year: number;data: BodyType<FestivalVenueSearchInput>}
+
+    export const useSearchFestivalVenue = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof searchFestivalVenue>>, TError,SearchFestivalVenueMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof searchFestivalVenue>>,
+        TError,
+        SearchFestivalVenueMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSearchFestivalVenueMutationOptions(options));
+    }
+
+export const getSearchFestivalNearbyStopsUrl = (id: string,
+    year: number,) => {
+
+
+
+
+  return `/api/event-profiles/${id}/editions/${year}/nearby/search`
+}
+
+export const searchFestivalNearbyStops = async (id: string,
+    year: number,
+    festivalNearbySearchInput: FestivalNearbySearchInput, options?: Parameters<typeof customFetch>[1]): Promise<SearchFestivalNearbyStops200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<SearchFestivalNearbyStops200>(getSearchFestivalNearbyStopsUrl(id,year),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(festivalNearbySearchInput)
+  }
+);}
+
+
+
+
+
+export const getSearchFestivalNearbyStopsMutationKey = () => ['searchFestivalNearbyStops'] as const;
+
+export const getSearchFestivalNearbyStopsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof searchFestivalNearbyStops>>, TError,SearchFestivalNearbyStopsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof searchFestivalNearbyStops>>, TError,SearchFestivalNearbyStopsMutationVariables, TContext> => {
+
+const mutationKey = getSearchFestivalNearbyStopsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof searchFestivalNearbyStops>>, SearchFestivalNearbyStopsMutationVariables> = (props) => {
+          const {id,year,data} = props ?? {};
+
+          return  searchFestivalNearbyStops(id,year,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SearchFestivalNearbyStopsMutationResult = NonNullable<Awaited<ReturnType<typeof searchFestivalNearbyStops>>>
+    export type SearchFestivalNearbyStopsMutationBody = BodyType<FestivalNearbySearchInput>
+    export type SearchFestivalNearbyStopsMutationError = ErrorType<unknown>
+    export type SearchFestivalNearbyStopsMutationVariables = {id: string;year: number;data: BodyType<FestivalNearbySearchInput>}
+
+    export const useSearchFestivalNearbyStops = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof searchFestivalNearbyStops>>, TError,SearchFestivalNearbyStopsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof searchFestivalNearbyStops>>,
+        TError,
+        SearchFestivalNearbyStopsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSearchFestivalNearbyStopsMutationOptions(options));
+    }
+
+export const getCreateFestivalCrewStopUrl = (id: string,
+    year: number,) => {
+
+
+
+
+  return `/api/event-profiles/${id}/editions/${year}/crew-stops`
+}
+
+export const createFestivalCrewStop = async (id: string,
+    year: number,
+    festivalCrewStopInput: FestivalCrewStopInput, options?: Parameters<typeof customFetch>[1]): Promise<FestivalCrewStop> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<FestivalCrewStop>(getCreateFestivalCrewStopUrl(id,year),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(festivalCrewStopInput)
+  }
+);}
+
+
+
+
+
+export const getCreateFestivalCrewStopMutationKey = () => ['createFestivalCrewStop'] as const;
+
+export const getCreateFestivalCrewStopMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFestivalCrewStop>>, TError,CreateFestivalCrewStopMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createFestivalCrewStop>>, TError,CreateFestivalCrewStopMutationVariables, TContext> => {
+
+const mutationKey = getCreateFestivalCrewStopMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createFestivalCrewStop>>, CreateFestivalCrewStopMutationVariables> = (props) => {
+          const {id,year,data} = props ?? {};
+
+          return  createFestivalCrewStop(id,year,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateFestivalCrewStopMutationResult = NonNullable<Awaited<ReturnType<typeof createFestivalCrewStop>>>
+    export type CreateFestivalCrewStopMutationBody = BodyType<FestivalCrewStopInput>
+    export type CreateFestivalCrewStopMutationError = ErrorType<unknown>
+    export type CreateFestivalCrewStopMutationVariables = {id: string;year: number;data: BodyType<FestivalCrewStopInput>}
+
+    export const useCreateFestivalCrewStop = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFestivalCrewStop>>, TError,CreateFestivalCrewStopMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createFestivalCrewStop>>,
+        TError,
+        CreateFestivalCrewStopMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateFestivalCrewStopMutationOptions(options));
+    }
+
+export const getUpdateFestivalCrewStopUrl = (id: string,
+    year: number,
+    stopId: string,) => {
+
+
+
+
+  return `/api/event-profiles/${id}/editions/${year}/crew-stops/${stopId}`
+}
+
+export const updateFestivalCrewStop = async (id: string,
+    year: number,
+    stopId: string,
+    festivalCrewStopInput: FestivalCrewStopInput, options?: Parameters<typeof customFetch>[1]): Promise<FestivalCrewStop> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<FestivalCrewStop>(getUpdateFestivalCrewStopUrl(id,year,stopId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(festivalCrewStopInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateFestivalCrewStopMutationKey = () => ['updateFestivalCrewStop'] as const;
+
+export const getUpdateFestivalCrewStopMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFestivalCrewStop>>, TError,UpdateFestivalCrewStopMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateFestivalCrewStop>>, TError,UpdateFestivalCrewStopMutationVariables, TContext> => {
+
+const mutationKey = getUpdateFestivalCrewStopMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateFestivalCrewStop>>, UpdateFestivalCrewStopMutationVariables> = (props) => {
+          const {id,year,stopId,data} = props ?? {};
+
+          return  updateFestivalCrewStop(id,year,stopId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateFestivalCrewStopMutationResult = NonNullable<Awaited<ReturnType<typeof updateFestivalCrewStop>>>
+    export type UpdateFestivalCrewStopMutationBody = BodyType<FestivalCrewStopInput>
+    export type UpdateFestivalCrewStopMutationError = ErrorType<unknown>
+    export type UpdateFestivalCrewStopMutationVariables = {id: string;year: number;stopId: string;data: BodyType<FestivalCrewStopInput>}
+
+    export const useUpdateFestivalCrewStop = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFestivalCrewStop>>, TError,UpdateFestivalCrewStopMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateFestivalCrewStop>>,
+        TError,
+        UpdateFestivalCrewStopMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateFestivalCrewStopMutationOptions(options));
+    }
+
+export const getRemoveFestivalCrewStopUrl = (id: string,
+    year: number,
+    stopId: string,) => {
+
+
+
+
+  return `/api/event-profiles/${id}/editions/${year}/crew-stops/${stopId}`
+}
+
+export const removeFestivalCrewStop = async (id: string,
+    year: number,
+    stopId: string,
+    festivalCrewStopRemoveInput: FestivalCrewStopRemoveInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<void>(getRemoveFestivalCrewStopUrl(id,year,stopId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(festivalCrewStopRemoveInput)
+  }
+);}
+
+
+
+
+
+export const getRemoveFestivalCrewStopMutationKey = () => ['removeFestivalCrewStop'] as const;
+
+export const getRemoveFestivalCrewStopMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeFestivalCrewStop>>, TError,RemoveFestivalCrewStopMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeFestivalCrewStop>>, TError,RemoveFestivalCrewStopMutationVariables, TContext> => {
+
+const mutationKey = getRemoveFestivalCrewStopMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeFestivalCrewStop>>, RemoveFestivalCrewStopMutationVariables> = (props) => {
+          const {id,year,stopId,data} = props ?? {};
+
+          return  removeFestivalCrewStop(id,year,stopId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveFestivalCrewStopMutationResult = NonNullable<Awaited<ReturnType<typeof removeFestivalCrewStop>>>
+    export type RemoveFestivalCrewStopMutationBody = BodyType<FestivalCrewStopRemoveInput>
+    export type RemoveFestivalCrewStopMutationError = ErrorType<unknown>
+    export type RemoveFestivalCrewStopMutationVariables = {id: string;year: number;stopId: string;data: BodyType<FestivalCrewStopRemoveInput>}
+
+    export const useRemoveFestivalCrewStop = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeFestivalCrewStop>>, TError,RemoveFestivalCrewStopMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeFestivalCrewStop>>,
+        TError,
+        RemoveFestivalCrewStopMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRemoveFestivalCrewStopMutationOptions(options));
+    }
 
 export const getPreviewFestivalNetPdfUrl = (params: PreviewFestivalNetPdfParams,) => {
   const normalizedParams = new URLSearchParams();

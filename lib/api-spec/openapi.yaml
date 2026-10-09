@@ -11,6 +11,119 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /event-profiles/{id}/editions/{year}/crew-location:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: year, in: path, required: true, schema: { type: integer, minimum: 1900, maximum: 2200 } }
+    get:
+      operationId: getFestivalCrewLocation
+      responses:
+        "200":
+          description: Saved event venue pin and crew stops for this year
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FestivalCrewLocation" }
+    put:
+      operationId: saveFestivalVenuePin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FestivalVenuePinInput" }
+      responses:
+        "200":
+          description: Confirmed event venue pin
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FestivalCrewLocation" }
+  /event-profiles/{id}/editions/{year}/crew-location/search:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: year, in: path, required: true, schema: { type: integer, minimum: 1900, maximum: 2200 } }
+    post:
+      operationId: searchFestivalVenue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FestivalVenueSearchInput" }
+      responses:
+        "200":
+          description: Unconfirmed address matches; searching does not save a pin
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [candidates]
+                properties:
+                  candidates: { type: array, items: { $ref: "#/components/schemas/FestivalVenuePin" } }
+  /event-profiles/{id}/editions/{year}/nearby/search:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: year, in: path, required: true, schema: { type: integer, minimum: 1900, maximum: 2200 } }
+    post:
+      operationId: searchFestivalNearbyStops
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FestivalNearbySearchInput" }
+      responses:
+        "200":
+          description: Unverified community place suggestions; not a complete directory
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [suggestions, searchedAt, radiusMiles]
+                properties:
+                  suggestions: { type: array, items: { $ref: "#/components/schemas/FestivalNearbySuggestion" } }
+                  searchedAt: { type: string, format: date-time }
+                  radiusMiles: { type: integer }
+  /event-profiles/{id}/editions/{year}/crew-stops:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: year, in: path, required: true, schema: { type: integer, minimum: 1900, maximum: 2200 } }
+    post:
+      operationId: createFestivalCrewStop
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FestivalCrewStopInput" }
+      responses:
+        "201":
+          description: Crew stop saved to this event year
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FestivalCrewStop" }
+  /event-profiles/{id}/editions/{year}/crew-stops/{stopId}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: year, in: path, required: true, schema: { type: integer, minimum: 1900, maximum: 2200 } }
+      - { name: stopId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      operationId: updateFestivalCrewStop
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FestivalCrewStopInput" }
+      responses:
+        "200":
+          description: Updated crew stop
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FestivalCrewStop" }
+    delete:
+      operationId: removeFestivalCrewStop
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FestivalCrewStopRemoveInput" }
+      responses:
+        "204": { description: Removed only this saved crew stop }
   /festivalnet-import/preview:
     post:
       operationId: previewFestivalNetPdf
@@ -111,6 +224,93 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
 components:
   schemas:
+    FestivalVenuePin:
+      type: object
+      required: [latitude, longitude, displayName]
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        displayName: { type: string, maxLength: 2000 }
+    FestivalVenueSearchInput:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string, minLength: 3, maxLength: 400 }
+    FestivalVenuePinInput:
+      allOf:
+        - { $ref: "#/components/schemas/FestivalVenuePin" }
+        - type: object
+          required: [expectedUpdatedAt]
+          properties:
+            expectedUpdatedAt: { type: string, format: date-time }
+    FestivalCrewLocation:
+      type: object
+      required: [venue, editionUpdatedAt, location, stops]
+      properties:
+        venue: { type: string }
+        editionUpdatedAt: { type: [string, "null"], format: date-time }
+        location:
+          oneOf:
+            - { $ref: "#/components/schemas/FestivalVenuePin" }
+            - { type: "null" }
+        stops: { type: array, items: { $ref: "#/components/schemas/FestivalCrewStop" } }
+    FestivalStopCategory:
+      type: string
+      enum: [rv_park, walmart, mechanic, tires, oil_change, hardware, bathroom, fuel]
+    FestivalCrewFact:
+      type: string
+      enum: [unknown, yes, no]
+    FestivalNearbySearchInput:
+      type: object
+      required: [radiusMiles]
+      properties:
+        radiusMiles: { type: integer, enum: [10, 25, 50] }
+    FestivalNearbySuggestion:
+      type: object
+      required: [sourceKey, name, category, address, latitude, longitude, sourceUrl, phone, website, distanceMiles]
+      properties:
+        sourceKey: { type: string }
+        name: { type: string }
+        category: { $ref: "#/components/schemas/FestivalStopCategory" }
+        address: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        sourceUrl: { type: string }
+        phone: { type: string }
+        website: { type: string }
+        distanceMiles: { type: number }
+    FestivalCrewStopInput:
+      type: object
+      required: [name, category, address, latitude, longitude, sourceKey, sourceUrl, phone, website, notes, rigFit, hookups, overnight, maxRigLengthFeet, expectedUpdatedAt]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        category: { $ref: "#/components/schemas/FestivalStopCategory" }
+        address: { type: string, maxLength: 500 }
+        latitude: { type: [number, "null"], minimum: -90, maximum: 90 }
+        longitude: { type: [number, "null"], minimum: -180, maximum: 180 }
+        sourceKey: { type: [string, "null"], maxLength: 80 }
+        sourceUrl: { type: string, maxLength: 2000 }
+        phone: { type: string, maxLength: 80 }
+        website: { type: string, maxLength: 2000 }
+        notes: { type: string, maxLength: 2000 }
+        rigFit: { $ref: "#/components/schemas/FestivalCrewFact" }
+        hookups: { $ref: "#/components/schemas/FestivalCrewFact" }
+        overnight: { $ref: "#/components/schemas/FestivalCrewFact" }
+        maxRigLengthFeet: { type: [integer, "null"], minimum: 1, maximum: 150 }
+        expectedUpdatedAt: { type: [string, "null"], format: date-time }
+    FestivalCrewStop:
+      allOf:
+        - { $ref: "#/components/schemas/FestivalCrewStopInput" }
+        - type: object
+          required: [id, updatedAt]
+          properties:
+            id: { type: string, format: uuid }
+            updatedAt: { type: string, format: date-time }
+    FestivalCrewStopRemoveInput:
+      type: object
+      required: [expectedUpdatedAt]
+      properties:
+        expectedUpdatedAt: { type: string, format: date-time }
     FestivalNetPdfFile:
       type: string
       description: Raw PDF bytes sent as application/pdf, not JSON or base64

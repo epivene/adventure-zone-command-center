@@ -22,6 +22,6 @@
 - [Boss event visibility boundary](boss-event-visibility.md) — Desie makes the initial leg assignment; Boss can then move that visible event between active legs.
 - [Daily workflow direction](daily-workflow-direction.md) — user approved one selectable queue and contextual next step for Today, leads, and booking follow-up.
 - [Festival profile direction](festival-profile-direction.md) — preserve existing CRM information; share organizer facts and keep annual festival details on each event edition.
-- [Crew nearby-place priorities](crew-nearby-places.md) — RV parks first; also track Walmart, repairs, tires, oil changes, hardware, bathrooms, and fuel.
+- [Crew nearby-place priorities](crew-nearby-places.md) — RV-first categories, annual venue pins, unverified accommodation facts, and public-provider policy boundaries.
 - [Vite offline cache boundary](vite-offline-cache-boundary.md) — imported development CSS is JavaScript; bypass production cache validation rather than weakening its MIME checks.
 - [Generated validator compatibility](openapi-zod-compatibility.md) — pin Orval output for the shared Zod 3 catalog while keeping it compatible with artifact Zod 4 aliases.

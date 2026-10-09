@@ -31,6 +31,7 @@ async function buildAll() {
       // Imported feature code uses the zod v4 API; the workspace catalog pins
       // zod 3.25.x which ships the v4 API under the "zod/v4" subpath.
       zod: "zod/v4",
+      "zod/v4": "zod/v4",
     },
     // Some packages may not be bundleable, so we externalize them, we can add more here as needed.
     // Some of the packages below may not be imported or installed, but we're adding them in case they are in the future.

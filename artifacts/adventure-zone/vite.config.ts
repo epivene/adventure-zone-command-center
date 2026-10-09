@@ -43,6 +43,7 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, 'src'),
       // Ported feature code uses the zod v4 API; workspace catalog pins zod
       // 3.25.x which exposes v4 under the "zod/v4" subpath.
+      'zod/v4': 'zod/v4',
       zod: 'zod/v4',
       '@assets': path.resolve(
         import.meta.dirname,

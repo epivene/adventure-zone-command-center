@@ -14,3 +14,9 @@ Avoid introducing DOM-only types into the shared server validator library when d
 **Why:** Orval turns `format: binary` into a `Blob` type, but the shared validator library does not include DOM type definitions.
 
 **How to apply:** For OpenAPI 3.1 raw PDF uploads, document the application/pdf body and raw-byte semantics without a DOM-only format, or explicitly resolve Node-compatible binary typing. Regenerate and run the shared-library check; do not hand-edit generated types.
+
+Bare Zod aliases must not rewrite explicit versioned imports.
+
+**Why:** Introducing drizzle-zod exposed a prefix-alias issue in both build tools: `zod/v4` became `zod/v4/v4`. Library typechecks and focused tests passed even though production builds failed.
+
+**How to apply:** Match only bare `zod`, or protect explicit versioned subpaths before the prefix alias. Verify both the frontend and API production builds when adding libraries that import Zod directly.
