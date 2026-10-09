@@ -21,12 +21,13 @@ export interface ManagerMutationStore {
 const DB_NAME = "adventure-zone-manager";
 const STORE = "mutations";
 
-function openDb(): Promise<IDBDatabase> {
+export function openManagerDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, 2);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
+      if (!db.objectStoreNames.contains("crew-snapshots")) db.createObjectStore("crew-snapshots", { keyPath: "key" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -34,7 +35,7 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 async function withStore<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore, done: (value: T) => void, fail: (error: unknown) => void) => void): Promise<T> {
-  const db = await openDb();
+  const db = await openManagerDb();
   return new Promise<T>((resolve, reject) => {
     const tx = db.transaction(STORE, mode);
     const store = tx.objectStore(STORE);

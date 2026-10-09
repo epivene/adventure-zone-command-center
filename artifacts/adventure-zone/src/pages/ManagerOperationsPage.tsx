@@ -13,6 +13,7 @@ import { useManagerAuth } from "@/lib/manager-auth-context";
 import type { ManagerDashboardResponse } from "@workspace/api-zod";
 import { Link } from "wouter";
 import type { YearEndInspectionDto } from "@/lib/year-end-inspections-api";
+import { listCrewSnapshots, type CrewSnapshot } from "@/lib/manager-crew-cache";
 
 export default function ManagerOperationsPage() {
   const { managerApi, manager } = useManagerAuth();
@@ -23,15 +24,36 @@ export default function ManagerOperationsPage() {
   const map = useManagerScopedMap();
   const operationsClient = useMemo(() => createOperationsReadClient(managerApi, 'manager'), [managerApi]);
   const [selectedBooking, setSelectedBooking] = useState(() => new URLSearchParams(window.location.search).get('bookingId') ?? '');
+  const [offline, setOffline] = useState(!navigator.onLine);
+  const [savedCrew, setSavedCrew] = useState<{ legId: string; rows: CrewSnapshot[] } | null>(null);
+  useEffect(() => {
+    let active = true;
+    const legId = manager?.legId;
+    const refresh = () => {
+      setOffline(!navigator.onLine);
+      if (legId) void listCrewSnapshots(legId).then(rows => {
+        if (active) setSavedCrew({ legId, rows });
+      }).catch(() => { if (active) setSavedCrew(null); });
+    };
+    setSavedCrew(null);
+    refresh();
+    window.addEventListener("online", refresh);
+    window.addEventListener("offline", refresh);
+    window.addEventListener("manager-crew-cache-changed", refresh);
+    return () => { active = false; window.removeEventListener("online", refresh); window.removeEventListener("offline", refresh); window.removeEventListener("manager-crew-cache-changed", refresh); };
+  }, [manager?.legId]);
   const assignedEvents = map.data?.events ?? [];
+  const cachedEvents = savedCrew?.legId === manager?.legId ? savedCrew?.rows ?? [] : [];
+  const offlineChoices = (offline || (!map.data && map.error)) ? cachedEvents : [];
   const bookingId = assignedEvents.some(event => event.bookingId === selectedBooking) ? selectedBooking : null;
+  const crewBookingId = bookingId ?? (offlineChoices.some(row => row.data.bookingId === selectedBooking) ? selectedBooking : null);
 
   useEffect(() => {
     managerApi<ManagerDashboardResponse>("/manager/dashboard").then(async (data) => {
       setDashboard(data);
       const tripId = data.route?.trip?.id ?? data.trips?.[0]?.id;
       if (tripId) setRollup(await managerApi(`/manager/operations/segments?tripId=${tripId}`));
-    });
+    }).catch(() => undefined);
   }, [managerApi]);
 
   useEffect(() => {
@@ -61,19 +83,21 @@ export default function ManagerOperationsPage() {
       <ApprovalQueue role="manager"/>
       {manager ? <details className="rounded-xl border p-3"><summary className="font-semibold">Season staffing &amp; base</summary><label className="grid gap-1 mt-2">Staffing season<input type="number" min="1900" max="9998" value={planningSeason} onChange={e=>setPlanningSeason(Number(e.target.value))}/></label><LegSeasonEditor key={`${manager.legId}:${planningSeason}`} legId={manager.legId} seasonYear={planningSeason} role="manager"/></details> : null}
       {map.error ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{map.error}</p> : null}
-      {assignedEvents.length > 0 ? <section className="grid gap-3" aria-label="Assigned event operations">
+      {assignedEvents.length > 0 || offlineChoices.length > 0 ? <section className="grid gap-3" aria-label="Assigned event operations">
+        {offlineChoices.length ? <p role="alert" className="rounded-md border border-border bg-muted p-3 text-sm">Offline / stale event list. Only previously loaded crew travel is available; reconnect to check assignments.</p> : null}
         <label className="text-sm font-semibold">Assigned event
-          <select className="mt-1 block w-full rounded border bg-white p-2" value={bookingId ?? ''} onChange={event => setSelectedBooking(event.target.value)}>
+          <select className="mt-1 block w-full rounded border bg-white p-2" value={crewBookingId ?? ''} onChange={event => setSelectedBooking(event.target.value)}>
             <option value="">Choose an assigned event</option>
             {assignedEvents.map(event => <option key={event.bookingId} value={event.bookingId}>{event.bookingName}</option>)}
+            {offlineChoices.filter(row => !assignedEvents.some(event => event.bookingId === row.data.bookingId)).map(row => <option key={row.key} value={row.data.bookingId}>{row.data.crewLocation?.venue || "Saved crew travel"} · {row.data.year ?? "No season"} (saved copy)</option>)}
           </select>
         </label>
-        {bookingId ? <BookingLegOperationsCard bookingId={bookingId} client={operationsClient} role="manager" /> : null}
-        {bookingId ? <ManagerCrewTravelCard key={bookingId} bookingId={bookingId} /> : null}
+        {bookingId && !offline ? <BookingLegOperationsCard bookingId={bookingId} client={operationsClient} role="manager" /> : null}
+        {crewBookingId ? <ManagerCrewTravelCard key={`${manager?.legId}:${crewBookingId}`} bookingId={crewBookingId} /> : null}
       </section> : null}
-      {map.data ? (
+      {map.data && !offline ? (
         <ManagerScopedMap data={map.data} variant="operations" mode="on-road" />
-      ) : map.loading ? <p className="text-sm text-slate-500">Loading map…</p> : null}
+      ) : !offline && map.loading ? <p className="text-sm text-slate-500">Loading map…</p> : null}
 
       {rollup ? (
         <section className="rounded-xl border bg-white p-4">

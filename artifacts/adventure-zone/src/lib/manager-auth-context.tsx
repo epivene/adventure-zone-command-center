@@ -2,8 +2,22 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { clearManagerPrivateData } from "./manager-sync-queue";
 import { clearManagerBlobData } from "./manager-blob-queue";
 import { clearManagerAssistantCache } from "@/features/manager-assistant/manager-assistant-offline-cache";
+import { activateCrewCache, clearCrewCache, pruneCrewAssignments } from "./manager-crew-cache";
 
 const KEY = "az_manager_token";
+const IDENTITY_KEY = "az_manager_offline_leg";
+function offlineIdentity(): ManagerIdentity | null {
+  try {
+    const leg = JSON.parse(localStorage.getItem(IDENTITY_KEY) ?? "null");
+    return leg && typeof leg.legId === "string" && typeof leg.legName === "string" ? { legId: leg.legId, legName: leg.legName, managerName: null } : null;
+  } catch { return null; }
+}
+function saveIdentity(manager: ManagerIdentity | null) {
+  try {
+    if (manager) localStorage.setItem(IDENTITY_KEY, JSON.stringify({ legId: manager.legId, legName: manager.legName }));
+    else localStorage.removeItem(IDENTITY_KEY);
+  } catch { /* Storage may be disabled. */ }
+}
 const base = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 const root = base ? `${base}/api` : `${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/api`;
 
@@ -22,17 +36,22 @@ async function raw(path: string, options: RequestInit = {}, bearer = token()) {
 export function ManagerAuthProvider({ children }: { children: ReactNode }) {
   const [manager, setManager] = useState<ManagerIdentity | null>(null);
   const managerRef = useRef<ManagerIdentity | null>(null);
+  const authGeneration = useRef(0);
   const [loading, setLoading] = useState(!!token());
   useEffect(() => { managerRef.current = manager; }, [manager]);
 
   const clearCurrentSession = useCallback(() => {
-    const current = managerRef.current;
+    authGeneration.current++;
+    const current = managerRef.current ?? offlineIdentity();
     save(null);
+    saveIdentity(null);
+    managerRef.current = null;
     setManager(null);
     if (current) {
       void clearManagerPrivateData(current.legId);
       void clearManagerBlobData(current.legId);
       void clearManagerAssistantCache(current.legId);
+      void clearCrewCache(current.legId).catch(() => undefined);
     }
   }, []);
 
@@ -53,21 +72,48 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
   }, [clearCurrentSession]);
 
   useEffect(() => {
-    const bootstrapToken = token();
-    if (!bootstrapToken) { setLoading(false); return; }
-    raw("/manager/auth/me", {}, bootstrapToken)
+    const refresh = () => {
+      const generation = ++authGeneration.current;
+      const bootstrapToken = token();
+      if (!bootstrapToken) { setLoading(false); return; }
+      raw("/manager/auth/me", {}, bootstrapToken)
       .then(async (res) => {
         if (!res.ok) throw Object.assign(new Error("Manager session expired"), { status: res.status });
         return res.json() as Promise<{ manager: ManagerIdentity }>;
       })
       .then((response) => {
-        if (token() === bootstrapToken) setManager(response.manager);
+        if (token() !== bootstrapToken || generation !== authGeneration.current) return;
+        const previous = managerRef.current ?? offlineIdentity();
+        if (previous && previous.legId !== response.manager.legId) void clearCrewCache(previous.legId).catch(() => undefined);
+        managerRef.current = response.manager;
+        saveIdentity(response.manager);
+        setManager(response.manager);
+        // Recheck assignment scope even if the operations screen is not mounted.
+        void managerApi<{ events: { bookingId: string }[] }>("/manager/map")
+          .then(data => {
+            if (token() === bootstrapToken && generation === authGeneration.current) return pruneCrewAssignments(response.manager.legId, data.events.map(e => e.bookingId));
+            return undefined;
+          }).catch((error: unknown) => {
+            const status = typeof error === "object" && error && "status" in error ? Number(error.status) : null;
+            if (token() === bootstrapToken && generation === authGeneration.current && (status === 403 || status === 404)) void clearCrewCache(response.manager.legId).catch(() => undefined);
+          });
       })
-      .catch(() => {
-        if (token() === bootstrapToken) clearCurrentSession();
+      .catch((error: unknown) => {
+        if (token() !== bootstrapToken || generation !== authGeneration.current) return;
+        const status = typeof error === "object" && error && "status" in error ? Number(error.status) : null;
+        if (status == null && (error instanceof TypeError || !navigator.onLine)) {
+          const cached = offlineIdentity();
+          managerRef.current = cached;
+          setManager(cached);
+        } else clearCurrentSession();
       })
-      .finally(() => setLoading(false));
-  }, [clearCurrentSession]);
+      .finally(() => { if (generation === authGeneration.current || !token()) setLoading(false); });
+    };
+    refresh();
+    window.addEventListener("online", refresh);
+    window.addEventListener("focus", refresh);
+    return () => { authGeneration.current++; window.removeEventListener("online", refresh); window.removeEventListener("focus", refresh); };
+  }, [clearCurrentSession, managerApi]);
 
   const signIn = useCallback(async (legId: string, password: string) => {
     const res = await raw("/manager/auth/login", { method: "POST", body: JSON.stringify({ legId, password }) }, null);
@@ -76,13 +122,18 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
       throw Object.assign(new Error(payload.error ?? "Could not sign in"), { status: res.status });
     }
     const data = await res.json() as { token: string; manager: ManagerIdentity };
-    const previous = managerRef.current;
+    const previous = managerRef.current ?? offlineIdentity();
     if (previous && previous.legId !== data.manager.legId) {
       void clearManagerPrivateData(previous.legId);
       void clearManagerBlobData(previous.legId);
       void clearManagerAssistantCache(previous.legId);
+      void clearCrewCache(previous.legId).catch(() => undefined);
     }
     save(data.token);
+    authGeneration.current++;
+    activateCrewCache(data.manager.legId);
+    saveIdentity(data.manager);
+    managerRef.current = data.manager;
     setManager(data.manager);
     setLoading(false);
   }, []);
@@ -94,7 +145,18 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
       throw Object.assign(new Error(payload.error ?? "Demo sign-in is unavailable"), { status: res.status });
     }
     const data = await res.json() as { token: string; manager: ManagerIdentity };
+    const previous = managerRef.current ?? offlineIdentity();
+    if (previous && previous.legId !== data.manager.legId) {
+      void clearManagerPrivateData(previous.legId);
+      void clearManagerBlobData(previous.legId);
+      void clearManagerAssistantCache(previous.legId);
+      void clearCrewCache(previous.legId).catch(() => undefined);
+    }
     save(data.token);
+    authGeneration.current++;
+    activateCrewCache(data.manager.legId);
+    saveIdentity(data.manager);
+    managerRef.current = data.manager;
     setManager(data.manager);
     setLoading(false);
   }, []);

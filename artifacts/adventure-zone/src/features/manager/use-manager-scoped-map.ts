@@ -3,6 +3,7 @@ import { useBookingOperationsRevision } from '@/features/bookings/booking-operat
 import { managerScopedMapResponseSchema, type ManagerScopedMapResponse } from "@workspace/api-zod";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import type { ManagerScopedMapData } from "./manager-map-types";
+import { clearCrewCache, pruneCrewAssignments } from "@/lib/manager-crew-cache";
 
 type WireData = ManagerScopedMapResponse;
 
@@ -19,7 +20,8 @@ function normalize(data: WireData): ManagerScopedMapData {
 }
 
 export function useManagerScopedMap() {
-  const { managerApi } = useManagerAuth();
+  const { managerApi, manager } = useManagerAuth();
+  const legId = manager?.legId;
   const [data, setData] = useState<ManagerScopedMapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,14 +36,28 @@ export function useManagerScopedMap() {
       const payload = managerScopedMapResponseSchema.parse(await managerApi<unknown>("/manager/map"));
       if (generation !== readGeneration.current) return;
       setData(normalize(payload));
+      if (legId) void pruneCrewAssignments(legId, payload.events.map(e => e.bookingId)).catch(() => undefined);
     } catch (e) {
-      if (generation === readGeneration.current) setError(e instanceof Error ? e.message : "Could not load manager map");
+      if (generation === readGeneration.current) {
+        setError(e instanceof Error ? e.message : "Could not load manager map");
+        const status = typeof e === "object" && e && "status" in e ? Number(e.status) : null;
+        if (status === 401 || status === 403 || status === 404) {
+          setData(null);
+          if (legId) void clearCrewCache(legId).catch(() => undefined);
+        }
+      }
     } finally {
       if (generation === readGeneration.current) setLoading(false);
     }
-  }, [managerApi]);
+  }, [managerApi, legId]);
 
-  useEffect(() => { void reload(); return () => { readGeneration.current++; }; }, [reload, revision]);
+  useEffect(() => {
+    setData(null);
+    void reload();
+    window.addEventListener("online", reload);
+    window.addEventListener("focus", reload);
+    return () => { readGeneration.current++; window.removeEventListener("online", reload); window.removeEventListener("focus", reload); };
+  }, [reload, revision]);
 
   return { data, loading, error, reload };
 }

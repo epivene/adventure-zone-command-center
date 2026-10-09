@@ -1,4 +1,4 @@
-import type { FestivalCrewLocation, FestivalCrewStop, FestivalCrewStopInput, FestivalNearbySuggestion, FestivalStopCategory, FestivalVenuePin, SearchFestivalNearbyStops200, SearchFestivalVenue200, ManagerFestivalCrewLocation } from "@workspace/api-client-react";
+import type { FestivalCrewLocation, FestivalCrewStop, FestivalCrewStopInput, FestivalNearbySuggestion, FestivalStopCategory, FestivalVenuePin, SearchFestivalNearbyStops200, SearchFestivalVenue200, ManagerFestivalCrewLocation } from "@workspace/api-zod";
 import { apiFetch } from "@/lib/auth-token";
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {

@@ -26,3 +26,4 @@
 - [Vite offline cache boundary](vite-offline-cache-boundary.md) — imported development CSS is JavaScript; bypass production cache validation rather than weakening its MIME checks.
 - [Generated validator compatibility](openapi-zod-compatibility.md) — pin Orval output for the shared Zod 3 catalog while keeping it compatible with artifact Zod 4 aliases.
 - [FestivalNet batch retries](festivalnet-batch-retries.md) — lost save responses may resolve exact source identities, never fuzzy names; completed rows stay out of retries.
+- [Manager crew offline authorization](manager-crew-offline-boundary.md) — cache only saved logistics; connectivity fallback never overrides denial or revocation.
