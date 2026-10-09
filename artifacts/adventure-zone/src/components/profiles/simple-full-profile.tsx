@@ -543,7 +543,7 @@ export function SimpleFullProfile({
                 Call
               </CallLink>
             ) : null}
-            <ProfileWorkspaceActions readOnly={boss} emailCount={boss ? emailConversations.length : undefined} onFollowUp={onFollowUp ?? (() => navigate(`/profiles/${profile.id}?action=follow-up`))} onOpenEmails={() => setOpenSection("emails")} onAddNote={openNoteComposer} onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))} />
+            <ProfileWorkspaceActions readOnly={boss} emailCount={boss ? emailConversations.length : undefined} onFollowUp={onFollowUp ?? (() => navigate(`/profiles/${profile.id}?action=follow-up`))} onOpenEmails={() => setOpenSection("emails")} onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))} />
           </div>
         </div>
 

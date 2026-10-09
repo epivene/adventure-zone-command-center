@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 const googleWorkspace = vi.hoisted(() => ({
@@ -112,12 +113,13 @@ describe("SimpleFullProfile Gmail history", () => {
   });
 
   it("gives live Gmail its own summary box and expandable section", async () => {
+    const user = userEvent.setup();
     render(<SimpleFullProfile profile={profile} />);
 
     await waitFor(() => expect(googleWorkspace.getGoogleProfileEmails).toHaveBeenCalledWith(profile.id));
-    expect(screen.getByRole("button", { name: "Open emails" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Open emails" }));
+    await user.click(screen.getByRole("menuitem", { name: "Open emails" }));
     expect(screen.getByTestId("profile-google-email-panel")).toHaveTextContent(
       "Gmail history for 11111111-1111-4111-8111-111111111111",
     );
@@ -125,9 +127,11 @@ describe("SimpleFullProfile Gmail history", () => {
 
   it("keeps notes and Gmail in separate expandable sections", async () => {
     render(<SimpleFullProfile profile={profile} />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Open emails" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "More actions" })).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    fireEvent.click(
+      within(screen.getByRole("navigation", { name: "Profile sections" })).getByRole("button", { name: "History" }),
+    );
     expect(screen.getByRole("heading", { name: "Activity history" })).toBeInTheDocument();
     expect(screen.getByTestId("activity-timeline")).toBeInTheDocument();
     expect(screen.queryByTestId("profile-google-email-panel")).not.toBeInTheDocument();
