@@ -50,6 +50,21 @@ describe("latest profile email", () => {
     await screen.findByText("A short preview");
     expect(latestEmail).toHaveTextContent("To: Office <office@example.org>");
   });
+  it("uses the authorized Boss thread reader and returns to the Boss Emails section", async () => {
+    const bossThread = vi.fn(async () => ({
+      id: "boss-thread", subject: "Boss-only conversation", originalGmailUrl: "",
+      messages: [{
+        id: "boss-message", internalDateMs: Date.parse("2026-10-08"), from: "Organizer",
+        to: "Staff", cc: "", subject: "Boss-only conversation", date: "2026-10-08",
+        direction: "incoming" as const, bodyText: "Read-only preview", attachments: [],
+      }],
+    }));
+    render(<ProfileLatestEmail profileId="profile-1" gmail={state([email("boss-thread", "2026-10-08")])} compact
+      getThread={bossThread} openEmailHref={() => "/boss/profiles/profile-1?section=emails"} />);
+    expect(await screen.findByText("Read-only preview")).toBeInTheDocument();
+    expect(bossThread).toHaveBeenCalledWith("profile-1", "boss-thread");
+    expect(screen.getByRole("link", { name: "Open email" })).toHaveAttribute("href", "/boss/profiles/profile-1?section=emails");
+  });
   it("clearly distinguishes loading, no linked email, and a failed email lookup", () => {
     const { rerender } = render(<ProfileLatestEmail profileId="profile-1" gmail={state([], { loading: true })} />);
     expect(screen.getByRole("status")).toHaveTextContent("Loading the latest");

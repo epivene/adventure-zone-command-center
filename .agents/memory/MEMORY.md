@@ -28,3 +28,4 @@
 - [FestivalNet batch retries](festivalnet-batch-retries.md) — lost save responses may resolve exact source identities, never fuzzy names; completed rows stay out of retries.
 - [Manager crew offline authorization](manager-crew-offline-boundary.md) — cache only saved logistics; connectivity fallback never overrides denial or revocation.
 - [Browser offline emulation](browser-offline-emulation.md) — SW navigation can reset reported connectivity; prove disconnection with traffic counters, not navigator.onLine alone.
+- [Profile email access by role](profile-email-access.md) — Office uses its own drafts; Boss reads approved conversations through its read-only email routes.

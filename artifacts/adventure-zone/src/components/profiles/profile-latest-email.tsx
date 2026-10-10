@@ -3,14 +3,18 @@ import { Link } from "wouter";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/avz-crm/components/ui/card";
 import type { ProfileGoogleEmailState } from "@/components/google-workspace/use-profile-google-email";
-import { getGoogleProfileEmailThread, type GoogleThreadMessage } from "@/features/google-workspace/google-workspace-client";
+import { getGoogleProfileEmailThread, type GoogleThreadDetail, type GoogleThreadMessage } from "@/features/google-workspace/google-workspace-client";
 import { emailTime, formatEmailDate, newestEmails } from "@/features/emails/email-presentation";
 import { htmlToPlainText } from "./history-summary";
 
-export function ProfileLatestEmail({ profileId, gmail, compact = false }: {
+type ProfileEmailThreadReader = (organizationId: string, threadId: string) => Promise<Pick<GoogleThreadDetail, "messages">>;
+
+export function ProfileLatestEmail({ profileId, gmail, compact = false, getThread, openEmailHref }: {
   profileId: string;
   gmail: ProfileGoogleEmailState;
   compact?: boolean;
+  getThread?: ProfileEmailThreadReader;
+  openEmailHref?: (threadId: string | null) => string;
 }) {
   const latest = newestEmails(gmail.conversations)[0];
   const key = latest ? `${profileId}:${latest.threadId}:${emailTime(latest)}` : "";
@@ -18,7 +22,7 @@ export function ProfileLatestEmail({ profileId, gmail, compact = false }: {
   useEffect(() => {
     let active = true;
     if (latest) {
-      void getGoogleProfileEmailThread(profileId, latest.threadId)
+      void (getThread ?? getGoogleProfileEmailThread)(profileId, latest.threadId)
         .then(thread => {
           if (active) setPreview({ key, message: newestEmails(thread.messages)[0] ?? null, error: null });
         })
@@ -27,7 +31,7 @@ export function ProfileLatestEmail({ profileId, gmail, compact = false }: {
         });
     }
     return () => { active = false; };
-  }, [profileId, key]);
+  }, [profileId, key, getThread]);
 
   useEffect(() => {
     const refresh = () => { if (!document.hidden) void gmail.reload(); };
@@ -41,6 +45,7 @@ export function ProfileLatestEmail({ profileId, gmail, compact = false }: {
   const body = message?.bodyText?.trim() || htmlToPlainText(message?.bodyHtml ?? "").trim();
   const params = new URLSearchParams({ profileId });
   if (latest) params.set("threadId", latest.threadId);
+  const emailHref = openEmailHref?.(latest?.threadId ?? null) ?? `/emails?${params}`;
   const content = gmail.loading ? <p role="status" className="text-sm text-muted-foreground">Loading the latest profile email…</p>
     : gmail.error ? <div className="grid gap-2">
       <p role="alert" className="text-sm text-destructive">{gmail.error}</p>
@@ -67,7 +72,7 @@ export function ProfileLatestEmail({ profileId, gmail, compact = false }: {
           {latest ? <p className="mt-1 text-xs text-muted-foreground">{formatEmailDate(message ?? latest)}</p> : null}
         </div>
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/emails?${params}`}>{latest ? "Open email" : "Open Emails"}</Link>
+          <Link data-testid="link-open-profile-email" href={emailHref}>{latest ? "Open email" : "Open Emails"}</Link>
         </Button>
       </div>
       {content}
@@ -81,7 +86,7 @@ export function ProfileLatestEmail({ profileId, gmail, compact = false }: {
         {latest ? <p className="mt-1 text-xs text-muted-foreground">{formatEmailDate(message ?? latest)}</p> : null}
       </div>
       <Button variant="outline" size="sm" asChild>
-        <Link href={`/emails?${params}`}>{latest ? "Open email" : "Open Emails"}</Link>
+        <Link data-testid="link-open-profile-email" href={emailHref}>{latest ? "Open email" : "Open Emails"}</Link>
       </Button>
     </CardHeader>
     <CardContent className="grid gap-3">{content}</CardContent>

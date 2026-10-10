@@ -7,6 +7,7 @@ import { useProfileGoogleEmail, type ProfileGoogleEmailState } from "@/component
 import { ProfileWorkspaceActions } from "./profile-workspace-actions";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { ProfileLatestNote } from "./profile-latest-note";
+import { ProfileLatestEmail } from "./profile-latest-email";
 import { useSearch, useLocation } from "wouter";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
@@ -596,7 +597,16 @@ export function SimpleFullProfile({
         </div>
         </details>
       </section>
-      <ProfileLatestNote key={profile.id} profileId={profile.id} contactId={primaryContact?.id} notes={profile.notes} onSaved={onProfileSaved} readOnly={boss} />
+      <ProfileLatestNote key={profile.id} profileId={profile.id} contactId={primaryContact?.id} notes={profile.notes} onSaved={onProfileSaved} readOnly={boss}
+        relatedActivity={<ProfileLatestEmail
+          key={`latest-email-${profile.id}`}
+          profileId={profile.id}
+          gmail={gmail}
+          compact
+          getThread={boss ? getBossThread : undefined}
+          openEmailHref={boss ? () => `/boss/profiles/${encodeURIComponent(profile.id)}?section=emails` : undefined}
+        />}
+      />
       </> : <div className="flex justify-end">
         <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id} showAddNote={false} onEdit={() => setEditing(true)}
           callHref={callHref} onOpenEmails={() => setOpenSection("emails")} onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))} />
