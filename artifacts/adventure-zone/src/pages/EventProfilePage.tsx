@@ -313,9 +313,7 @@ export default function EventProfilePage() {
         ) : null}
 
         </> : null}
-        <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <summary className="cursor-pointer font-semibold text-slate-800">More profile tools</summary>
-          <div className="mt-3">
+          <div className="profile-modern">
             <EventProfileWorkspace
               showHeader={false}
               profile={data}
@@ -329,7 +327,6 @@ export default function EventProfilePage() {
               onOrganizationChanged={() => void loadProfile()}
             />
           </div>
-         </details>
         </FestivalProfileWorkspace>
     </ProfilePageFrame>
   );

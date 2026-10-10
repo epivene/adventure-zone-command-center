@@ -41,6 +41,15 @@ describe("latest profile email", () => {
     expect(restored).toMatchObject({ threadId: "thread/123", profiles: [{ id: "profile & one" }] });
     await screen.findByText(/No text preview available/);
   });
+  it("shows the latest email as a compact row with a direct conversation link", async () => {
+    mocks.thread.mockResolvedValue({ messages: [{ subject: "Subject latest", to: "Office <office@example.org>", bodyText: "A short preview" }] });
+    render(<ProfileLatestEmail profileId="profile-1" gmail={state([email("latest", "2026-10-08")])} compact />);
+    const latestEmail = screen.getByTestId("profile-latest-email");
+    expect(latestEmail).toHaveTextContent("Latest email");
+    expect(screen.getByRole("link", { name: "Open email" })).toHaveAttribute("href", "/emails?profileId=profile-1&threadId=latest");
+    await screen.findByText("A short preview");
+    expect(latestEmail).toHaveTextContent("To: Office <office@example.org>");
+  });
   it("clearly distinguishes loading, no linked email, and a failed email lookup", () => {
     const { rerender } = render(<ProfileLatestEmail profileId="profile-1" gmail={state([], { loading: true })} />);
     expect(screen.getByRole("status")).toHaveTextContent("Loading the latest");

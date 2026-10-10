@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/avz-crm/components/ui/card";
 import { Label } from "@workspace/avz-crm/components/ui/label";
@@ -8,12 +8,13 @@ import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 import { latestProfileNote, profileNoteTime, type DatedProfileNote } from "./latest-profile-note";
 import { htmlToPlainText } from "./history-summary";
 
-export function ProfileLatestNote({ profileId, contactId, notes, onSaved, readOnly = false }: {
+export function ProfileLatestNote({ profileId, contactId, notes, onSaved, readOnly = false, relatedActivity }: {
   profileId: string;
   contactId?: string | null;
   notes: DatedProfileNote[];
   onSaved?(): Promise<void> | void;
   readOnly?: boolean;
+  relatedActivity?: ReactNode;
 }) {
   const [optimistic, setOptimistic] = useState<DatedProfileNote | null>(null);
   const [composing, setComposing] = useState(false);
@@ -69,6 +70,7 @@ export function ProfileLatestNote({ profileId, contactId, notes, onSaved, readOn
       </div> : null}
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
       {saved ? <p role="status" className="text-sm text-muted-foreground">Note saved.</p> : null}
+      {relatedActivity ? <div className="border-t border-border pt-4" data-testid="profile-note-related-activity">{relatedActivity}</div> : null}
     </CardContent>
   </Card>;
 }

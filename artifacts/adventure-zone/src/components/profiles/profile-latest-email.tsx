@@ -7,9 +7,10 @@ import { getGoogleProfileEmailThread, type GoogleThreadMessage } from "@/feature
 import { emailTime, formatEmailDate, newestEmails } from "@/features/emails/email-presentation";
 import { htmlToPlainText } from "./history-summary";
 
-export function ProfileLatestEmail({ profileId, gmail }: {
+export function ProfileLatestEmail({ profileId, gmail, compact = false }: {
   profileId: string;
   gmail: ProfileGoogleEmailState;
+  compact?: boolean;
 }) {
   const latest = newestEmails(gmail.conversations)[0];
   const key = latest ? `${profileId}:${latest.threadId}:${emailTime(latest)}` : "";
@@ -40,6 +41,39 @@ export function ProfileLatestEmail({ profileId, gmail }: {
   const body = message?.bodyText?.trim() || htmlToPlainText(message?.bodyHtml ?? "").trim();
   const params = new URLSearchParams({ profileId });
   if (latest) params.set("threadId", latest.threadId);
+  const content = gmail.loading ? <p role="status" className="text-sm text-muted-foreground">Loading the latest profile email…</p>
+    : gmail.error ? <div className="grid gap-2">
+      <p role="alert" className="text-sm text-destructive">{gmail.error}</p>
+      <Button variant="outline" size="sm" className="w-fit" onClick={() => void gmail.reload()}>Retry emails</Button>
+    </div>
+    : !latest ? <p className="text-sm text-muted-foreground">No linked profile emails yet. Notes and emails remain available under Activity.</p>
+    : <>
+      <p className="break-words font-semibold">{message?.subject || latest.subject || "(No subject)"}</p>
+      <div className="grid gap-1 break-all text-xs text-muted-foreground">
+        <p>From: {message?.from || latest.from || "Unknown sender"}</p>
+        <p>To: {message?.to || latest.to || "Unknown recipient"}</p>
+      </div>
+      {!currentPreview ? <p role="status" className="text-sm text-muted-foreground">Loading email preview…</p>
+        : currentPreview.error ? <p role="alert" className="text-sm text-destructive">{currentPreview.error}</p>
+        : <p className={`whitespace-pre-line break-words text-sm leading-7 ${compact ? "line-clamp-2" : "line-clamp-4"}`}>{body || "No text preview available. Open email to read the full conversation."}</p>}
+      {latest.hasAttachments ? <p className="text-xs text-muted-foreground">Includes attachments</p> : null}
+    </>;
+
+  if (compact) {
+    return <section className="grid gap-3" data-testid="profile-latest-email" aria-label="Latest profile email">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Latest email</p>
+          {latest ? <p className="mt-1 text-xs text-muted-foreground">{formatEmailDate(message ?? latest)}</p> : null}
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/emails?${params}`}>{latest ? "Open email" : "Open Emails"}</Link>
+        </Button>
+      </div>
+      {content}
+    </section>;
+  }
+
   return <Card className="min-w-0" data-testid="profile-latest-email">
     <CardHeader className="flex-row flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
@@ -50,24 +84,6 @@ export function ProfileLatestEmail({ profileId, gmail }: {
         <Link href={`/emails?${params}`}>{latest ? "Open email" : "Open Emails"}</Link>
       </Button>
     </CardHeader>
-    <CardContent className="grid gap-3">
-      {gmail.loading ? <p role="status" className="text-sm text-muted-foreground">Loading the latest profile email…</p>
-        : gmail.error ? <div className="grid gap-2">
-          <p role="alert" className="text-sm text-destructive">{gmail.error}</p>
-          <Button variant="outline" size="sm" className="w-fit" onClick={() => void gmail.reload()}>Retry emails</Button>
-        </div>
-        : !latest ? <p className="text-sm text-muted-foreground">No linked profile emails yet. Notes and emails remain available under Activity.</p>
-        : <>
-          <p className="break-words font-semibold">{message?.subject || latest.subject || "(No subject)"}</p>
-          <div className="grid gap-1 break-all text-xs text-muted-foreground">
-            <p>From: {message?.from || latest.from || "Unknown sender"}</p>
-            <p>To: {message?.to || latest.to || "Unknown recipient"}</p>
-          </div>
-          {!currentPreview ? <p role="status" className="text-sm text-muted-foreground">Loading email preview…</p>
-            : currentPreview.error ? <p role="alert" className="text-sm text-destructive">{currentPreview.error}</p>
-            : <p className="line-clamp-4 whitespace-pre-line break-words text-sm leading-7">{body || "No text preview available. Open email to read the full conversation."}</p>}
-          {latest.hasAttachments ? <p className="text-xs text-muted-foreground">Includes attachments</p> : null}
-        </>}
-    </CardContent>
+    <CardContent className="grid gap-3">{content}</CardContent>
   </Card>;
 }

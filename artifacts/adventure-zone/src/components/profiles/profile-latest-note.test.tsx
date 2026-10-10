@@ -25,6 +25,13 @@ describe("front-and-center profile note", () => {
       note("dated", "2026-01-01"),
     ])?.id).toBe("dated");
   });
+  it("keeps the related email link inside the front-and-center latest-note card", () => {
+    render(<ProfileLatestNote profileId="profile-1" notes={[note("latest", "2026-08-01", "Recent organizer update")]}
+      relatedActivity={<a href="/emails?profileId=profile-1&threadId=thread-1">Open latest email</a>} />);
+    const card = screen.getByTestId("profile-latest-note");
+    expect(card).toHaveTextContent("Recent organizer update");
+    expect(card).toContainElement(screen.getByRole("link", { name: "Open latest email" }));
+  });
   it("shows a saved note immediately and refreshes the existing profile", async () => {
     create.mockResolvedValue({ ok: true, activity: note("saved", "2026-10-08", "Newest saved note") });
     const refresh = vi.fn();

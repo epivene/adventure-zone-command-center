@@ -4,12 +4,14 @@ import { describe, expect, it } from "vitest";
 const page = readFileSync("src/pages/EventProfilePage.tsx", "utf8");
 const simple = readFileSync("src/components/profiles/simple-full-profile.tsx", "utf8");
 const actions = readFileSync("src/components/profiles/profile-actions-menu.tsx", "utf8");
+const workspace = readFileSync("src/components/profiles/festival-profile-workspace.tsx", "utf8");
 
 describe("modern CRM full profile", () => {
-  it("uses the CRM profile surface before advanced tools", () => {
+  it("groups advanced tools under the existing profile disclosure", () => {
     expect(page).toContain("<SimpleFullProfile");
-    expect(page).toContain("More profile tools");
-    expect(page.indexOf("<SimpleFullProfile")).toBeLessThan(page.indexOf("More profile tools"));
+    expect(page).toContain("<EventProfileWorkspace");
+    expect(page).not.toContain("More profile tools");
+    expect(workspace).toContain("Activity, records &amp; profile tools");
   });
 
   it("uses the approved CRM header and controls", () => {
