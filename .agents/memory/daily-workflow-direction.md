@@ -14,3 +14,9 @@ Keep frequent destinations, especially Profiles, visibly discoverable rather tha
 **Why:** The user said Profiles was difficult to find and reported that clicking other pages still showed Today in the whole-CRM preview.
 
 **How to apply:** Reduce duplicate navigation without removing the primary navigation. Demonstrate actual screen transitions for the modeled routes; clearly identify any destination not yet modeled.
+
+The user approved the revision with visible primary navigation and working screen changes (“that looks great”), but asked for a route map on Schedule and whether the redesign also covers Boss.
+
+**Why:** Schedule needs geographic route context, and approval of a shared preview must not be presented as a change to the live Boss screen.
+
+**How to apply:** Include route-map access in Schedule and Boss assignment workflows. Clearly distinguish schematic demo maps from accurate geographic routes and design previews from live implementation.

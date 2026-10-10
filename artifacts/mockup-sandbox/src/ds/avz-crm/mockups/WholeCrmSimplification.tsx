@@ -42,6 +42,7 @@ import {
   ScheduleScreen,
   type CrmWorkItem,
 } from "./WholeCrmRouteScreens";
+import { ScheduleRouteMap } from "./ScheduleRouteMap";
 
 type Destination = { label: string; href: string };
 type DestinationGroup = { label: string; items: Destination[] };
@@ -273,10 +274,13 @@ function screenLabel(screen: Screen) {
 }
 
 export function WholeCrmSimplification() {
+  const previewScreen: Screen = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("screen") === "schedule"
+    ? "schedule"
+    : "today";
   const [activeId, setActiveId] = useState(workItems[0]!.id);
-  const [activeRoute, setActiveRoute] = useState("/today");
+  const [activeRoute, setActiveRoute] = useState(previewScreen === "schedule" ? "/schedule" : "/today");
   const [workspace, setWorkspace] = useState("Booking");
-  const [screen, setScreen] = useState<Screen>("today");
+  const [screen, setScreen] = useState<Screen>(previewScreen);
   const [destinationLabel, setDestinationLabel] = useState("");
   const [backTarget, setBackTarget] = useState<BackTarget>({ screen: "today", route: "/today", label: "Today" });
   const [selectedLegs, setSelectedLegs] = useState<Record<string, string>>(() =>
@@ -456,6 +460,9 @@ export function WholeCrmSimplification() {
                 <SelectContent>{legs.map((leg) => <SelectItem key={leg} value={leg}>{leg}</SelectItem>)}</SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">Current: {selectedLeg || "No saved assignment"} · preview choice does not reassign a live booking leg.</p>
+              <Button className="w-fit" onClick={() => navigate({ href: "/schedule", label: "Schedule" })} size="sm" variant="link">
+                <MapPinned className="mr-1 h-4 w-4" />View route map
+              </Button>
             </div>
           </section>
 
@@ -565,7 +572,10 @@ export function WholeCrmSimplification() {
   ) : screen === "email-thread" ? (
     <EmailThreadScreen item={activeWork} onBack={() => { setScreen("emails"); setActiveRoute("/emails"); }} onOpenProfile={() => openProfile(activeId)} />
   ) : screen === "schedule" ? (
-    <ScheduleScreen assignedLegs={selectedLegs} onOpenProfile={openProfile} workItems={workItems} />
+    <div className="grid gap-4">
+      <ScheduleRouteMap assignedLegs={selectedLegs} workItems={workItems} />
+      <ScheduleScreen assignedLegs={selectedLegs} onOpenProfile={openProfile} workItems={workItems} />
+    </div>
   ) : screen === "documents" ? (
     <DemoDocuments workItems={workItems} />
   ) : (
