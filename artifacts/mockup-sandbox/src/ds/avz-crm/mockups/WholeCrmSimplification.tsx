@@ -616,12 +616,12 @@ export function WholeCrmSimplification() {
           </div>
           <div className="flex items-center gap-2 border-t border-border pt-2">
             <CrmPrimaryNavigation activeRoute={activeRoute} onNavigate={navigate} />
-            <Badge className="mb-2 hidden shrink-0 sm:inline-flex" variant="outline">Local preview</Badge>
+            <Badge className="mb-2 hidden shrink-0 sm:inline-flex" variant="outline">Preview only · no live sends or saves</Badge>
           </div>
         </div>
       </header>
       <main className="mx-auto min-h-dvh max-w-7xl px-3 py-4 pb-8 sm:px-6 sm:py-6">
-        <div className="mb-4 sm:hidden"><Badge variant="outline">Local preview · no live saves or sends</Badge></div>
+        <div className="mb-4 sm:hidden"><Badge variant="outline">Preview only · no live sends or saves</Badge></div>
         {screenBody}
       </main>
     </div>
