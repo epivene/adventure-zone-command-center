@@ -8,6 +8,13 @@ The app reads `RENDER_DATABASE_URL` (Replit Secret) first, falling back to the R
 
 **Why:** Replit runtime manages `DATABASE_URL` and it cannot be overridden via setEnvVars/requestSecrets. A separate `RENDER_DATABASE_URL` secret sidesteps this while keeping dev and prod portable.
 
+## Application hosting boundary
+The user confirmed that their working CRM is hosted separately on Render. The Replit development workspace does not establish whether the deployed Render app's email connection is configured.
+
+**Why:** The user identified Render as the app they normally use, while Google Workspace settings were absent from this Replit environment.
+
+**How to apply:** Verify email against the actual Render app and its authorized runtime only after identifying its URL; never infer production email health from this workspace's environment.
+
 ## Schema state
 Render DB schema is fully applied. The `organization_contacts_organization_contact_unique` constraint already existed on the Render DB before this task — drizzle-kit push was not strictly required but was confirmed via psql.
 
