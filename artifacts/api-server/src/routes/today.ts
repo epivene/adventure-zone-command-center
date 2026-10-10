@@ -36,6 +36,17 @@ const router: IRouter = Router();
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ONE_YEAR_MS = 366 * 24 * 60 * 60 * 1000;
+const leadStatuses = new Set([
+  "new_lead",
+  "researching",
+  "contact_due",
+  "contacted",
+  "interested",
+  "possible",
+  "unlikely",
+  "quote_sent",
+  "pending_decision",
+]);
 
 type TodayCallablePhone = {
   id: string;
@@ -152,7 +163,7 @@ router.get("/today", async (req, res): Promise<void> => {
             booking.id,
           );
           if (
-            booking.status === "new_lead" &&
+            leadStatuses.has(booking.status) &&
             (!decision ||
               (!decision.suggestedLegId && decision.source === "needs_review"))
           ) {

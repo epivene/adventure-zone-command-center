@@ -20,6 +20,8 @@ import { apiGet } from "@/lib/auth-token";
 import type { LegAssignmentView } from "@/components/bookings/leg-assignment-panel";
 import { LeadLegControls } from "./lead-leg-controls";
 
+const OPEN_LEAD_STATUSES = new Set(["new_lead", "researching", "contact_due", "contacted", "interested", "possible", "unlikely", "quote_sent", "pending_decision"]);
+
 function dueLabel(work: DailyWork) {
   if (!work.dueAt) return "Needs a next step";
   const date = new Date(work.dueAt);
@@ -68,6 +70,7 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
   const validSelected = selected.filter(id => decisions.some(decision => decision.id === id));
   const loadedLeg = bookingLeg?.bookingId === work?.bookingId ? bookingLeg : null;
   const assignment = loadedLeg?.assignment ?? work?.decision?.legAssignment;
+  const canCorrectLeg = !!work?.decision && OPEN_LEAD_STATUSES.has(work.decision.status);
   useEffect(() => {
     let cancelled = false;
     setLegError(false);
@@ -140,6 +143,21 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
         {work ? <>
           <CardHeader><CardTitle>{work.name}</CardTitle><p className="text-sm text-muted-foreground">{[work.location, leadDate(work), work.kind].filter(Boolean).join(" · ")}</p></CardHeader>
           <CardContent className="grid gap-4">
+            {work.bookingId ? <section aria-label="Leg assignment" className="grid gap-3 rounded-lg border border-border p-4">
+              <p className="font-semibold">{canCorrectLeg ? "Suggested leg" : "Leg assignment"}</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><p className="text-xs font-semibold uppercase text-muted-foreground">Recommendation</p><p className="font-semibold">{assignment?.suggestedLegId ? legName(assignment.suggestedLegId) : "No safe suggestion"}</p></div>
+                <div><p className="text-xs font-semibold uppercase text-muted-foreground">Current assignment</p><p className="font-semibold">{assignment ? legName(assignment.assignedLegId) : "Unassigned"}</p></div>
+              </div>
+              {assignment ? <p className="text-sm text-muted-foreground">{assignment.explanation} · {assignment.confidence} confidence</p> : <p className="text-sm text-muted-foreground">{canCorrectLeg ? (legError ? "Could not load a recommendation. You can still choose an active leg, or review the booking." : "No leg recommendation is available yet. You can still choose an active leg.") : (legError ? "Could not load the saved assignment. Open the booking to review it." : "Open the booking to review its saved assignment.")}</p>}
+              {assignment?.warning ? <Badge variant="secondary">{assignment.warning === "major_travel_concern" ? "Major travel concern" : "Long travel"}</Badge> : null}
+              {canCorrectLeg
+                ? <LeadLegControls key={work.bookingId} bookingId={work.bookingId} assignment={assignment ?? null} legs={loadedLeg?.legs ?? travelLegs} onBusyChange={setLegBusy} onSaved={async saved => {
+                    setBookingLeg({ bookingId: work.bookingId!, assignment: saved, legs: loadedLeg?.legs ?? travelLegs });
+                    await onChanged();
+                  }} /> : null}
+              <Button asChild variant="outline" size="sm"><Link onClick={remember} href={`/bookings/${work.bookingId}/edit`}>Review assignment</Link></Button>
+            </section> : null}
             <div className="grid gap-3 rounded-lg border border-border bg-muted p-4">
               <p className="font-semibold">Follow-up path</p>
               <p className="text-sm text-muted-foreground">{work.reason}</p>
@@ -167,21 +185,6 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
                 onDelete={async id => { const result = await deleteFollowUpAction(id); if (result.ok) await onChanged(); return result; }}
               /> : null}
             </div>
-            {work.bookingId ? <section aria-label="Leg assignment" className="grid gap-3 rounded-lg border border-border p-4">
-              <p className="font-semibold">Leg assignment</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div><p className="text-xs font-semibold uppercase text-muted-foreground">Suggested leg</p><p className="font-semibold">{assignment?.suggestedLegId ? legName(assignment.suggestedLegId) : "No suggestion loaded"}</p></div>
-                <div><p className="text-xs font-semibold uppercase text-muted-foreground">Saved assignment</p><p className="font-semibold">{assignment ? legName(assignment.assignedLegId) : work.followUp?.operations?.leg?.name ?? "Check booking profile"}</p></div>
-              </div>
-              {assignment ? <p className="text-sm text-muted-foreground">{assignment.explanation} · {assignment.confidence} confidence</p> : <p className="text-sm text-muted-foreground">{legError ? "Could not load the recommendation. Open the booking to review its assignment." : "Open the booking to review dates, location, and route recommendations."}</p>}
-              {assignment?.warning ? <Badge variant="secondary">{assignment.warning === "major_travel_concern" ? "Major travel concern" : "Long travel"}</Badge> : null}
-              {assignment && work.decision && ["new_lead", "researching", "contact_due", "contacted", "interested", "possible", "unlikely", "quote_sent", "pending_decision"].includes(work.decision.status)
-                ? <LeadLegControls key={work.bookingId} bookingId={work.bookingId} assignment={assignment} legs={loadedLeg?.legs ?? travelLegs} onBusyChange={setLegBusy} onSaved={async saved => {
-                    setBookingLeg({ bookingId: work.bookingId!, assignment: saved, legs: loadedLeg?.legs ?? travelLegs });
-                    await onChanged();
-                  }} /> : null}
-              <Button asChild variant="outline" size="sm"><Link onClick={remember} href={`/bookings/${work.bookingId}/edit`}>Review assignment</Link></Button>
-            </section> : null}
           </CardContent>
         </> : <CardContent><p className="text-sm text-muted-foreground">Select waiting or scheduled work, or enjoy a clear queue.</p></CardContent>}
       </Card>

@@ -1,13 +1,18 @@
 import express from "express";
 import request from "supertest";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const contactId = "20000000-0000-4000-8000-000000000001";
+const state = vi.hoisted(() => ({
+  dashboard: null as any,
+  savedDecisions: new Map<string, any>(),
+  suggestedIds: [] as string[],
+}));
 
 vi.mock("@workspace/db", () => ({ db: {} }));
 vi.mock("@/features/follow-ups/today-query", () => ({
   TODAY_UPCOMING_EVENT_LIMIT: 5,
-  getTodayDashboard: vi.fn(async () => ({
+  getTodayDashboard: vi.fn(async () => state.dashboard ?? ({
     followUps: [
       {
         id: "40000000-0000-4000-8000-000000000001",
@@ -71,10 +76,29 @@ vi.mock("@/features/routes/travel-leg-repository", () => ({
   },
 }));
 vi.mock("@/features/leg-assignment/leg-assignment-repository", () => ({
-  LegAssignmentRepository: class {},
+  LegAssignmentRepository: class {
+    loadPersistedDecision(bookingId: string) {
+      return Promise.resolve(state.savedDecisions.get(bookingId) ?? null);
+    }
+  },
 }));
 vi.mock("@/features/leg-assignment/leg-assignment-service", () => ({
-  LegAssignmentService: class {},
+  LegAssignmentService: class {
+    async suggest(bookingId: string) {
+      state.suggestedIds.push(bookingId);
+      const decision = {
+        bookingId,
+        assignedLegId: null,
+        suggestedLegId: "60000000-0000-4000-8000-000000000001",
+        source: "route_score",
+        explanation: "Balanced workload and route fit.",
+        warning: null,
+        confidence: "medium",
+      };
+      state.savedDecisions.set(bookingId, decision);
+      return decision;
+    }
+  },
 }));
 vi.mock("@/features/leg-assignment/drive-time-estimator", () => ({
   RouteDriveTimeEstimator: class {},
@@ -103,6 +127,12 @@ vi.mock("@/features/office/office-owner-attention", () => ({
 
 import todayRouter from "./today";
 
+beforeEach(() => {
+  state.dashboard = null;
+  state.savedDecisions.clear();
+  state.suggestedIds.length = 0;
+});
+
 describe("Today callable phone enrichment", () => {
   it("loads a phone for a profile-linked task whose kind is a descriptive label", async () => {
     const app = express();
@@ -117,5 +147,42 @@ describe("Today callable phone enrichment", () => {
       extension: null,
       type: "office",
     });
+  });
+
+  it("loads missing suggestions for every open lead stage but preserves existing manual assignments", async () => {
+    const newLeadId = "30000000-0000-4000-8000-000000000001";
+    const researchedLeadId = "30000000-0000-4000-8000-000000000002";
+    const assignedLeadId = "30000000-0000-4000-8000-000000000003";
+    const manualDecision = {
+      bookingId: assignedLeadId,
+      assignedLegId: "60000000-0000-4000-8000-000000000002",
+      suggestedLegId: "60000000-0000-4000-8000-000000000002",
+      source: "manual",
+      explanation: "Assigned manually",
+      warning: null,
+      confidence: "high",
+    };
+    state.savedDecisions.set(assignedLeadId, manualDecision);
+    state.dashboard = {
+      followUps: [],
+      nextCall: null,
+      needsFollowUpPlan: [
+        { id: newLeadId, status: "new_lead", contactId: null },
+        { id: researchedLeadId, status: "researching", contactId: null },
+        { id: assignedLeadId, status: "contacted", contactId: null },
+      ],
+    };
+
+    const app = express();
+    app.use("/api", todayRouter);
+    const response = await request(app).get("/api/today");
+
+    expect(response.status).toBe(200);
+    expect(state.suggestedIds).toEqual([newLeadId, researchedLeadId]);
+    expect(response.body.needsFollowUpPlan.map((item: any) => item.legAssignment)).toEqual([
+      expect.objectContaining({ suggestedLegId: "60000000-0000-4000-8000-000000000001" }),
+      expect.objectContaining({ suggestedLegId: "60000000-0000-4000-8000-000000000001" }),
+      manualDecision,
+    ]);
   });
 });
