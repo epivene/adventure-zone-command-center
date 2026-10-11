@@ -43,6 +43,9 @@ export class LegAssignmentService {
 
   async evaluate(bookingId: string, options: { allowAutomaticAssignment?: boolean } = {}): Promise<LegAssignmentDecision> {
     const allowAutomaticAssignment = options.allowAutomaticAssignment !== false;
+    const persisted = await this.repository.loadPersistedDecision(bookingId);
+    if (persisted?.source === "manual") return persisted;
+
     const target = await this.repository.loadTarget(bookingId);
     if (!target) {
       const decision = needsLegAssignmentDecision({
@@ -53,8 +56,6 @@ export class LegAssignmentService {
       return decision;
     }
 
-    const persisted = await this.repository.loadPersistedDecision(bookingId);
-    if (target.travelLegId && persisted?.source === "manual") return persisted;
     if (target.travelLegId && !persisted) {
       const decision: LegAssignmentDecision = {
         bookingId,

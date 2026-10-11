@@ -123,5 +123,59 @@ describe("LegAssignmentService", () => {
     const decision = await new LegAssignmentService(repo.fake, estimator({})).evaluate("booking");
     expect(decision).toEqual(manual);
     expect(repo.assigned).toHaveLength(0);
+    expect(repo.saved).toHaveLength(0);
+  });
+
+  it("preserves the manual decision when event details become incomplete", async () => {
+    const manual: LegAssignmentDecision = {
+      bookingId: "booking",
+      assignedLegId: "leg-hulk",
+      suggestedLegId: "leg-hulk",
+      source: "manual",
+      explanation: "Assigned manually",
+      warning: null,
+      previousStopDriveMinutes: null,
+      nextStopDriveMinutes: null,
+      confidence: "high",
+    };
+    const repo = store({ target: null, persisted: manual });
+
+    const decision = await new LegAssignmentService(repo.fake, estimator({})).evaluate("booking");
+
+    expect(decision).toEqual(manual);
+    expect(repo.assigned).toHaveLength(0);
+    expect(repo.saved).toHaveLength(0);
+  });
+
+  it("refreshes an existing automatic assignment from updated route evidence", async () => {
+    const previousAutomatic: LegAssignmentDecision = {
+      bookingId: "booking",
+      assignedLegId: "leg-kristy",
+      suggestedLegId: "leg-kristy",
+      source: "route_score",
+      explanation: "Previous route suggestion",
+      warning: null,
+      previousStopDriveMinutes: 240,
+      nextStopDriveMinutes: null,
+      confidence: "high",
+    };
+    const repo = store({
+      target: { ...target, travelLegId: "leg-kristy" },
+      persisted: previousAutomatic,
+      contexts: [
+        candidate({
+          legId: "leg-hulk",
+          legName: "Hulk",
+          previousStop: { ...stop("hulk"), latitude: 45 },
+        }),
+      ],
+    });
+
+    const decision = await new LegAssignmentService(repo.fake, estimator({ 45: 60 })).evaluate("booking");
+
+    expect(decision.source).toBe("route_score");
+    expect(decision.assignedLegId).toBe("leg-hulk");
+    expect(repo.assigned).toEqual([{ bookingId: "booking", legId: "leg-hulk" }]);
+    expect(repo.saved).toEqual([decision]);
   });
 });

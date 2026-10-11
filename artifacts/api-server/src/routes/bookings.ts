@@ -49,6 +49,35 @@ function legAssignmentService() {
   );
 }
 
+type BookingRouteDetails = {
+  startsAt: Date | null;
+  endsAt: Date | null;
+  venueName: string | null;
+  address1: string | null;
+  city: string;
+  region: string;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+function bookingRouteDetailsChanged(before: BookingRouteDetails, after: BookingRouteDetails) {
+  const locationFields = [
+    "venueName",
+    "address1",
+    "city",
+    "region",
+    "postalCode",
+    "latitude",
+    "longitude",
+  ] as const;
+  return (
+    before.startsAt?.getTime() !== after.startsAt?.getTime() ||
+    before.endsAt?.getTime() !== after.endsAt?.getTime() ||
+    locationFields.some((field) => before[field] !== after[field])
+  );
+}
+
 async function evaluateQualifiedBooking(bookingId: string, status: string) {
   if (!isQualifiedPotentialStatus(status)) return;
   await legAssignmentService().evaluate(bookingId);
@@ -278,6 +307,7 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
     if (!before) { res.status(404).json({ ok: false, error: "Not found" }); return; }
     await repo.updateBookingDetails(id, parsed.data as any);
 
+    const routeDetailsChanged = bookingRouteDetailsChanged(before.booking, parsed.data);
     const previousLegId = before.booking.travelLegId;
     const nextLegId = parsed.data.travelLegId ?? null;
     if (previousLegId !== nextLegId && nextLegId) {
@@ -295,6 +325,11 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
       isQualifiedPotentialStatus(parsed.data.status)
     ) {
       await evaluateQualifiedBooking(id, parsed.data.status);
+    } else if (
+      routeDetailsChanged &&
+      isQualifiedPotentialStatus(parsed.data.status)
+    ) {
+      await legAssignmentService().evaluate(id);
     }
     res.json({ ok: true });
   } catch (err) {
