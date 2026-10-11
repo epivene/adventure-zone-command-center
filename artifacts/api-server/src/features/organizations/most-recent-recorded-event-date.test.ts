@@ -10,7 +10,11 @@ describe("resolveMostRecentRecordedEventDate", () => {
         { details: { startsOn: "2025-06-10", endsOn: "2025-06-12" } },
         { details: { startsOn: "2026-06-10", endsOn: "2026-06-12" } },
       ],
-    })).toEqual({ startsOn: "2026-06-10", endsOn: "2026-06-12" });
+    })).toEqual({
+      startsOn: "2026-06-10",
+      endsOn: "2026-06-12",
+      source: "festival_edition",
+    });
   });
 
   it("chooses the latest date across bookings, active facts, and edition records", () => {
@@ -18,7 +22,11 @@ describe("resolveMostRecentRecordedEventDate", () => {
       bookings: [{ id: "booking-1", startsOn: "2026-07-10", endsOn: null, status: "confirmed" }],
       facts: [{ id: "fact-1", startsOn: "2026-08-10", endsOn: null, status: "expected", active: true }],
       editions: [{ details: { startsOn: "2026-09-10", endsOn: null } }],
-    })).toEqual({ startsOn: "2026-09-10", endsOn: null });
+    })).toEqual({
+      startsOn: "2026-09-10",
+      endsOn: null,
+      source: "festival_edition",
+    });
   });
 
   it("ignores cancelled bookings, inactive or review-only facts, and invalid dates", () => {

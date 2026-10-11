@@ -172,7 +172,18 @@ router.get("/organizations/export", async (req, res): Promise<void> => {
       nextDate: dateValue(record.effectiveEventDate?.startsOn ?? null),
       nextEventStatus: record.effectiveEventDate
         ? labels[record.effectiveEventDate.displayStatus] ?? record.effectiveEventDate.displayStatus
-        : "Date not found",
+        : record.latestRecordedEventDate
+          ? "No upcoming date; latest recorded date below"
+          : "Date not found",
+      latestRecordedEventDate: dateValue(record.latestRecordedEventDate?.startsOn ?? null),
+      latestRecordedEventEndDate: dateValue(record.latestRecordedEventDate?.endsOn ?? null),
+      latestRecordedEventSource: record.latestRecordedEventDate
+        ? ({
+            booking: "Booking",
+            event_date_fact: "CRM event-date fact",
+            festival_edition: "Festival edition",
+          }[record.latestRecordedEventDate.source] ?? "")
+        : "",
       deadline: dateValue(record.applicationDeadline),
       status: labels[record.decisionStatus] ?? record.decisionStatus,
       recommendedDealModel: record.recommendedDealModel ? labels[record.recommendedDealModel] : "",

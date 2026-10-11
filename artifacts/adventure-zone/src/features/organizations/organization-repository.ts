@@ -34,6 +34,7 @@ export type OrganizationListRecord = {
   latestRecordedEventDate?: {
     startsOn: string;
     endsOn: string | null;
+    source: "booking" | "event_date_fact" | "festival_edition";
   } | null;
   applicationDeadline?: string | null;
   pipelineStatus?: string | null;

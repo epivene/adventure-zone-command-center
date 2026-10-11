@@ -89,7 +89,7 @@ describe("OrganizationList profile summary cards", () => {
                 profileImageDataUrl: "data:image/png;base64,aA==",
                 ratingAverage: 4.5,
                 ratingCount: 2,
-                latestRecordedEventDate: { startsOn: "2025-07-16", endsOn: null },
+                latestRecordedEventDate: { startsOn: "2025-07-16", endsOn: null, source: "festival_edition" },
                 applicationDeadline: "2026-10-01",
                 pipelineStatus: "contacted",
                 decisionStatus: "contacted",
