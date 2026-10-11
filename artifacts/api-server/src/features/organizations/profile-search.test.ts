@@ -10,6 +10,7 @@ import * as profileSearch from "./profile-search";
 
 const routeSource = readFileSync("src/routes/organization-forgiving-search.ts", "utf8");
 const indexSource = readFileSync("src/routes/index.ts", "utf8");
+const organizationRepositorySource = readFileSync("src/features/organizations/organization-repository.ts", "utf8");
 
 describe("forgiving profile search", () => {
   it("normalizes capitalization, punctuation, and whitespace into useful terms", () => {
@@ -69,6 +70,14 @@ describe("forgiving profile search", () => {
     expect(indexSource).toContain('import organizationForgivingSearchRouter from "./organization-forgiving-search"');
     expect(indexSource.indexOf("router.use(organizationForgivingSearchRouter)")).toBeLessThan(
       indexSource.indexOf("router.use(organizationsRouter)"),
+    );
+  });
+
+  it("preserves latest recorded event dates in the forgiving-search result path", () => {
+    expect(routeSource).toContain("new DrizzleOrganizationRepository(db).listOrganizations");
+    expect(organizationRepositorySource).toContain(".from(festivalEditions)");
+    expect(organizationRepositorySource).toContain(
+      "latestRecordedEventDate: resolveMostRecentRecordedEventDate",
     );
   });
 });

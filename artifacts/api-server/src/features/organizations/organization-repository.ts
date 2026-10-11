@@ -21,6 +21,7 @@ import {
   callSessions,
   contacts,
   eventDateFacts,
+  festivalEditions,
   followUps,
   organizationContacts,
   organizationFamilyReviews,
@@ -31,6 +32,8 @@ import {
 } from "@/db/schema";
 import { resolveEffectiveEventDate } from "@/features/event-date-coverage/effective-event-date";
 import type { EffectiveEventDate } from "@/features/event-date-coverage/event-date-types";
+import { resolveMostRecentRecordedEventDate } from "@/features/organizations/most-recent-recorded-event-date";
+import type { MostRecentRecordedEventDate } from "@/features/organizations/most-recent-recorded-event-date";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import { bookingStatusValues } from "@/features/bookings/booking-types";
 import { isActiveStatus } from "@/features/follow-ups/follow-up-policy";
@@ -142,6 +145,7 @@ export type OrganizationListRecord = Omit<
   matchedLocation: MatchedOrganizationLocation | null;
   parentContext: ProfileParentContext;
   effectiveEventDate: EffectiveEventDate | null;
+  latestRecordedEventDate: MostRecentRecordedEventDate | null;
 };
 
 export type OrganizationListPage = {
@@ -956,6 +960,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       matchedLocationRows,
       dateBookings,
       activeDateFacts,
+      dateEditions,
     ] = await Promise.all([
       this.database
         .select({
@@ -1054,6 +1059,13 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           inArray(eventDateFacts.organizationId, organizationIds),
           eq(eventDateFacts.active, true),
         )),
+      this.database
+        .select({
+          organizationId: festivalEditions.organizationId,
+          details: festivalEditions.details,
+        })
+        .from(festivalEditions)
+        .where(inArray(festivalEditions.organizationId, organizationIds)),
     ]);
     const contactCountByOrganization = new Map(
       contactCounts.map((record) => [record.organizationId, record.value]),
@@ -1084,6 +1096,12 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       const rows = factsByOrganization.get(fact.organizationId) ?? [];
       rows.push(fact);
       factsByOrganization.set(fact.organizationId, rows);
+    }
+    const editionsByOrganization = new Map<string, typeof dateEditions>();
+    for (const edition of dateEditions) {
+      const rows = editionsByOrganization.get(edition.organizationId) ?? [];
+      rows.push(edition);
+      editionsByOrganization.set(edition.organizationId, rows);
     }
     const today = new Date().toISOString().slice(0, 10);
     // Take the first matched location per organization (ORDER BY is not guaranteed, but any one is fine).
@@ -1131,6 +1149,22 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
             status: fact.status,
             active: fact.active,
           })),
+        }),
+        latestRecordedEventDate: resolveMostRecentRecordedEventDate({
+          bookings: (bookingsByOrganization.get(organization.id) ?? []).map((booking) => ({
+            id: booking.id,
+            startsOn: booking.startsAt?.toISOString().slice(0, 10) ?? null,
+            endsOn: booking.endsAt?.toISOString().slice(0, 10) ?? null,
+            status: booking.status,
+          })),
+          facts: (factsByOrganization.get(organization.id) ?? []).map((fact) => ({
+            id: fact.id,
+            startsOn: fact.startsOn,
+            endsOn: fact.endsOn,
+            status: fact.status,
+            active: fact.active,
+          })),
+          editions: editionsByOrganization.get(organization.id) ?? [],
         }),
       })),
       total,
