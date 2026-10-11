@@ -637,9 +637,9 @@ export function OrganizationList({
                               : "No deal recommendation"}
                           </strong>
                           <span className="text-right text-muted-foreground">
-                            {organization.effectiveEventDate
-                              ? `${readableAction(organization.effectiveEventDate.displayStatus)} ${formatDate(organization.effectiveEventDate.startsOn, "")}${organization.effectiveEventDate.endsOn ? `–${formatDate(organization.effectiveEventDate.endsOn, "")}` : ""}`
-                              : "Date not found"}
+                            {organization.latestRecordedEventDate
+                              ? `Latest event ${formatDate(organization.latestRecordedEventDate.startsOn, "")}${organization.latestRecordedEventDate.endsOn ? `–${formatDate(organization.latestRecordedEventDate.endsOn, "")}` : ""}`
+                              : "No event date recorded"}
                           </span>
                         </span>
                         <span className="mt-2.5 flex items-start gap-2 text-xs font-bold text-[#a63f35]">

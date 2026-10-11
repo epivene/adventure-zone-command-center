@@ -31,6 +31,10 @@ export type OrganizationListRecord = {
     displayStatus: "booked" | "confirmed" | "expected";
     sourceId: string;
   } | null;
+  latestRecordedEventDate?: {
+    startsOn: string;
+    endsOn: string | null;
+  } | null;
   applicationDeadline?: string | null;
   pipelineStatus?: string | null;
   priority?: string | null;

@@ -7,12 +7,14 @@ import {
   eventFamilyMembers,
   followUps,
   eventDateFacts,
+  festivalEditions,
   organizationContacts,
   organizationLocations,
   organizations,
 } from "../../db/schema";
 import { resolveEffectiveEventDate } from "../event-date-coverage/effective-event-date";
 import type { EffectiveEventDate } from "../event-date-coverage/event-date-types";
+import { resolveMostRecentRecordedEventDate } from "./most-recent-recorded-event-date";
 import type { OrganizationListQuery } from "./last-resort-input";
 
 type MatchedOrganizationLocation = {
@@ -54,6 +56,7 @@ type OrganizationListPage = {
     primaryContactEmail: string | null;
     primaryContactPhone: string | null;
     effectiveEventDate: EffectiveEventDate | null;
+    latestRecordedEventDate: ReturnType<typeof resolveMostRecentRecordedEventDate>;
     nextEventDate: Date | null;
     applicationDeadline: string | null;
     pipelineStatus: string | null;
@@ -420,10 +423,12 @@ export async function listOrganizationDirectoryPage(
     where o.id in (${idList})
   `);
 
-  const [dateBookings, dateFacts] = await Promise.all([
+  const [dateBookings, dateFacts, dateEditions] = await Promise.all([
     db.select({ id: bookings.id, organizationId: bookings.organizationId, startsAt: bookings.startsAt, endsAt: bookings.endsAt, status: bookings.status })
       .from(bookings).where(inArray(bookings.organizationId, organizationIds)),
     db.select().from(eventDateFacts).where(and(inArray(eventDateFacts.organizationId, organizationIds), eq(eventDateFacts.active, true))),
+    db.select({ organizationId: festivalEditions.organizationId, details: festivalEditions.details })
+      .from(festivalEditions).where(inArray(festivalEditions.organizationId, organizationIds)),
   ]);
   const today = new Date().toISOString().slice(0, 10);
   const contactCountByOrganization = new Map(contactCounts.map((record) => [record.organizationId, record.value]));
@@ -482,6 +487,14 @@ export async function listOrganizationDirectoryPage(
             endsOn: booking.endsAt?.toISOString().slice(0, 10) ?? null, status: booking.status,
           })),
           facts: dateFacts.filter((fact) => fact.organizationId === organization.id),
+        }),
+        latestRecordedEventDate: resolveMostRecentRecordedEventDate({
+          bookings: dateBookings.filter((booking) => booking.organizationId === organization.id).map((booking) => ({
+            id: booking.id, startsOn: booking.startsAt?.toISOString().slice(0, 10) ?? null,
+            endsOn: booking.endsAt?.toISOString().slice(0, 10) ?? null, status: booking.status,
+          })),
+          facts: dateFacts.filter((fact) => fact.organizationId === organization.id),
+          editions: dateEditions.filter((edition) => edition.organizationId === organization.id),
         }),
         nextEventDate: decision?.nextEventDate ?? null,
         applicationDeadline: decision?.applicationDeadline ?? null,

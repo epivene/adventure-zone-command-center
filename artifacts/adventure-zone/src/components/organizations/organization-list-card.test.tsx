@@ -89,7 +89,7 @@ describe("OrganizationList profile summary cards", () => {
                 profileImageDataUrl: "data:image/png;base64,aA==",
                 ratingAverage: 4.5,
                 ratingCount: 2,
-                effectiveEventDate: { startsOn: "2027-07-16", endsOn: null, displayStatus: "booked", sourceId: "booking-1" },
+                latestRecordedEventDate: { startsOn: "2025-07-16", endsOn: null },
                 applicationDeadline: "2026-10-01",
                 pipelineStatus: "contacted",
                 decisionStatus: "contacted",
@@ -116,7 +116,7 @@ describe("OrganizationList profile summary cards", () => {
     ).toBeVisible();
     expect(screen.getByText("Breckenridge, CO")).toBeVisible();
     expect(screen.queryByText("other")).not.toBeInTheDocument();
-    expect(screen.getByText("Booked Jul 16, 2027")).toBeVisible();
+    expect(screen.getByText("Latest event Jul 16, 2025")).toBeVisible();
     expect(screen.getByText("Contacted")).toBeVisible();
     expect(screen.getByText("Flat fee")).toBeVisible();
     expect(screen.getByText(/Email.*Due Sep 18/)).toBeVisible();
