@@ -15,6 +15,19 @@ export type EvaluatedCandidate = AssignmentCandidateContext & {
   routeDriveMinutes: number | null;
 };
 
+export type LegAssignmentAlternative = {
+  legId: string;
+  legName: string;
+  confirmedEventCount: number;
+  priorYearMatch: boolean;
+  eligible: boolean;
+  previousStopDriveMinutes: number | null;
+  nextStopDriveMinutes: number | null;
+  routeDriveMinutes: number | null;
+  warning: LegAssignmentDecision["warning"];
+  reason: string;
+};
+
 function routeDriveMinutes(result: FeasibilityResult) {
   const values = [result.previousDriveMinutes, result.nextDriveMinutes].filter(
     (value): value is number => value !== null,
@@ -187,6 +200,37 @@ export class LegAssignmentService {
     if (decision.assignedLegId) await this.repository.assignLeg(bookingId, decision.assignedLegId);
     await this.repository.saveDecision(decision);
     return decision;
+  }
+
+  async compareAlternatives(bookingId: string): Promise<LegAssignmentAlternative[]> {
+    const target = await this.repository.loadTarget(bookingId);
+    if (!target) return [];
+
+    const contexts = await this.repository.loadCandidateContexts(bookingId);
+    const evaluated = await Promise.all(contexts.map(async (context) => {
+      const feasibility = await evaluateLegFeasibility({
+        target,
+        previousStop: context.previousStop,
+        nextStop: context.nextStop,
+        estimator: this.estimator,
+      });
+      const hasSurroundingStops = context.previousStop !== null || context.nextStop !== null;
+      return {
+        legId: context.legId,
+        legName: context.legName,
+        confirmedEventCount: context.confirmedEventCount,
+        priorYearMatch: context.priorYearMatch,
+        eligible: feasibility.eligible && hasSurroundingStops,
+        previousStopDriveMinutes: feasibility.previousDriveMinutes,
+        nextStopDriveMinutes: feasibility.nextDriveMinutes,
+        routeDriveMinutes: routeDriveMinutes(feasibility),
+        warning: feasibility.warning,
+        reason: hasSurroundingStops
+          ? feasibility.reason
+          : "No surrounding confirmed stops; travel and setup fit cannot be compared.",
+      };
+    }));
+    return evaluated;
   }
 
   async suggest(bookingId: string): Promise<LegAssignmentDecision> {

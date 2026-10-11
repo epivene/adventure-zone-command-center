@@ -17,7 +17,7 @@ import { clearTodayReturnContext, readTodayReturnContext, saveTodayReturnContext
 import { callWorkspaceHref, eventProfileHref } from "./next-call-card";
 import { DailyFollowUpForm } from "./daily-follow-up-form";
 import { apiGet } from "@/lib/auth-token";
-import type { LegAssignmentView } from "@/components/bookings/leg-assignment-panel";
+import type { LegAssignmentAlternativeView, LegAssignmentView } from "@/components/bookings/leg-assignment-panel";
 import { LeadLegControls } from "./lead-leg-controls";
 
 const OPEN_LEAD_STATUSES = new Set(["new_lead", "researching", "contact_due", "contacted", "interested", "possible", "unlikely", "quote_sent", "pending_decision"]);
@@ -49,7 +49,7 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
   const [formOpen, setFormOpen] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
   const [visibleCount, setVisibleCount] = useState(8);
-  const [bookingLeg, setBookingLeg] = useState<{ bookingId: string; assignment: LegAssignmentView | null; legs: { id: string; name: string }[] } | null>(null);
+  const [bookingLeg, setBookingLeg] = useState<{ bookingId: string; assignment: LegAssignmentView | null; alternatives: LegAssignmentAlternativeView[]; legs: { id: string; name: string; archivedAt?: unknown }[] } | null>(null);
   const [legError, setLegError] = useState(false);
   const [legBusy, setLegBusy] = useState(false);
   const restored = useRef(false);
@@ -76,8 +76,8 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
     setLegError(false);
     if (!work?.bookingId) return;
     const bookingId = work.bookingId;
-    apiGet<{ legAssignment: LegAssignmentView | null; allTravelLegs: { id: string; name: string }[] }>(`/bookings/${bookingId}`)
-      .then(detail => { if (!cancelled) setBookingLeg({ bookingId, assignment: detail.legAssignment, legs: detail.allTravelLegs ?? [] }); })
+    apiGet<{ legAssignment: LegAssignmentView | null; legAlternatives?: LegAssignmentAlternativeView[]; allTravelLegs: { id: string; name: string; archivedAt?: unknown }[] }>(`/bookings/${bookingId}`)
+      .then(detail => { if (!cancelled) setBookingLeg({ bookingId, assignment: detail.legAssignment, alternatives: detail.legAlternatives ?? [], legs: detail.allTravelLegs ?? [] }); })
       .catch(() => { if (!cancelled) setLegError(true); });
     return () => { cancelled = true; };
   }, [work?.bookingId, work?.decision?.legAssignment]);
@@ -152,8 +152,8 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
               {assignment ? <p className="text-sm text-muted-foreground">{assignment.explanation} · {assignment.confidence} confidence</p> : <p className="text-sm text-muted-foreground">{canCorrectLeg ? (legError ? "Could not load a recommendation. You can still choose an active leg, or review the booking." : "No leg recommendation is available yet. You can still choose an active leg.") : (legError ? "Could not load the saved assignment. Open the booking to review it." : "Open the booking to review its saved assignment.")}</p>}
               {assignment?.warning ? <Badge variant="secondary">{assignment.warning === "major_travel_concern" ? "Major travel concern" : "Long travel"}</Badge> : null}
               {canCorrectLeg
-                ? <LeadLegControls key={work.bookingId} bookingId={work.bookingId} assignment={assignment ?? null} legs={loadedLeg?.legs ?? travelLegs} onBusyChange={setLegBusy} onSaved={async saved => {
-                    setBookingLeg({ bookingId: work.bookingId!, assignment: saved, legs: loadedLeg?.legs ?? travelLegs });
+                ? <LeadLegControls key={work.bookingId} bookingId={work.bookingId} assignment={assignment ?? null} alternatives={loadedLeg?.alternatives} legs={loadedLeg?.legs ?? travelLegs} onBusyChange={setLegBusy} onSaved={async saved => {
+                    setBookingLeg({ bookingId: work.bookingId!, assignment: saved, alternatives: loadedLeg?.alternatives ?? [], legs: loadedLeg?.legs ?? travelLegs });
                     await onChanged();
                   }} /> : null}
               <Button asChild variant="outline" size="sm"><Link onClick={remember} href={`/bookings/${work.bookingId}/edit`}>Review assignment</Link></Button>

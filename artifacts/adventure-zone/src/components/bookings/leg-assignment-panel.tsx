@@ -7,6 +7,19 @@ export type LegAssignmentView = {
   confidence: "high" | "medium" | "low";
 };
 
+export type LegAssignmentAlternativeView = {
+  legId: string;
+  legName: string;
+  confirmedEventCount: number;
+  priorYearMatch: boolean;
+  eligible: boolean;
+  previousStopDriveMinutes: number | null;
+  nextStopDriveMinutes: number | null;
+  routeDriveMinutes: number | null;
+  warning: "long_travel" | "major_travel_concern" | null;
+  reason: string;
+};
+
 function warningText(warning: LegAssignmentView["warning"]) {
   if (warning === "major_travel_concern") return "Major travel concern";
   if (warning === "long_travel") return "Long travel";

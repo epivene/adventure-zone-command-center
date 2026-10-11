@@ -27,6 +27,18 @@ describe("lead review workspace", () => {
     };
     apiGet.mockResolvedValue({
       legAssignment: assignment,
+      legAlternatives: [{
+        legId: "leg-north",
+        legName: "North route",
+        confirmedEventCount: 3,
+        priorYearMatch: false,
+        eligible: true,
+        previousStopDriveMinutes: 60,
+        nextStopDriveMinutes: null,
+        routeDriveMinutes: 60,
+        warning: null,
+        reason: "The confirmed route leaves enough travel and setup time.",
+      }],
       allTravelLegs: [{ id: "leg-north", name: "North route" }, { id: "leg-south", name: "South route" }],
     });
     render(<DailyWorkspace
@@ -55,6 +67,9 @@ describe("lead review workspace", () => {
     const legSection = screen.getByRole("region", { name: "Leg assignment" });
     const followUp = screen.getByText("Follow-up path");
     await waitFor(() => expect(legSection).toHaveTextContent("North route"));
+    const comparisons = await screen.findByRole("region", { name: "Active leg comparisons" });
+    expect(comparisons).toHaveTextContent("3 confirmed events this season");
+    expect(comparisons).toHaveTextContent("North route");
     expect(legSection.compareDocumentPosition(followUp) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("button", { name: "Use suggested leg" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Schedule follow-up" })).toBeInTheDocument();

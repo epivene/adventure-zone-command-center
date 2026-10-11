@@ -97,6 +97,64 @@ describe("LegAssignmentService", () => {
     expect(decision.assignedLegId).toBe("leg-hulk");
   });
 
+  it("compares every active leg, including workload and infeasible route reasons, without changing assignments", async () => {
+    const repo = store({ contexts: [
+      candidate({
+        legId: "leg-kristy",
+        legName: "Kristy",
+        priorYearMatch: true,
+        confirmedEventCount: 2,
+        previousStop: { ...stop("kristy"), latitude: 46 },
+      }),
+      candidate({
+        legId: "leg-hulk",
+        legName: "Hulk",
+        confirmedEventCount: 7,
+        previousStop: {
+          ...stop("hulk"),
+          latitude: 45,
+          startsAt: new Date("2026-09-09T10:00:00Z"),
+          endsAt: new Date("2026-09-10T11:00:00Z"),
+        },
+      }),
+      candidate({
+        legId: "leg-unplanned",
+        legName: "Unplanned route",
+        confirmedEventCount: 0,
+        previousStop: null,
+        nextStop: null,
+      }),
+    ] });
+
+    const alternatives = await new LegAssignmentService(repo.fake, estimator({ 46: 60, 45: 180 })).compareAlternatives("booking");
+
+    expect(alternatives).toHaveLength(3);
+    expect(alternatives[0]).toMatchObject({
+      legId: "leg-kristy",
+      confirmedEventCount: 2,
+      priorYearMatch: true,
+      eligible: true,
+      previousStopDriveMinutes: 60,
+      routeDriveMinutes: 60,
+      reason: "The confirmed route leaves enough travel and setup time.",
+    });
+    expect(alternatives[1]).toMatchObject({
+      legId: "leg-hulk",
+      confirmedEventCount: 7,
+      eligible: false,
+      previousStopDriveMinutes: 180,
+      reason: "Not enough time between the previous confirmed stop and this event for travel and setup.",
+    });
+    expect(alternatives[2]).toMatchObject({
+      legId: "leg-unplanned",
+      eligible: false,
+      routeDriveMinutes: null,
+      reason: "No surrounding confirmed stops; travel and setup fit cannot be compared.",
+    });
+    expect(repo.saved).toHaveLength(0);
+    expect(repo.assigned).toHaveLength(0);
+  });
+
   it("returns needs review when route scores are effectively tied", async () => {
     const repo = store({ contexts: [
       candidate({ legId: "leg-kristy", legName: "Kristy", confirmedEventCount: 3, previousStop: { ...stop("k"), latitude: 46 } }),

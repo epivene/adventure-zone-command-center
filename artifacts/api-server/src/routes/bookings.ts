@@ -26,6 +26,18 @@ import { isQualifiedPotentialStatus } from "@/features/leg-assignment/qualificat
 
 const router: IRouter = Router();
 
+const leadAssignmentStatuses = new Set([
+  "new_lead",
+  "researching",
+  "contact_due",
+  "contacted",
+  "interested",
+  "possible",
+  "unlikely",
+  "quote_sent",
+  "pending_decision",
+]);
+
 const actionUuid = z.string().uuid().transform((v) => v.toLowerCase());
 const configureResourcesSchema = z.object({
   bookingId: actionUuid,
@@ -273,11 +285,14 @@ router.get("/bookings/:id", async (req, res): Promise<void> => {
         req.log.warn({ err, bookingId: id }, "Package history comparison unavailable");
         return null;
       });
-    const [allTravelLegs, timelinePage, packageHistoryComparison, legAssignment] = await Promise.all([
+    const [allTravelLegs, timelinePage, packageHistoryComparison, legAssignment, legAlternatives] = await Promise.all([
       new DrizzleTravelLegRepository(db).listTravelLegs({ includeArchived: true }),
       activitySvc.listTimeline({ bookingId: id }),
       packageHistoryPromise,
       new LegAssignmentRepository(db).loadPersistedDecision(id),
+      leadAssignmentStatuses.has(detail.booking.status)
+        ? legAssignmentService().compareAlternatives(id)
+        : Promise.resolve([]),
     ]);
     res.json({
       ...detail,
@@ -286,6 +301,7 @@ router.get("/bookings/:id", async (req, res): Promise<void> => {
       timelineNextPage: timelinePage.nextPage,
       packageHistoryComparison,
       legAssignment,
+      legAlternatives,
     });
   } catch (err) {
     if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
