@@ -8,6 +8,16 @@ const menuSource = readFileSync("src/components/navigation/app-menu.tsx", "utf8"
 const switcherSource = readFileSync("src/components/navigation/workspace-switcher.tsx", "utf8");
 
 describe("workspace-aware Admin shell", () => {
+  it("uses a persistent token-based sidebar for core desktop navigation", () => {
+    expect(shellSource).toContain("const showWorkspaceNavigation = primaryItems.length > 0;");
+    expect(shellSource).toContain("fixed inset-y-0 left-0");
+    expect(shellSource).toContain("bg-sidebar");
+    expect(shellSource).toContain('aria-label="Main navigation"');
+    expect(shellSource).toContain('aria-current={active ? "page" : undefined}');
+    expect(shellSource).toContain("md:ml-60");
+    expect(shellSource).toContain("<MobileBottomNav workspace={workspace}");
+  });
+
   it("keeps the core Booking destinations and inquiry inbox in the desktop top bar", () => {
     const bookingStart = shellSource.indexOf('if (workspace === "booking")');
     const operationsStart = shellSource.indexOf('if (workspace === "operations")');

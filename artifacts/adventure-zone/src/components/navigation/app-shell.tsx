@@ -60,6 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [officeAttention, setOfficeAttention] = useState<OfficeCoordinatorAttentionData | null>(null);
   const immersiveProfile = location.startsWith("/profiles/") || location.startsWith("/event-profiles/");
   const assistantWorkspace = location === "/assistant/workspace" || location.startsWith("/assistant/workspace/");
+  const showWorkspaceNavigation = primaryItems.length > 0;
 
   useEffect(() => {
     if (immersiveProfile) return;
@@ -132,44 +133,57 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <IncomingCallingProvider><div className="min-h-[100dvh] bg-background text-foreground print:min-h-0">
       <AssistantNavigationContextSync />
+      {showWorkspaceNavigation ? (
+        <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col bg-sidebar px-3 py-5 text-sidebar-foreground print:hidden md:flex">
+          <div className="mb-6 flex items-center gap-3 px-2">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <UsersRound className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate font-display text-sm font-bold uppercase tracking-wide">Adventure Zone</p>
+              <p className="truncate text-xs text-sidebar-foreground/70">Festival workbench</p>
+            </div>
+          </div>
+          <nav aria-label="Main navigation" className="grid content-start gap-1">
+            {primaryItems.map((item) => {
+              const active = location === item.href || location.startsWith(`${item.href}/`);
+              const Icon = item.icon;
+              return (
+                <Link
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "inline-flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition",
+                    active
+                      ? "bg-secondary text-secondary-foreground"
+                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                  )}
+                  data-testid={`nav-${item.label.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}`}
+                  href={item.href}
+                  key={`${item.label}:${item.href}`}
+                >
+                  <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{item.label}</span>
+                  {item.href === "/website-inquiries" && websiteInquiryCount > 0 ? (
+                    <span aria-label={`${websiteInquiryCount} new inquiries`} className="ml-auto rounded-full bg-orange-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                      {websiteInquiryCount > 99 ? "99+" : websiteInquiryCount}
+                    </span>
+                  ) : null}
+                  {item.href === "/emails" && pendingEmailReviewCount > 0 ? (
+                    <span aria-label={`${pendingEmailReviewCount} pending email reviews`} className="ml-auto rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-950">
+                      {pendingEmailReviewCount > 99 ? "99+" : pendingEmailReviewCount}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </nav>
+        </aside>
+      ) : null}
+      <div className={cn(showWorkspaceNavigation && "md:ml-60")}>
       {!immersiveProfile ? (
         <header data-assistant-shell-header className="sticky top-0 z-20 hidden border-b border-border bg-card/95 backdrop-blur md:block print:hidden">
           <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2.5 lg:px-6">
             <WorkspaceSwitcher workspace={workspace} />
-            {primaryItems.length ? (
-              <nav aria-label="Main navigation" className="flex min-w-0 items-center gap-1">
-                {primaryItems.map((item) => {
-                  const active = location === item.href || (item.href.startsWith("/") && location.startsWith(`${item.href}/`));
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "relative inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold transition lg:px-3",
-                        active
-                          ? "bg-secondary text-secondary-foreground"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      )}
-                      href={item.href}
-                      key={`${item.label}:${item.href}`}
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span className="hidden lg:inline">{item.label}</span>
-                      {item.href === "/website-inquiries" && websiteInquiryCount > 0 ? (
-                        <span aria-label={`${websiteInquiryCount} new inquiries`} className="rounded-full bg-orange-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                          {websiteInquiryCount > 99 ? "99+" : websiteInquiryCount}
-                        </span>
-                      ) : null}
-                      {item.href === "/emails" && pendingEmailReviewCount > 0 ? (
-                        <span aria-label={`${pendingEmailReviewCount} pending email reviews`} className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-950">
-                          {pendingEmailReviewCount > 99 ? "99+" : pendingEmailReviewCount}
-                        </span>
-                      ) : null}
-                    </Link>
-                  );
-                })}
-              </nav>
-            ) : null}
             <div className="ml-auto flex items-center gap-1.5">
               {workspace === "booking" ? <IncomingAvailabilityControl /> : null}
               {workspace === "booking" ? <AddMenu /> : null}
@@ -194,6 +208,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {assistantRequested ? <div className="print:hidden"><Suspense fallback={null}><AssistantDrawer /></Suspense></div> : null}
       {!immersiveProfile ? <div className="print:hidden"><MobileBottomNav workspace={workspace} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} /></div> : null}
+      </div>
     </div></IncomingCallingProvider>
   );
 }

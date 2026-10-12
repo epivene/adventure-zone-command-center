@@ -7,6 +7,7 @@ import { Label } from "@workspace/avz-crm/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@workspace/avz-crm/components/ui/radio-group";
 import { Checkbox } from "@workspace/avz-crm/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@workspace/avz-crm/components/ui/dropdown-menu";
+import { Input } from "@workspace/avz-crm/components/ui/input";
 import { FollowUpControls } from "@/components/follow-ups/follow-up-controls";
 import { deleteFollowUpAction, editFollowUpAction } from "@/actions/follow-ups";
 import { buildDailyWork, type DailyDecision, type DailyWork } from "@/features/today/daily-work";
@@ -21,6 +22,22 @@ import type { LegAssignmentAlternativeView, LegAssignmentView } from "@/componen
 import { LeadLegControls } from "./lead-leg-controls";
 
 const OPEN_LEAD_STATUSES = new Set(["new_lead", "researching", "contact_due", "contacted", "interested", "possible", "unlikely", "quote_sent", "pending_decision"]);
+type WorkView = "all" | "attention" | "confirmed";
+
+function workStatus(item: DailyWork) {
+  return item.decision?.status ?? item.master?.opportunityStatus ?? "";
+}
+
+function isConfirmedWork(item: DailyWork) {
+  const status = workStatus(item).toLowerCase();
+  return ["confirmed", "booked", "won", "completed"].includes(status);
+}
+
+function needsAttention(item: DailyWork) {
+  if (!item.dueAt) return true;
+  const dueAt = new Date(item.dueAt);
+  return !Number.isFinite(dueAt.getTime()) || classifyBusinessDueDate(dueAt, new Date()) !== "future";
+}
 
 function dueLabel(work: DailyWork) {
   if (!work.dueAt) return "Needs a next step";
@@ -44,6 +61,8 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
   const { open, later } = buildDailyWork(queue, followUps, decisions);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showLater, setShowLater] = useState(false);
+  const [workView, setWorkView] = useState<WorkView>("all");
+  const [search, setSearch] = useState("");
   const [manage, setManage] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [formOpen, setFormOpen] = useState(false);
@@ -65,7 +84,24 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
     clearTodayReturnContext();
   }, []);
   const visible = showLater ? [...open, ...later] : open;
-  const work = visible.find(item => item.id === activeId) ?? open[0] ?? (showLater ? later[0] : undefined);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredWork = visible.filter(item => {
+    const status = workStatus(item);
+    const matchesView = workView === "all"
+      || (workView === "attention" && needsAttention(item))
+      || (workView === "confirmed" && isConfirmedWork(item));
+    const matchesSearch = !normalizedSearch
+      || [item.name, item.kind, item.reason, item.location, status]
+        .filter(Boolean)
+        .some(value => value.toLowerCase().includes(normalizedSearch));
+    return matchesView && matchesSearch;
+  });
+  const work = filteredWork.find(item => item.id === activeId) ?? filteredWork[0];
+  const availableViews = [
+    { value: "all" as const, label: leadsOnly ? "All leads" : "All work", count: visible.length },
+    { value: "attention" as const, label: "Needs attention", count: visible.filter(needsAttention).length },
+    ...(!leadsOnly ? [{ value: "confirmed" as const, label: "Confirmed", count: visible.filter(isConfirmedWork).length }] : []),
+  ];
   const locked = busy || formBusy || legBusy;
   const validSelected = selected.filter(id => decisions.some(decision => decision.id === id));
   const loadedLeg = bookingLeg?.bookingId === work?.bookingId ? bookingLeg : null;
@@ -82,7 +118,7 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
     return () => { cancelled = true; };
   }, [work?.bookingId, work?.decision?.legAssignment]);
   const legName = (id: string | null | undefined) => id ? [...travelLegs, ...(loadedLeg?.legs ?? [])].find(leg => leg.id === id)?.name ?? "Unknown leg" : "Unassigned";
-  const renderedWork = visible.slice(0, visibleCount);
+  const renderedWork = filteredWork.slice(0, visibleCount);
   // Keep a restored/selected item visible even when it is beyond the first page.
   if (work && !renderedWork.some(item => item.id === work.id)) renderedWork.push(work);
   const isConversation = !!work?.master?.threadId && ["reply", "draft", "review"].includes(work.master.kind);
@@ -105,6 +141,29 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
           <CardTitle>{leadsOnly ? "Open leads" : "Your work"}</CardTitle><Badge variant="outline">{open.length} open</Badge>
         </CardHeader>
         <CardContent className="grid gap-3">
+          <div className="grid gap-3">
+            <div aria-label="Work views" className="flex flex-wrap gap-1" role="group">
+              {availableViews.map(({ value, label, count }) => (
+                <Button
+                  aria-pressed={workView === value}
+                  data-testid={`button-work-view-${value}`}
+                  key={value}
+                  onClick={() => setWorkView(value)}
+                  size="sm"
+                  variant={workView === value ? "secondary" : "ghost"}
+                >
+                  {label}<span aria-label={`${count} ${count === 1 ? "record" : "records"}`} className="ml-1 text-xs">{count}</span>
+                </Button>
+              ))}
+            </div>
+            <Input
+              aria-label="Search work"
+              data-testid="input-work-search"
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Search event, location, or status"
+              value={search}
+            />
+          </div>
           {decisions.length ? <Button size="sm" variant="ghost" aria-label="Manage next steps" disabled={locked} onClick={() => { setManage(value => !value); setSelected([]); }}>{manage ? "Done managing" : "Manage next steps"}</Button> : null}
           {manage ? <div className="grid gap-3 rounded-lg border border-border p-3">
             <p className="text-sm text-muted-foreground">Manage bookings without a future reminder.</p>
@@ -117,19 +176,20 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
               <Button size="sm" variant="outline" disabled={locked || !validSelected.length} onClick={() => void bulk(onClear)}>Clear selected</Button>
               <Button size="sm" variant="outline" disabled={locked || !validSelected.length} onClick={() => void bulk(onSnooze)}>Snooze selected 1 week</Button>
             </div>
-          </div> : visible.length ? <RadioGroup aria-label="Select work item" value={work?.id ?? ""} onValueChange={id => { if (!locked) { setActiveId(id); setFormOpen(false); } }} className="gap-0">
-            {renderedWork.map(item => <div className="flex items-start gap-3 border-t border-border py-3" key={item.id} data-work-item-id={item.id}>
+          </div> : filteredWork.length ? <RadioGroup aria-label="Select work item" value={work?.id ?? ""} onValueChange={id => { if (!locked) { setActiveId(id); setFormOpen(false); } }} className="gap-0">
+            {renderedWork.map(item => <div className="flex items-start gap-3 border-t border-border py-3" key={item.id} data-testid={`row-work-${item.id}`} data-work-item-id={item.id}>
               <RadioGroupItem id={`daily-${item.id}`} value={item.id} disabled={locked} className="mt-1" />
               <Label htmlFor={`daily-${item.id}`} className="grid min-w-0 flex-1 cursor-pointer gap-1">
                 <span className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold">{item.name}</span><span className="text-xs text-muted-foreground">{dueLabel(item)}</span></span>
                 <span className="text-sm text-muted-foreground">{item.kind} · {item.reason}</span>
+                {workStatus(item) ? <Badge className="w-fit" variant={isConfirmedWork(item) ? "outline" : "secondary"}>{workStatus(item).replaceAll("_", " ")}</Badge> : null}
                 {item.location ? <span className="text-xs text-muted-foreground">{item.location}</span> : null}
                 {leadDate(item) ? <span className="text-xs text-muted-foreground">Event: {leadDate(item)}</span> : null}
                 {item.decision?.legAssignment ? <span className="text-xs font-semibold text-primary">{item.decision.legAssignment.suggestedLegId ? `${item.decision.legAssignment.source === "manual" ? "Assigned leg" : "Suggested leg"}: ${legName(item.decision.legAssignment.suggestedLegId)}` : "Needs leg assignment"}</span> : null}
               </Label>
             </div>)}
-          </RadioGroup> : <p className="text-sm text-muted-foreground">Nothing needs action right now.</p>}
-          {!manage && visible.length > 8 ? <Button size="sm" variant="ghost" disabled={locked} onClick={() => setVisibleCount(value => value >= visible.length ? 8 : value + 8)}>{visibleCount >= visible.length ? "Show less" : `Show more (${visible.length - visibleCount} remaining)`}</Button> : null}
+          </RadioGroup> : visible.length ? <p className="text-sm text-muted-foreground">No records match this view. Try another view or clear your search.</p> : <p className="text-sm text-muted-foreground">Nothing needs action right now.</p>}
+          {!manage && filteredWork.length > 8 ? <Button size="sm" variant="ghost" disabled={locked} onClick={() => setVisibleCount(value => value >= filteredWork.length ? 8 : value + 8)}>{visibleCount >= filteredWork.length ? "Show less" : `Show more (${filteredWork.length - visibleCount} remaining)`}</Button> : null}
         </CardContent>
       </Card>
       <Card><CardContent className="flex flex-wrap items-center justify-between gap-3">

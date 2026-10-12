@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const apiGet = vi.hoisted(() => vi.fn());
@@ -73,5 +73,34 @@ describe("lead review workspace", () => {
     expect(legSection.compareDocumentPosition(followUp) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("button", { name: "Use suggested leg" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Schedule follow-up" })).toBeInTheDocument();
+  });
+
+  it("filters records by work view and search without losing the selected detail", async () => {
+    apiGet.mockResolvedValue({ legAssignment: null, legAlternatives: [], allTravelLegs: [] });
+    render(<DailyWorkspace
+      queue={{ active: [], completedToday: [], needsAttention: [] } as any}
+      followUps={[]}
+      decisions={[
+        { id: "lead-1", name: "Mountain Film Festival", status: "researching", city: "Aspen", region: "CO", startsAt: "2027-06-10" },
+        { id: "booking-2", name: "Aspen Arts Weekend", status: "confirmed", city: "Aspen", region: "CO", startsAt: "2027-08-12" },
+      ]}
+      travelLegs={[]}
+      callingEnabled={false}
+      onChanged={vi.fn().mockResolvedValue(undefined)}
+      onClear={vi.fn().mockResolvedValue(undefined)}
+      onSnooze={vi.fn().mockResolvedValue(undefined)}
+      busy={false}
+      leadsOnly={false}
+    />);
+
+    expect(screen.getByTestId("row-work-decision:lead-1")).toBeInTheDocument();
+    expect(screen.getByTestId("row-work-decision:booking-2")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("button-work-view-confirmed"));
+
+    expect(screen.queryByTestId("row-work-decision:lead-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("row-work-decision:booking-2")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("input-work-search"), { target: { value: "Mountain" } });
+    expect(screen.getByText("No records match this view. Try another view or clear your search.")).toBeInTheDocument();
   });
 });
