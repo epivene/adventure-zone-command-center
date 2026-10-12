@@ -42,7 +42,7 @@ const profile = {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("one profile renderer for admin and Dave", () => {
-  it("combines the owner profile into three sections without dropping its records or email history", () => {
+  it("combines the owner profile into three destinations without dropping its records or email history", () => {
     render(<SimpleFullProfile compact profile={profile} />);
     const navigation = within(screen.getByRole("navigation", { name: "Profile sections" }));
     expect(navigation.getAllByRole("button").map(button => button.textContent)).toEqual(["Overview", "Activity", "Records"]);
@@ -54,6 +54,24 @@ describe("one profile renderer for admin and Dave", () => {
     expect(screen.getByText("Shared timeline")).toBeInTheDocument();
     expect(screen.getByText("Shared email reader")).toBeInTheDocument();
     expect(screen.getByText("Shared drafts")).toBeInTheDocument();
+  });
+
+  it("uses the same grouped destinations on the full profile and keeps recent activity in the overview", () => {
+    render(<SimpleFullProfile profile={profile} />);
+    const navigation = within(screen.getByRole("navigation", { name: "Profile sections" }));
+    expect(navigation.getAllByRole("button").map(button => button.textContent)).toEqual(["Overview", "Activity", "Records"]);
+    expect(screen.getByTestId("profile-latest-note")).toBeInTheDocument();
+    expect(screen.getByTestId("profile-latest-email")).toBeInTheDocument();
+
+    fireEvent.click(navigation.getByRole("button", { name: "Activity" }));
+    expect(screen.getByText("Shared timeline")).toBeInTheDocument();
+    expect(screen.getByText("Shared email reader")).toBeInTheDocument();
+    expect(screen.getByText("Shared drafts")).toBeInTheDocument();
+
+    fireEvent.click(navigation.getByRole("button", { name: "Records" }));
+    expect(screen.getByRole("link", { name: /Fair 2027/ })).toHaveAttribute("href", "/bookings/booking-1");
+    expect(screen.getByRole("link", { name: "Details" })).toHaveAttribute("href", "/contacts/contact-1");
+    expect(screen.getByText("Design documents")).toBeInTheDocument();
   });
   it("uses identical overview content and section styling with fewer actions for Dave", async () => {
     const admin = render(<SimpleFullProfile profile={profile} ratingSummary={{ average: 4, count: 2 }} />);
@@ -71,16 +89,19 @@ describe("one profile renderer for admin and Dave", () => {
     expect(screen.getByText("2 rated occurrences")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Follow up|Add note|Assistant/ })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Contacts" }));
+    const navigation = within(screen.getByRole("navigation", { name: "Profile sections" }));
+    expect(navigation.getAllByRole("button").map(button => button.textContent)).toEqual(["Overview", "Activity", "Records"]);
+    fireEvent.click(navigation.getByRole("button", { name: "Records" }));
     expect(screen.getByRole("link", { name: "Details" })).toHaveAttribute("href", "/boss/contacts/contact-1");
     expect(screen.queryByRole("link", { name: "Add contact" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Bookings" }));
     expect(screen.getByRole("link", { name: /Fair 2027/ })).toHaveAttribute("href", "/boss/bookings/booking-1");
-    fireEvent.click(within(screen.getByRole("navigation", { name: "Profile sections" })).getByRole("button", { name: "History" }));
+    expect(screen.queryByText("Design documents")).not.toBeInTheDocument();
+
+    fireEvent.click(navigation.getByRole("button", { name: "Activity" }));
     expect(mocks.timeline.mock.calls.at(-1)?.[0]).toMatchObject({
       editActivity: undefined, deleteActivity: undefined, loadPage: undefined, openPaperNoteSource: undefined,
     });
-    fireEvent.click(within(screen.getByRole("navigation", { name: "Profile sections" })).getByRole("button", { name: "Emails" }));
+    expect(screen.getByText("Shared timeline")).toBeInTheDocument();
     expect(mocks.emailPanel.mock.calls.at(-1)?.[0]).toMatchObject({ readOnly: true, getThread: mocks.bossThread });
     expect(mocks.drafts.mock.calls.at(-1)?.[0]).toMatchObject({ readOnly: true, getDrafts: mocks.bossDrafts });
   });

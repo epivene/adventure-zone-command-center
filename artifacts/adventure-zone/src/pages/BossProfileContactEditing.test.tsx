@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -82,19 +82,21 @@ describe("Dave profile and contact pages", () => {
     expect(screen.getByText("At a glance")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Profiles" }));
     expect(mocks.navigate).toHaveBeenCalledWith("/boss/profiles?sort=name_asc");
-    expect(screen.getByText("Next action")).toBeInTheDocument();
+    expect(screen.getAllByText("Next action").length).toBeGreaterThan(0);
     expect(screen.getByText("Relationship health")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "History" })).toBeInTheDocument();
-    expect(screen.getByTestId("boss-profile-page")).toHaveClass("bg-[#f3f5f0]", "md:py-7");
+    const navigation = within(screen.getByRole("navigation", { name: "Profile sections" }));
+    expect(navigation.getAllByRole("button").map(button => button.textContent)).toEqual(["Overview", "Activity", "Records"]);
+    expect(screen.getByTestId("boss-profile-page")).toHaveClass("bg-background", "md:py-7");
     expect(screen.queryByRole("link", { name: "Find next date" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Contacts/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Bookings/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Emails/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Assistant|Follow up|Add note/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Add event|Create contract/i })).not.toBeInTheDocument();
+    fireEvent.click(navigation.getByRole("button", { name: "Records" }));
+    expect(screen.getByRole("heading", { name: "Contacts" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bookings & opportunities" })).toBeInTheDocument();
+    expect(screen.queryByText("Design documents")).not.toBeInTheDocument();
   });
 
-  it("shows the linked Gmail conversation count instead of a hard-coded zero", async () => {
+  it("keeps the latest Boss email linked to its read-only email history", async () => {
     mocks.bossGet.mockImplementation(async (path: string) => {
       if (path.includes("/google-workspace/profiles/")) {
         return {
@@ -107,8 +109,10 @@ describe("Dave profile and contact pages", () => {
     render(<BossProfilePage profileId={profileId} />);
 
     await waitFor(() => expect(mocks.bossGet).toHaveBeenCalledWith(`/boss/google-workspace/profiles/${profileId}/emails`));
-    const emailButton = await screen.findByRole("button", { name: /Emails/ });
-    await waitFor(() => expect(emailButton).toHaveAttribute("aria-label", "2 Emails"));
+    expect(screen.getByTestId("profile-latest-email")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open email" })).toHaveAttribute("href", `/boss/profiles/${profileId}?section=emails`);
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Profile sections" })).getByRole("button", { name: "Activity" }));
+    expect(screen.getByRole("heading", { name: "Activity history" })).toBeInTheDocument();
   });
 
   it("lets Dave edit and save an event profile", async () => {

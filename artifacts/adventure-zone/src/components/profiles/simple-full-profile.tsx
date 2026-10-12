@@ -179,8 +179,8 @@ export function SimpleFullProfile({
   const [noteError, setNoteError] = useState("");
   const [optimisticActivities, setOptimisticActivities] = useState<ActivityTimelineItem[]>([]);
   const boss = role === "boss";
-  const recordsOpen = compact && ["contacts", "events", "documents"].includes(openSection ?? "");
-  const activityOpen = compact && ["notes", "emails"].includes(openSection ?? "");
+  const recordsOpen = ["contacts", "events", "documents"].includes(openSection ?? "");
+  const activityOpen = ["notes", "emails"].includes(openSection ?? "");
   const routePrefix = boss ? "/boss" : "";
   const localEmails = useProfileGoogleEmail(profile.id, undefined, boss ? getBossProfileEmails : undefined, !profileEmails);
   const gmail = profileEmails ?? localEmails;
@@ -291,10 +291,6 @@ export function SimpleFullProfile({
   function setEditing(next: boolean) {
     if (editing === undefined) setInternalEditing(next);
     onEditingChange?.(next);
-  }
-
-  function toggleSection(section: Exclude<OpenSection, null>) {
-    setOpenSection((current) => (current === section ? null : section));
   }
 
   async function loadSimpleNotesPage(page: number) {
@@ -489,6 +485,7 @@ export function SimpleFullProfile({
             showAddNote={false}
             showFollowUp={false}
             onEdit={() => setEditing(true)}
+            onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))}
             triggerLabel="More"
           />}
         </div>
@@ -555,7 +552,10 @@ export function SimpleFullProfile({
                 Call
               </CallLink>
             ) : null}
-            <ProfileWorkspaceActions readOnly={boss} emailCount={boss ? emailConversations.length : undefined} onFollowUp={onFollowUp ?? (() => navigate(`/profiles/${profile.id}?action=follow-up`))} onOpenEmails={() => setOpenSection("emails")} onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))} />
+            <ProfileWorkspaceActions
+              readOnly={boss}
+              onFollowUp={onFollowUp ?? (() => navigate(`/profiles/${profile.id}?action=follow-up`))}
+            />
           </div>
         </div>
 
@@ -608,8 +608,8 @@ export function SimpleFullProfile({
         />}
       />
       </> : <div className="flex justify-end">
-        <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id} showAddNote={false} onEdit={() => setEditing(true)}
-          showFollowUp={false} callHref={callHref} onOpenEmails={() => setOpenSection("emails")} onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))} />
+        <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id} showAddNote={false} showFollowUp={false} onEdit={() => setEditing(true)}
+          callHref={callHref} onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))} />
       </div>}
 
       {compact ? <details><summary className="cursor-pointer text-sm font-semibold">Call brief</summary>
@@ -618,12 +618,23 @@ export function SimpleFullProfile({
       {!compact ? <details><summary className="cursor-pointer text-sm font-semibold">More profile facts</summary><ProfileAtAGlance profile={profile} allowDateManagement={!boss} /></details> : null}
 
       <nav aria-label="Profile sections" className="flex flex-wrap gap-2 border-b pb-3">
-        {compact ? ([[null, "Overview"], ["notes", "Activity"], ["events", "Records"]] as const).map(([section, label]) =>
-          <Button key={label} variant={(section === null ? openSection === null : section === "notes" ? activityOpen : recordsOpen) ? "default" : "outline"}
-            size="sm" data-testid={`profile-section-${label.toLowerCase()}`} onClick={() => setOpenSection(section)}>{label}</Button>
-        ) :
-        ([[null,"Overview"],["contacts","Contacts"],["events","Bookings"],["notes","History"],["emails","Emails"],["documents","Documents"]] as const).filter(([section]) => !boss || section !== "documents").map(([section,label]) => <button key={label} type="button" aria-current={openSection === section ? "page" : undefined} className={openSection === section ? "button-primary" : "button-secondary"} onClick={() => setOpenSection(section)}>{label}</button>)
-        }
+        {([
+          { section: null, label: "Overview", active: openSection === null },
+          { section: "notes", label: "Activity", active: activityOpen },
+          { section: "events", label: "Records", active: recordsOpen },
+        ] as const).map(({ section, label, active }) => (
+          <Button
+            key={label}
+            type="button"
+            variant={active ? "default" : "outline"}
+            size="sm"
+            aria-pressed={active}
+            data-testid={`profile-section-${label.toLowerCase()}`}
+            onClick={() => setOpenSection(section)}
+          >
+            {label}
+          </Button>
+        ))}
       </nav>
       {!boss && (openSection === "emails" || activityOpen) ? <Link className="button-secondary w-fit" href={`/emails?profileId=${encodeURIComponent(profile.id)}`}>Open email account</Link> : null}
       <div id="profile-section-content" className="scroll-mt-4" />

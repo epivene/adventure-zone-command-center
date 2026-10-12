@@ -16,11 +16,11 @@ describe("modern CRM full profile", () => {
 
   it("keeps recent activity prominent and removes the duplicate follow-up action", () => {
     const compactActionsStart = simple.indexOf(
-      "ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id} showAddNote={false} onEdit={() => setEditing(true)}",
+      "ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id} showAddNote={false} showFollowUp={false}",
     );
     const compactActionsEnd = simple.indexOf("onAssistant=", compactActionsStart);
     expect(compactActionsStart).toBeGreaterThan(-1);
-    expect(simple.slice(compactActionsStart, compactActionsEnd)).toContain("showFollowUp={false}");
+    expect(simple.slice(compactActionsStart, compactActionsEnd)).toContain("callHref={callHref}");
     expect(workspace).toContain("<ProfileLatestNote");
     expect(workspace).toContain("<ProfileLatestEmail");
     expect(workspace).toContain(">Schedule follow-up</Button>");
@@ -38,15 +38,17 @@ describe("modern CRM full profile", () => {
     expect(simple).not.toContain('["overview", "notes", "events"]');
   });
 
-  it("keeps profile sections accessible through the compact section switcher", () => {
+  it("groups profile destinations while preserving their deep-link section keys", () => {
     expect(simple).toContain('export type OpenSection = "contacts" | "events" | "notes" | "emails" | "documents" | null');
     expect(simple).toContain("useState<OpenSection>(() =>");
+    expect(simple).toContain('label: "Overview"');
+    expect(simple).toContain('label: "Activity"');
+    expect(simple).toContain('label: "Records"');
     expect(simple).toContain('openSection === "contacts"');
     expect(simple).toContain('openSection === "events"');
     expect(simple).toContain('openSection === "notes"');
-    expect(simple).toContain('([[null, "Overview"], ["notes", "Activity"], ["events", "Records"]] as const)');
-    expect(simple).toContain('["notes", "Activity"]');
-    expect(simple).toContain('["events", "Records"]');
+    expect(simple).toContain('const recordsOpen = ["contacts", "events", "documents"]');
+    expect(simple).toContain('const activityOpen = ["notes", "emails"]');
     expect(simple).toContain("onClick={() => setOpenSection(section)}");
     expect(simple).toContain('document.getElementById("profile-section-content")?.scrollIntoView');
   });
@@ -94,6 +96,16 @@ describe("modern CRM full profile", () => {
     expect(workspace).toContain("Next action");
     expect(workspace).toContain("Organizer contact");
     expect(workspace).toContain("Activity, records &amp; profile tools");
+  });
+
+  it("keeps the three approved CRM metrics and relationship cards", () => {
+    expect(simple).toContain("Contacts");
+    expect(simple).toContain("Bookings & opportunities");
+    expect(simple).toContain("Emails");
+    expect(simple).toContain("No open follow-ups");
+    expect(simple).toContain("Relationship health");
+    expect(simple).toContain("Recent history");
+    expect(simple).toContain("Organization record");
   });
 
   it("sanitizes imported ACT bodies before the profile surface receives them", () => {

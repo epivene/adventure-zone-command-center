@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 const googleWorkspace = vi.hoisted(() => ({
@@ -14,6 +13,7 @@ const googleWorkspace = vi.hoisted(() => ({
       { threadId: "thread-2" },
     ],
   })),
+  getGoogleProfileEmailThread: vi.fn(async () => ({ messages: [] })),
 }));
 
 vi.mock("@/features/google-workspace/google-workspace-client", () => googleWorkspace);
@@ -84,7 +84,7 @@ describe("SimpleFullProfile Gmail history", () => {
         evidenceCodes: ["exact_contact_email"],
         originalGmailUrl: "https://mail.google.com/mail/u/0/#all/thread-newer",
       }],
-    });
+    } as any);
     const profileWithOlderNote = {
       ...profile,
       notes: [{
@@ -112,28 +112,26 @@ describe("SimpleFullProfile Gmail history", () => {
     expect(rows[1]).toHaveTextContent("Older profile note");
   });
 
-  it("gives live Gmail its own summary box and expandable section", async () => {
-    const user = userEvent.setup();
+  it("keeps recent Gmail in the overview and the full history under Activity", async () => {
     render(<SimpleFullProfile profile={profile} />);
 
     await waitFor(() => expect(googleWorkspace.getGoogleProfileEmails).toHaveBeenCalledWith(profile.id));
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-
-    await user.click(screen.getByRole("menuitem", { name: "Open emails" }));
+    expect(screen.getByTestId("profile-latest-email")).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Profile sections" })).getByRole("button", { name: "Activity" }));
     expect(screen.getByTestId("profile-google-email-panel")).toHaveTextContent(
       "Gmail history for 11111111-1111-4111-8111-111111111111",
     );
   });
 
-  it("keeps notes and Gmail in separate expandable sections", async () => {
+  it("groups notes and Gmail under the same Activity destination", async () => {
     render(<SimpleFullProfile profile={profile} />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "More actions" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Activity" })).toBeInTheDocument());
 
     fireEvent.click(
-      within(screen.getByRole("navigation", { name: "Profile sections" })).getByRole("button", { name: "History" }),
+      within(screen.getByRole("navigation", { name: "Profile sections" })).getByRole("button", { name: "Activity" }),
     );
     expect(screen.getByRole("heading", { name: "Activity history" })).toBeInTheDocument();
     expect(screen.getByTestId("activity-timeline")).toBeInTheDocument();
-    expect(screen.queryByTestId("profile-google-email-panel")).not.toBeInTheDocument();
+    expect(screen.getByTestId("profile-google-email-panel")).toBeInTheDocument();
   });
 });
