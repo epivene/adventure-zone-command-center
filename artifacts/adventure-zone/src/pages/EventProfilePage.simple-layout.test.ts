@@ -14,27 +14,41 @@ describe("modern CRM full profile", () => {
     expect(workspace).toContain("Activity, records &amp; profile tools");
   });
 
-  it("uses the approved CRM header and controls", () => {
+  it("keeps recent activity prominent and removes the duplicate follow-up action", () => {
+    const compactActionsStart = simple.indexOf(
+      "ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id} showAddNote={false} onEdit={() => setEditing(true)}",
+    );
+    const compactActionsEnd = simple.indexOf("onAssistant=", compactActionsStart);
+    expect(compactActionsStart).toBeGreaterThan(-1);
+    expect(simple.slice(compactActionsStart, compactActionsEnd)).toContain("showFollowUp={false}");
+    expect(workspace).toContain("<ProfileLatestNote");
+    expect(workspace).toContain("<ProfileLatestEmail");
+    expect(workspace).toContain(">Schedule follow-up</Button>");
+  });
+
+  it("uses the profile workspace header and grouped actions", () => {
     expect(simple).toContain("Adventure Zone");
     expect(simple).toContain("Relationships / {originLabel}");
     expect(page).toContain("originLabel={profileOrigin}");
-    expect(simple).toContain("Ask Assistant");
+    expect(simple).toContain("<ProfileWorkspaceActions");
+    expect(simple).toContain("onAssistant={onAskAssistant");
     expect(simple).toContain("Open notifications");
     expect(simple).toContain("Open primary contact");
     expect(simple).not.toContain("profileImageDataUrl");
     expect(simple).not.toContain('["overview", "notes", "events"]');
   });
 
-  it("keeps contact, event, note and email panels hidden until their card is clicked", () => {
-    expect(simple).toContain('type OpenSection = "contacts" | "events" | "notes" | "emails" | null');
-    expect(simple).toContain("useState<OpenSection>(null)");
+  it("keeps profile sections accessible through the compact section switcher", () => {
+    expect(simple).toContain('export type OpenSection = "contacts" | "events" | "notes" | "emails" | "documents" | null');
+    expect(simple).toContain("useState<OpenSection>(() =>");
     expect(simple).toContain('openSection === "contacts"');
     expect(simple).toContain('openSection === "events"');
     expect(simple).toContain('openSection === "notes"');
-    expect(simple).toContain('toggleSection("contacts")');
-    expect(simple).toContain('toggleSection("events")');
-    expect(simple).toContain('toggleSection("emails")');
-    expect(simple).not.toContain("scrollIntoView");
+    expect(simple).toContain('([[null, "Overview"], ["notes", "Activity"], ["events", "Records"]] as const)');
+    expect(simple).toContain('["notes", "Activity"]');
+    expect(simple).toContain('["events", "Records"]');
+    expect(simple).toContain("onClick={() => setOpenSection(section)}");
+    expect(simple).toContain('document.getElementById("profile-section-content")?.scrollIntoView');
   });
 
   it("opens notes automatically when Add note is used", () => {
@@ -71,14 +85,15 @@ describe("modern CRM full profile", () => {
     expect(actions).toContain("More <ChevronDown");
   });
 
-  it("shows the three approved CRM metrics and relationship cards", () => {
-    expect(simple).toContain("Contacts");
-    expect(simple).toContain("Upcoming events");
-    expect(simple).toContain("Emails");
-    expect(simple).toContain("No open follow-ups");
-    expect(simple).toContain("Relationship health");
-    expect(simple).toContain("Recent history");
-    expect(simple).toContain("Organization record");
+  it("shows recent activity before secondary festival and profile details", () => {
+    const activityPosition = workspace.indexOf("<ProfileLatestNote");
+    const editionPosition = workspace.indexOf("Festival edition");
+    expect(activityPosition).toBeGreaterThan(-1);
+    expect(activityPosition).toBeLessThan(editionPosition);
+    expect(workspace).toContain("<ProfileLatestEmail");
+    expect(workspace).toContain("Next action");
+    expect(workspace).toContain("Organizer contact");
+    expect(workspace).toContain("Activity, records &amp; profile tools");
   });
 
   it("sanitizes imported ACT bodies before the profile surface receives them", () => {

@@ -609,7 +609,7 @@ export function SimpleFullProfile({
       />
       </> : <div className="flex justify-end">
         <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id} showAddNote={false} onEdit={() => setEditing(true)}
-          callHref={callHref} onOpenEmails={() => setOpenSection("emails")} onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))} />
+          showFollowUp={false} callHref={callHref} onOpenEmails={() => setOpenSection("emails")} onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))} />
       </div>}
 
       {compact ? <details><summary className="cursor-pointer text-sm font-semibold">Call brief</summary>
