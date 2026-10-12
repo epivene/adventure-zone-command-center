@@ -1,6 +1,6 @@
 ---
-name: Daily workflow direction
-description: User-approved scope and layout direction for simplifying daily CRM work.
+name: Daily workflow and board direction
+description: User-approved scope and layout direction for simplifying daily CRM work and evolving CRM-wide organization.
 ---
 
 The user chose Today, leads, and booking follow-up as the first redesign area and approved a unified selectable work queue with the selected record's next step alongside it. The user now wants the simplification and visual direction extended across the whole CRM, not left as isolated screen fixes.
@@ -20,3 +20,9 @@ The user approved the revision with visible primary navigation and working scree
 **Why:** Schedule needs geographic route context, and approval of a shared preview must not be presented as a change to the live Boss screen.
 
 **How to apply:** Include route-map access in Schedule and Boss assignment workflows. Clearly distinguish schematic demo maps from accurate geographic routes and design previews from live implementation.
+
+The user likes Monday.com's AI CRM workspace and wants the Adventure Zone CRM to feel somewhat similar.
+
+**Why:** The user said they like Monday's CRM workspace and asked to make their app more like it.
+
+**How to apply:** Adapt grouped work views, clear statuses, and contextual next actions to the festival CRM while preserving Avz branding, role-specific workflows, and visible destinations. Keep AI suggestions explainable and distinguish demos from connected AI.

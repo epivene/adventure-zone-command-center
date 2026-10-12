@@ -20,7 +20,7 @@
 - [Campaign delivery approval boundary](campaign-delivery-approval.md) — real audience sends require a current immutable snapshot, explicit approval, and provider-confirmed per-recipient results.
 - [Review-due removal semantics](review-due-removal.md) — review-due rows are computed; remove them with an auditable dismissal, never by deleting a booking.
 - [Boss event visibility boundary](boss-event-visibility.md) — Desie makes the initial leg assignment; Boss can then move that visible event between active legs.
-- [Daily workflow direction](daily-workflow-direction.md) — user approved one selectable queue and contextual next step for Today, leads, and booking follow-up.
+- [Daily workflow and board direction](daily-workflow-direction.md) — Monday-inspired grouped work views should simplify CRM flow without dropping Avz-specific workflows or visible destinations.
 - [Festival profile direction](festival-profile-direction.md) — preserve existing CRM information; share organizer facts and keep annual festival details on each event edition.
 - [Crew nearby-place priorities](crew-nearby-places.md) — RV-first categories, annual venue pins, unverified accommodation facts, and public-provider policy boundaries.
 - [Vite offline cache boundary](vite-offline-cache-boundary.md) — imported development CSS is JavaScript; bypass production cache validation rather than weakening its MIME checks.
