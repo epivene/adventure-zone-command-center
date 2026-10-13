@@ -18,25 +18,26 @@ import { readAppearance, saveAppearance, type Appearance } from "@/lib/appearanc
 import { saveBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
 import { apiGet } from "@/lib/auth-token";
+import { ToolFinder, type ToolFinderItem } from "./tool-finder";
 
-type MenuItem = { href: string; label: string; rememberBookingBeforeOpen?: boolean; badgeCount?: number };
+type MenuItem = { href: string; label: string; rememberBookingBeforeOpen?: boolean; badgeCount?: number; keywords?: string[] };
 type MenuGroup = { label: string; items: MenuItem[] };
 
 const bookingItems: MenuItem[] = [
   { href: "/profiles", label: "Profiles" },
   { href: "/dave-requests", label: "Dave Requests" },
   { href: "/emails", label: "Emails" },
+  { href: "/website-inquiries", label: "Website Inquiries", keywords: ["web", "inquiry", "inquiries", "website form", "contact form", "lead"] },
   { href: "/emails?view=review", label: "Emails needing review" },
   { href: "/calls/workspace", label: "Calls" },
   { href: "/calls/voicemail", label: "Voicemail" },
-  { href: "/website-inquiries", label: "Website Inquiries" },
   { href: "/boss-access", label: "Boss Access" },
   { href: "/research-sources", label: "Research Sources" },
   { href: "/needs-answer", label: "Needs Answer" },
 ];
 
 const bookingToolsGroups: MenuGroup[] = [
-  { label: "Booking tools", items: bookingItems },
+  { label: "Booking tools", items: bookingItems.filter(item => item.href !== "/website-inquiries") },
 ];
 
 const operationsGroups: MenuGroup[] = [
@@ -114,6 +115,27 @@ function groupsForWorkspace(workspace: AdminWorkspace): MenuGroup[] {
   if (workspace === "operations") return operationsGroups;
   if (workspace === "marketing") return marketingGroups;
   return [];
+}
+
+export function getAppMenuSearchItems(workspace: AdminWorkspace): ToolFinderItem[] {
+  const groups = workspace === "command" ? [] : [...groupsForWorkspace(workspace), ...adminToolsGroups];
+  const groupedItems = groups.flatMap(group => group.items.map(item => ({
+    href: item.href,
+    label: item.label,
+    keywords: item.keywords,
+    category: group.label,
+  })));
+  const commonItems: ToolFinderItem[] = [
+    { href: "/business-documents", label: "All documents", category: "Documents", keywords: ["files", "insurance", "COI"] },
+    { href: "/invoices-contracts", label: "Contracts & Invoices", category: "Documents", keywords: ["invoice", "contract"] },
+    { href: "/manager-communications", label: "Messages", category: "Communication", keywords: ["message", "communications"] },
+    { href: "/assistant/workspace", label: "Assistant workspace", category: "Tools", keywords: ["assistant", "help"] },
+  ];
+  const uniqueItems = new Map<string, ToolFinderItem>();
+  for (const item of [...groupedItems, ...commonItems]) {
+    if (!uniqueItems.has(item.href)) uniqueItems.set(item.href, item);
+  }
+  return [...uniqueItems.values()];
 }
 
 export function AddMenu() {
@@ -280,12 +302,14 @@ export function AppMenu({
   unreadMessages = 0,
   websiteInquiryCount = 0,
   pendingEmailReviewCount = 0,
+  searchItems = [],
 }: {
   workspace: AdminWorkspace;
   mobile?: boolean;
   unreadMessages?: number;
   websiteInquiryCount?: number;
   pendingEmailReviewCount?: number;
+  searchItems?: ToolFinderItem[];
 }) {
   const { signOut } = useAuth();
   const { openAssistant } = useAssistantContext();
@@ -349,6 +373,14 @@ export function AppMenu({
         side={mobile ? "top" : "bottom"}
         className={mobile ? "max-h-[72dvh] w-[min(92vw,22rem)] overflow-y-auto p-2" : "max-h-[76vh] w-72 overflow-y-auto p-2"}
       >
+        {mobile ? (
+          <>
+            <div className="px-1 pb-2 pt-1">
+              <ToolFinder items={searchItems} variant="menu" />
+            </div>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuLabel>Documents</DropdownMenuLabel>
         <MenuLink item={{ href: "/business-documents", label: "All documents", badgeCount: pendingDocumentReviewCount }} workspace={workspace} location={location} />
         <MenuLink item={{ href: "/invoices-contracts", label: "Contracts & Invoices" }} workspace={workspace} location={location} />

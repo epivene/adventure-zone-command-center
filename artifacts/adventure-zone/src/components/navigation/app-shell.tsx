@@ -3,8 +3,9 @@ import { Link, useLocation } from "wouter";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { FolderOpen, Bot, ArrowLeft, CalendarDays, House, Inbox, MailQuestion, MapPinned, ClipboardList, Megaphone, MessageSquare, Palette, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
-import { AddMenu, AppMenu } from "./app-menu";
+import { AddMenu, AppMenu, getAppMenuSearchItems } from "./app-menu";
 import { MobileBottomNav } from "./mobile-bottom-nav";
+import { ToolFinder } from "./tool-finder";
 import { MessageBubbleLink } from "./message-bubble-link";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
@@ -19,7 +20,7 @@ import { IncomingAvailabilityControl } from "@/components/calls/incoming-availab
 import { IncomingCallPanel } from "@/components/calls/incoming-call-panel";
 import { getGoogleWorkspaceValidationReview } from "@/features/google-workspace/google-workspace-client";
 
-type PrimaryNavigationItem = { href: string; label: string; icon: LucideIcon };
+type PrimaryNavigationItem = { href: string; label: string; icon: LucideIcon; keywords?: string[] };
 
 const AssistantDrawer = lazy(() => import("@/components/assistant/assistant-drawer").then(({ AssistantDrawer }) => ({ default: AssistantDrawer })));
 const OfficeCoordinatorAttention = lazy(() => import("@/components/today/office-coordinator-attention").then(({ OfficeCoordinatorAttention }) => ({ default: OfficeCoordinatorAttention })));
@@ -27,7 +28,7 @@ const OfficeUpdateHistory = lazy(() => import("@/components/office-admin/office-
 
 function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string | null): PrimaryNavigationItem[] {
   if (workspace === "booking") {
-    const icons = { home: House, profiles: UsersRound, emails: Inbox, schedule: CalendarDays, documents: FolderOpen };
+    const icons = { home: House, profiles: UsersRound, emails: Inbox, websiteInquiries: MailQuestion, schedule: CalendarDays, documents: FolderOpen };
     return bookingNavigation().map(item => ({ ...item, icon: icons[item.icon] }));
   }
   if (workspace === "operations") {
@@ -53,6 +54,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const workspace = adminWorkspaceForPath(location);
   const bookingReturnPath = workspace === "marketing" ? readBookingReturnPath() : null;
   const primaryItems = primaryNavigation(workspace, bookingReturnPath);
+  const searchItems = [
+    ...primaryItems.map(item => ({ href: item.href, label: item.label, category: "Workspace", keywords: item.keywords })),
+    ...getAppMenuSearchItems(workspace),
+  ];
   const [assistantRequested, setAssistantRequested] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [websiteInquiryCount, setWebsiteInquiryCount] = useState(0);
@@ -144,6 +149,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <p className="truncate text-xs text-sidebar-foreground/70">Festival workbench</p>
             </div>
           </div>
+          <div className="mb-4 px-1">
+            <ToolFinder items={searchItems} />
+          </div>
           <nav aria-label="Main navigation" className="grid content-start gap-1">
             {primaryItems.map((item) => {
               const active = location === item.href || location.startsWith(`${item.href}/`);
@@ -184,7 +192,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header data-assistant-shell-header className="sticky top-0 z-20 hidden border-b border-border bg-card/95 backdrop-blur md:block print:hidden">
           <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2.5 lg:px-6">
             <WorkspaceSwitcher workspace={workspace} />
-            <div className="ml-auto flex items-center gap-1.5">
+            {!showWorkspaceNavigation ? (
+              <div className="ml-auto w-full max-w-sm">
+                <ToolFinder items={searchItems} />
+              </div>
+            ) : null}
+            <div className={cn("flex items-center gap-1.5", showWorkspaceNavigation && "ml-auto")}>
               {workspace === "booking" ? <IncomingAvailabilityControl /> : null}
               {workspace === "booking" ? <AddMenu /> : null}
               <AppMenu workspace={workspace} unreadMessages={unreadMessages} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} />
@@ -207,7 +220,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </main>
 
       {assistantRequested ? <div className="print:hidden"><Suspense fallback={null}><AssistantDrawer /></Suspense></div> : null}
-      {!immersiveProfile ? <div className="print:hidden"><MobileBottomNav workspace={workspace} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} /></div> : null}
+      {!immersiveProfile ? <div className="print:hidden"><MobileBottomNav workspace={workspace} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} searchItems={searchItems} /></div> : null}
       </div>
     </div></IncomingCallingProvider>
   );

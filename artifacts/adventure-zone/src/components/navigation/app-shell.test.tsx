@@ -6,6 +6,7 @@ const launcherSource = readFileSync("src/components/assistant/assistant-launcher
 const mobileSource = readFileSync("src/components/navigation/mobile-bottom-nav.tsx", "utf8");
 const menuSource = readFileSync("src/components/navigation/app-menu.tsx", "utf8");
 const switcherSource = readFileSync("src/components/navigation/workspace-switcher.tsx", "utf8");
+const bookingNavigationSource = readFileSync("src/features/navigation/booking-navigation.ts", "utf8");
 
 describe("workspace-aware Admin shell", () => {
   it("uses a persistent token-based sidebar for core desktop navigation", () => {
@@ -18,27 +19,24 @@ describe("workspace-aware Admin shell", () => {
     expect(shellSource).toContain("<MobileBottomNav workspace={workspace}");
   });
 
-  it("keeps the core Booking destinations and inquiry inbox in the desktop top bar", () => {
+  it("keeps core Booking destinations and Website Inquiries in the desktop sidebar", () => {
     const bookingStart = shellSource.indexOf('if (workspace === "booking")');
     const operationsStart = shellSource.indexOf('if (workspace === "operations")');
     const bookingPrimary = shellSource.slice(bookingStart, operationsStart);
 
-    for (const [href, label] of [
-      ["/today", "Today"],
-      ["/profiles", "Profiles"],
-      ["/schedule", "Schedule"],
-      ["/website-inquiries", "Website Inquiries"],
-    ]) expect(bookingPrimary).toContain(`{ href: "${href}", label: "${label}"`);
-    for (const href of ["/bookings", "/calls/workspace", "/research-sources"]) {
-      expect(bookingPrimary).not.toContain(`href: "${href}"`);
+    expect(bookingPrimary).toContain("bookingNavigation()");
+    for (const href of ["/today", "/profiles", "/emails", "/website-inquiries", "/business-documents", "/schedule"]) {
+      expect(bookingNavigationSource).toContain(`href: "${href}"`);
     }
+    expect(bookingNavigationSource).toContain('label: "Website Inquiries"');
+    expect(bookingNavigationSource).toContain("!mobile");
     expect(bookingPrimary).not.toContain('label: "Marketing"');
   });
 
   it("polls the inquiry count independently on the existing cadence", () => {
     expect(shellSource).toContain('apiGet<{ newCount: number }>("/website-inquiries/count")');
     expect(shellSource).toContain("setWebsiteInquiryCount");
-    expect(shellSource).toContain("15000");
+    expect(shellSource).toContain("60000");
     expect(shellSource).toContain("websiteInquiryCount > 99");
     expect(shellSource).toContain("<MobileBottomNav workspace={workspace} websiteInquiryCount={websiteInquiryCount}");
   });
@@ -80,7 +78,7 @@ describe("workspace-aware Admin shell", () => {
     for (const label of ["Data & Imports", "Business Setup", "Connections", "System"]) {
       expect(menuSource).toContain(`label: "${label}"`);
     }
-    expect(menuSource).toContain('label="Admin Tools"');
+    expect(menuSource).toContain('label="Administration"');
     expect(menuSource).toContain("nestedGroups");
     expect(menuSource).toContain("DropdownMenuSubContent");
     for (const href of [
@@ -93,7 +91,7 @@ describe("workspace-aware Admin shell", () => {
 
   it("keeps mobile workspace access compact", () => {
     expect(mobileSource).toContain('{ href: "/command", label: "Panel"');
-    expect(mobileSource).toContain("<AppMenu workspace={workspace} mobile websiteInquiryCount={websiteInquiryCount} />");
+    expect(mobileSource).toContain("<AppMenu workspace={workspace} mobile websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} searchItems={searchItems} />");
   });
 
   it("restores a saved Booking destination from Marketing", () => {
@@ -103,22 +101,25 @@ describe("workspace-aware Admin shell", () => {
   });
 
   it("keeps Messages and Assistant in the desktop overflow with accessible state", () => {
-    expect(shellSource).toContain("<AppMenu workspace={workspace} unreadMessages={unreadMessages} websiteInquiryCount={websiteInquiryCount} />");
+    expect(shellSource).toContain("<AppMenu workspace={workspace} unreadMessages={unreadMessages} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} />");
     expect(menuSource).toContain('href="/manager-communications"');
     expect(menuSource).toContain("unreadMessages > 0");
     expect(menuSource).toContain('aria-label={unreadMessages ? `Messages, ${unreadMessages} unread` : "Messages"}');
     expect(menuSource).toContain("openAssistant");
-    expect(menuSource).toContain("Booking Assistant");
+    expect(menuSource).toContain("Assistant workspace");
+    expect(menuSource).toContain("Older conversations & tools");
     expect(shellSource).not.toContain('<AssistantLauncher placement="toolbar" />');
     expect(launcherSource).toContain('placement?: "toolbar" | "floating"');
-    expect(launcherSource).toContain('aria-label="Open Booking Assistant"');
+    expect(launcherSource).toContain('aria-label="Open Assistant"');
   });
 
-  it("keeps the floating assistant only on mobile and hides it on full profiles", () => {
+  it("keeps the shared assistant drawer and hides mobile navigation on full profiles", () => {
     expect(shellSource).toContain("immersiveProfile");
     expect(shellSource).toContain('location.startsWith("/profiles/")');
     expect(shellSource).toContain('location.startsWith("/event-profiles/")');
-    expect(shellSource).toContain('<AssistantLauncher placement="floating" />');
-    expect(launcherSource).toContain("md:hidden");
+    expect(shellSource).toContain("const { isOpen } = useAssistantContext()");
+    expect(shellSource).toContain("if (isOpen) setAssistantRequested(true)");
+    expect(shellSource).toContain("<AssistantDrawer />");
+    expect(shellSource).toContain('{!immersiveProfile ? <div className="print:hidden"><MobileBottomNav');
   });
 });

@@ -1,15 +1,16 @@
 import { bookingNavigation } from "@/features/navigation/booking-navigation";
 import { Link, useLocation } from "wouter";
-import { FolderOpen, Bot, ArrowLeft, CalendarDays, ContactRound, House, Inbox, LayoutGrid, MapPinned, Megaphone, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
+import { FolderOpen, Bot, ArrowLeft, CalendarDays, ContactRound, House, Inbox, LayoutGrid, MailQuestion, MapPinned, Megaphone, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import { AppMenu } from "./app-menu";
+import type { ToolFinderItem } from "./tool-finder";
 import { readBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
 
 type MobileItem = { href: string; label: string; icon: LucideIcon };
 
 function itemsForWorkspace(workspace: AdminWorkspace): MobileItem[] {
   if (workspace === "booking") {
-    const icons = { home: House, profiles: ContactRound, emails: Inbox, schedule: CalendarDays, documents: FolderOpen };
+    const icons = { home: House, profiles: ContactRound, emails: Inbox, websiteInquiries: MailQuestion, schedule: CalendarDays, documents: FolderOpen };
     return bookingNavigation(true).map(item => ({ ...item, icon: icons[item.icon] }));
   }
   if (workspace === "operations") {
@@ -35,10 +36,12 @@ export function MobileBottomNav({
   workspace,
   websiteInquiryCount = 0,
   pendingEmailReviewCount = 0,
+  searchItems = [],
 }: {
   workspace: AdminWorkspace;
   websiteInquiryCount?: number;
   pendingEmailReviewCount?: number;
+  searchItems?: ToolFinderItem[];
 }) {
   const [location] = useLocation();
   const primaryItems = itemsForWorkspace(workspace);
@@ -69,7 +72,7 @@ export function MobileBottomNav({
             </Link>
           );
         })}
-        <AppMenu workspace={workspace} mobile websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} />
+        <AppMenu workspace={workspace} mobile websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} searchItems={searchItems} />
       </div>
     </nav>
   );
