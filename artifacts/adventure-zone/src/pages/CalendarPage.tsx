@@ -1,3 +1,4 @@
+import { OperationalCalendarBookingSearch } from "@/components/google-workspace/operational-calendar-booking-search";
 import { ScheduleDateIssues } from "@/components/schedule/schedule-date-issues";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { eventMatchesOperationsSeason } from '@/features/bookings/operations-navigation';
@@ -101,8 +102,9 @@ function OperationalReviewQueue({
 }: {
   reviews: OperationalCalendarReview[];
   busyReviewId: string | null;
-  onResolved: (reviewId: string, resolution: "link_existing" | "create_new", bookingId?: string) => Promise<void>;
+  onResolved: (reviewId: string, resolution: "link_existing" | "create_new", bookingId?: string, packageKey?: "zone" | "pirates" | "warrior") => Promise<void>;
 }) {
+  const [packageByReview, setPackageByReview] = useState<Record<string, "zone" | "pirates" | "warrior" | "">>({});
   const [selectedBookingByReview, setSelectedBookingByReview] = useState<Record<string, string>>({});
   if (!reviews.length) return null;
 
@@ -116,6 +118,8 @@ function OperationalReviewQueue({
       <div className="grid gap-3">
         {reviews.map((review) => {
           const { parsed, google, candidateBookings } = reviewDetails(review);
+          const packageKey = packageByReview[review.id] || (["zone", "pirates", "warrior"].includes(String(parsed.packageKey)) ? parsed.packageKey as "zone" | "pirates" | "warrior" : undefined);
+          const cancelled = parsed.calendarState === "cancelled" || /\bcancel(?:led|ed)\b/i.test(String(google.summary ?? ""));
           const selectedBookingId = selectedBookingByReview[review.id] ?? "";
           const title = typeof google.summary === "string" && google.summary.trim()
             ? google.summary
@@ -167,13 +171,30 @@ function OperationalReviewQueue({
                   })}
                 </fieldset>
               ) : (
-                <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">No existing profile was retained as a safe candidate for this event.</p>
+                <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">No automatic match was found. Search your existing profiles below.</p>
               )}
+              <OperationalCalendarBookingSearch
+                disabled={busyReviewId !== null}
+                selectedBookingId={selectedBookingId}
+                onSelect={bookingId => setSelectedBookingByReview(current => ({ ...current, [review.id]: bookingId }))}
+              />
+              {!["zone", "pirates", "warrior"].includes(String(parsed.packageKey)) ? <label className="mt-3 grid gap-1 text-sm font-semibold">
+                Package for this calendar link
+                <select value={packageByReview[review.id] ?? ""} disabled={busyReviewId !== null}
+                  onChange={event => setPackageByReview(current => ({ ...current, [review.id]: event.target.value as "zone" | "pirates" | "warrior" | "" }))}>
+                  <option value="">Select the package</option>
+                  <option value="zone">Adventure Zone</option>
+                  <option value="pirates">Pirates</option>
+                  <option value="warrior">Warrior</option>
+                </select>
+              </label> : null}
+              {cancelled ? <p className="mt-2 text-sm text-amber-900">Canceled calendar event: link to the existing booking for reference. Creating a confirmed profile is disabled.</p> : null}
+              <p className="mt-2 text-xs text-slate-600">Linking keeps the existing profile and booking details, dates, and status.</p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <button className="button-primary" disabled={busyReviewId !== null || !selectedBookingId} onClick={() => void onResolved(review.id, "link_existing", selectedBookingId)} type="button">
+                <button className="button-primary" disabled={busyReviewId !== null || !selectedBookingId || !packageKey} onClick={() => void onResolved(review.id, "link_existing", selectedBookingId, packageKey)} type="button">
                   {busyReviewId === review.id ? "Saving…" : "Link selected booking"}
                 </button>
-                <button className="button-secondary" disabled={busyReviewId !== null} onClick={() => void onResolved(review.id, "create_new")} type="button">
+                <button className="button-secondary" disabled={busyReviewId !== null || cancelled} onClick={() => void onResolved(review.id, "create_new")} type="button">
                   Create new confirmed profile
                 </button>
               </div>
@@ -307,11 +328,11 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
     return () => { active = false; };
   }, [activeMonth, season, revision]);
 
-  async function resolveReview(reviewId: string, resolution: "link_existing" | "create_new", bookingId?: string) {
+  async function resolveReview(reviewId: string, resolution: "link_existing" | "create_new", bookingId?: string, packageKey?: "zone" | "pirates" | "warrior") {
     setBusyReviewId(reviewId);
     setReviewError(null);
     try {
-      await resolveOperationalCalendarReview(reviewId, resolution, bookingId);
+      await resolveOperationalCalendarReview(reviewId, resolution, bookingId, packageKey);
       setReviews((current) => current.filter((review) => review.id !== reviewId));
       setEvents((current) => current.filter((event) => (event as any).reviewId !== reviewId));
     } catch (caught) {
@@ -416,3 +437,4 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
 export default function CalendarPage() {
   return <div className="mx-auto max-w-7xl"><CalendarContent /></div>;
 }
+

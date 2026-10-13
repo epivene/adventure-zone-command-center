@@ -37,6 +37,7 @@ const resolutionSchema = z.discriminatedUnion("resolution", [
   z.object({
     resolution: z.literal("link_existing"),
     bookingId: z.string().uuid(),
+    packageKey: z.enum(["zone", "pirates", "warrior"]).optional(),
   }).strict(),
   z.object({
     resolution: z.literal("create_new"),
@@ -67,6 +68,21 @@ router.get("/google-workspace/operational-calendar", async (_req, res): Promise<
     res.json({ connection, pendingReviewCount: reviews.length, reviews, reviewEvents });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "GOOGLE_OPERATIONAL_CALENDAR_STATUS_FAILED" });
+  }
+});
+
+router.get("/google-workspace/operational-calendar/bookings/search", async (req, res): Promise<void> => {
+  const query = z.string().trim().min(2).max(160).safeParse(req.query.q);
+  if (!query.success) {
+    res.status(400).json({ error: "Enter 2–160 characters to search existing profiles and bookings." });
+    return;
+  }
+  try {
+    const candidates = await new OperationalCalendarLinkRepository(db).searchExistingBookings(query.data);
+    res.json({ candidates });
+  } catch (error) {
+    req.log.error({ err: error }, "Calendar booking search failed");
+    res.status(500).json({ error: "Could not search existing profiles and bookings." });
   }
 });
 
@@ -157,6 +173,8 @@ router.post("/google-workspace/operational-calendar/reviews/:reviewId/resolve", 
       "GOOGLE_OPERATIONAL_CALENDAR_PACKAGE_REQUIRED",
       "GOOGLE_OPERATIONAL_CALENDAR_WINDOW_INVALID",
       "GOOGLE_OPERATIONAL_CALENDAR_CANDIDATE_INVALID",
+      "GOOGLE_OPERATIONAL_CALENDAR_CANCELLED_CREATE_BLOCKED",
+      "GOOGLE_OPERATIONAL_CALENDAR_BOOKING_ALREADY_LINKED",
       "GOOGLE_OPERATIONAL_CALENDAR_BOOKING_NOT_FOUND",
       "GOOGLE_OPERATIONAL_CALENDAR_LOCATION_REQUIRED",
       "GOOGLE_OPERATIONAL_CALENDAR_PACKAGE_TEMPLATE_NOT_FOUND",
