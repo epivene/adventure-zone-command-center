@@ -1,10 +1,12 @@
-import { activeConnection, requireConnectionScope, ConnectionError, type ConnectionPrincipal, type SqlQuery } from "./contracts";
+import { WebsiteInquiryProcessing } from "./website-inquiry-processing";
+import { activeConnection, requireConnectionScope, ConnectionError, type ConnectionPrincipal, type ConnectionDatabase } from "./contracts";
 import { parseWebsiteInquiryCursor, WebsiteInquiryNotFoundError, type WebsiteInquiryReviewService } from "../website-inquiries/website-inquiry-review-service";
 
 type InquiryStatus = "new" | "reviewing" | "converted" | "archived" | "spam";
 const statuses = new Set(["new", "reviewing", "converted", "archived", "spam"]);
 export class WebsiteInquiryReads {
-  constructor(private readonly db: SqlQuery, private readonly review: Pick<WebsiteInquiryReviewService, "list" | "detail">, private readonly appOrigin: string) {}
+  get processing() { return new WebsiteInquiryProcessing(this.db, this.appOrigin); }
+  constructor(private readonly db: ConnectionDatabase, private readonly review: Pick<WebsiteInquiryReviewService, "list" | "detail">, private readonly appOrigin: string) {}
   private url(id: string): string { return new URL("/website-inquiries?inquiry=" + encodeURIComponent(id), this.appOrigin).href; }
   private async authorize(p: ConnectionPrincipal) {
     requireConnectionScope(p, "crm:read");
