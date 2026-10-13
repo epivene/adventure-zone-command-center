@@ -69,13 +69,13 @@ function readableAction(value: string) {
 }
 
 const statusStyles = {
-  deadline_soon: ["Deadline soon", "bg-orange-100 text-orange-900"],
-  needs_follow_up: ["Needs follow-up", "bg-amber-100 text-amber-900"],
-  contacted: ["Contacted", "bg-sky-100 text-sky-900"],
-  waiting: ["Waiting", "bg-muted text-foreground"],
-  booked: ["Booked", "bg-teal-100 text-teal-900"],
-  not_a_fit: ["Not a fit", "bg-rose-100 text-rose-900"],
-  unrecorded: ["Status not recorded", "bg-muted text-foreground"],
+  deadline_soon: ["Deadline soon", "bg-accent text-accent-foreground"],
+  needs_follow_up: ["Needs follow-up", "bg-accent text-accent-foreground"],
+  contacted: ["Contacted", "bg-secondary text-secondary-foreground"],
+  waiting: ["Waiting", "bg-muted text-muted-foreground"],
+  booked: ["Booked", "bg-primary text-primary-foreground"],
+  not_a_fit: ["Not a fit", "bg-destructive text-destructive-foreground"],
+  unrecorded: ["Status not recorded", "bg-muted text-muted-foreground"],
 } as const;
 
 const quickFilterLabels = {
@@ -567,7 +567,7 @@ export function OrganizationList({
                   <li key={organization.id}>
                     <Link
                       aria-label={`Open ${organization.name} profile`}
-                      className="group block rounded-md border border-border bg-card p-4 text-left shadow-sm transition hover:border-[#e85d35] focus-visible:ring-2 focus-visible:ring-[#157d78]"
+                      className="group block rounded-md border border-border bg-card p-4 text-left shadow-sm transition hover:border-primary focus-visible:ring-2 focus-visible:ring-ring"
                       data-testid={`profile-card-${organization.id}`}
                       href={profileHref}
                       onClick={(event) => {
@@ -582,80 +582,105 @@ export function OrganizationList({
                       }}
                     >
                       <span
-                        className="block min-w-0"
+                        className="grid min-w-0 gap-3 md:grid-cols-3"
                         data-testid="profile-decision-summary"
                       >
-                        <span className="flex flex-wrap items-start justify-between gap-3">
-                          <span className="min-w-0">
-                            <span className="block break-words text-xl font-extrabold leading-tight tracking-tight text-foreground group-hover:text-orange-800">
-                              {organization.name}
-                            </span>
-                            <span className="mt-1 block text-xs font-medium text-muted-foreground">
-                              {location || "Location not recorded"}
-                            </span>
-                            <span
-                              aria-label={
-                                rating === null
-                                  ? "No reviews"
-                                  : `${rating.toFixed(1)} out of 5 stars from ${ratingCount} reviews`
-                              }
-                              className="mt-1.5 block text-xs font-semibold text-muted-foreground"
-                              data-testid="profile-rating-summary"
-                            >
-                              {rating === null ? (
-                                "No reviews"
-                              ) : (
-                                <>
-                                  <span
-                                    aria-hidden
-                                    className="tracking-[0.08em] text-[#efb33f]"
-                                  >
-                                    {"★".repeat(roundedRating)}
-                                    {"☆".repeat(5 - roundedRating)}
-                                  </span>{" "}
-                                  {rating.toFixed(1)} ({ratingCount})
-                                </>
-                              )}
-                            </span>
+                        <span className="min-w-0">
+                          <span className="block break-words text-xl font-extrabold leading-tight tracking-tight text-foreground group-hover:text-primary">
+                            {organization.name}
+                          </span>
+                          <span className="mt-1 block text-xs font-medium text-muted-foreground">
+                            {location || "Location not recorded"}
                           </span>
                           <span
-                            className={`shrink-0 rounded-sm px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.06em] ${status[1]}`}
+                            aria-label={
+                              rating === null
+                                ? "No reviews"
+                                : `${rating.toFixed(1)} out of 5 stars from ${ratingCount} reviews`
+                            }
+                            className="mt-1.5 block text-xs font-semibold text-muted-foreground"
+                            data-testid="profile-rating-summary"
                           >
-                            {status[0]}
+                            {rating === null ? (
+                              "No reviews"
+                            ) : (
+                              <>
+                                <span aria-hidden className="text-accent">
+                                  {"★".repeat(roundedRating)}
+                                  {"☆".repeat(5 - roundedRating)}
+                                </span>{" "}
+                                {rating.toFixed(1)} ({ratingCount})
+                              </>
+                            )}
                           </span>
+                          {organization.description?.trim() ? (
+                            <span
+                              className="mt-2 block line-clamp-2 text-sm leading-5 text-muted-foreground"
+                              data-testid="profile-about-preview"
+                            >
+                              {organization.description.trim()}
+                            </span>
+                          ) : null}
                         </span>
-                        {organization.description?.trim() ? <span className="mt-2 block line-clamp-2 text-sm leading-5 text-muted-foreground" data-testid="profile-about-preview">{organization.description.trim()}</span> : null}
+
                         <span
-                          className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3 text-xs"
+                          className="grid content-start gap-1 border-t border-border pt-3 text-sm md:border-l md:border-t-0 md:pl-4 md:pt-0"
                           data-testid="profile-money-line"
                         >
-                          <strong className="text-foreground">
+                          <span className="text-xs font-semibold text-muted-foreground">
+                            Most recent event
+                          </span>
+                          <strong
+                            className="text-foreground"
+                            data-testid="profile-date-summary"
+                          >
+                            {organization.latestRecordedEventDate
+                              ? `Latest event ${formatDate(organization.latestRecordedEventDate.startsOn, "")}${organization.latestRecordedEventDate.endsOn ? `–${formatDate(organization.latestRecordedEventDate.endsOn, "")}` : ""}`
+                              : "No event date recorded"}
+                          </strong>
+                          <span className="mt-2 text-xs font-semibold text-muted-foreground">
+                            Deal recommendation
+                          </span>
+                          <strong className="text-sm text-foreground">
                             {organization.recommendedDealModel
                               ? dealModelLabels[
                                   organization.recommendedDealModel
                                 ]
                               : "No deal recommendation"}
                           </strong>
-                          <span className="text-right text-muted-foreground">
-                            {organization.latestRecordedEventDate
-                              ? `Latest event ${formatDate(organization.latestRecordedEventDate.startsOn, "")}${organization.latestRecordedEventDate.endsOn ? `–${formatDate(organization.latestRecordedEventDate.endsOn, "")}` : ""}`
-                              : "No event date recorded"}
-                          </span>
                         </span>
-                        <span className="mt-2.5 flex items-start gap-2 text-xs font-bold text-[#a63f35]">
-                          <span
-                            aria-hidden
-                            className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#e85d35] ring-4 ring-muted"
-                          />
-                          <span>
-                            {organization.nextActionKind
-                              ? readableAction(
-                                  String(organization.nextActionKind),
-                                )
-                              : "No next action recorded"}
-                            {organization.nextActionDueAt
-                              ? ` · Due ${formatDate(organization.nextActionDueAt, "")}`
-                              : ""}
+
+                        <span className="grid content-start gap-2 border-t border-border pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
+                          <span className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-muted-foreground">
+                              Outreach status
+                            </span>
+                            <span
+                              className={`shrink-0 rounded-sm px-2 py-1 text-xs font-extrabold uppercase ${status[1]}`}
+                            >
+                              {status[0]}
+                            </span>
+                          </span>
+                          <span className="grid gap-1">
+                            <span className="text-xs font-semibold text-muted-foreground">
+                              Next action
+                            </span>
+                            <strong
+                              className="text-sm text-foreground"
+                              data-testid="profile-next-action"
+                            >
+                              {organization.nextActionKind
+                                ? readableAction(
+                                    String(organization.nextActionKind),
+                                  )
+                                : "No next action recorded"}
+                            </strong>
+                            {organization.nextActionDueAt ? (
+                              <span className="text-xs text-muted-foreground">
+                                Due{" "}
+                                {formatDate(organization.nextActionDueAt, "")}
+                              </span>
+                            ) : null}
                           </span>
                         </span>
                       </span>

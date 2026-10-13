@@ -89,13 +89,14 @@ describe("OrganizationList profile summary cards", () => {
                 profileImageDataUrl: "data:image/png;base64,aA==",
                 ratingAverage: 4.5,
                 ratingCount: 2,
-                latestRecordedEventDate: { startsOn: "2025-07-16", endsOn: null, source: "festival_edition" },
+                latestRecordedEventDate: { startsOn: "2025-07-16", endsOn: "2025-07-18", source: "festival_edition" },
                 applicationDeadline: "2026-10-01",
                 pipelineStatus: "contacted",
                 decisionStatus: "contacted",
                 recommendedDealModel: "flat_fee",
                 nextActionKind: "email",
                 nextActionDueAt: "2026-09-18T15:00:00.000Z",
+                description: "A summer festival with a large community parade and live music.",
               },
             ],
             total: 1,
@@ -116,10 +117,20 @@ describe("OrganizationList profile summary cards", () => {
     ).toBeVisible();
     expect(screen.getByText("Breckenridge, CO")).toBeVisible();
     expect(screen.queryByText("other")).not.toBeInTheDocument();
-    expect(screen.getByText("Latest event Jul 16, 2025")).toBeVisible();
+    expect(
+      screen.getByText("Latest event Jul 16, 2025–Jul 18, 2025"),
+    ).toBeVisible();
     expect(screen.getByText("Contacted")).toBeVisible();
     expect(screen.getByText("Flat fee")).toBeVisible();
-    expect(screen.getByText(/Email.*Due Sep 18/)).toBeVisible();
+    expect(screen.getByTestId("profile-next-action")).toHaveTextContent("Email");
+    expect(screen.getByText("Due Sep 18, 2026")).toBeVisible();
+    expect(screen.getByText("Outreach status")).toBeVisible();
+    expect(screen.getByText("Most recent event")).toBeVisible();
+    expect(
+      screen.getByText(
+        "A summer festival with a large community parade and live music.",
+      ),
+    ).toBeVisible();
     expect(screen.getByTestId("profile-rating-summary")).toHaveTextContent(
       "4.5 (2)",
     );

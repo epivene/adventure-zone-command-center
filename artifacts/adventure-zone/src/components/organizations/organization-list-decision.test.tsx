@@ -103,8 +103,10 @@ describe("OrganizationList booking decisions", () => {
     );
     expect(screen.getByText("Prairie Days")).toBeVisible();
     expect(screen.getByText("Denver, CO")).toBeVisible();
-    expect(screen.getByText("Date not published")).toBeVisible();
+    expect(screen.getByText("No event date recorded")).toBeVisible();
     expect(screen.getByText("Deadline soon")).toBeVisible();
+    expect(screen.getByText("Outreach status")).toBeVisible();
+    expect(screen.getByText("Next action")).toBeVisible();
     expect(screen.getByText("Flat fee")).toBeVisible();
     expect(screen.getByText(/Send pitch/i)).toBeVisible();
     expect(screen.getByTestId("profile-rating-summary")).toHaveTextContent(
@@ -113,6 +115,6 @@ describe("OrganizationList booking decisions", () => {
     expect(screen.getByLabelText(/4.8 out of 5 stars/i)).toBeVisible();
     expect(
       screen.getByTestId("profile-card-10000000-0000-4000-8000-000000000001"),
-    ).toHaveClass("bg-[#fffefa]");
+    ).toHaveClass("bg-card");
   });
 });
