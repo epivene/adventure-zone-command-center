@@ -1,3 +1,4 @@
+import { isGoogleWorkspaceSchemaReady } from "./google-workspace-schema-readiness";
 type Client = {
   query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }>;
 };
@@ -5,6 +6,7 @@ type Client = {
 export async function ensureGoogleWorkspaceSchema(
   client: Client,
 ): Promise<boolean> {
+  if (await isGoogleWorkspaceSchemaReady(client)) return true;
   await client.query("SET lock_timeout = '5s'");
   try {
     await client.query(`

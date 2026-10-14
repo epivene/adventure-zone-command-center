@@ -1,3 +1,4 @@
+import { isOperationalCalendarSchemaReady } from "./google-workspace-schema-readiness";
 type Client = {
   query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }>;
 };
@@ -5,6 +6,7 @@ type Client = {
 export async function ensureOperationalCalendarConnectionUpgrade(
   client: Client,
 ): Promise<boolean> {
+  if (await isOperationalCalendarSchemaReady(client)) return true;
   await client.query(`
     ALTER TABLE google_workspace_connections
       ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'workspace',

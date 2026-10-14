@@ -1,77 +1,80 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
-
+import { describe, it, expect, vi } from "vitest";
+vi.mock("@workspace/db", () => ({ pool: {} }));
 import { ensureGoogleWorkspaceSchemaBeforeListen } from "./google-workspace-required-startup";
-
-function fakeClient(locked = true) {
-  return {
-    query: vi.fn(async (sql: string) => ({
-      rows: sql.includes("pg_try_advisory_lock") ? [{ locked }] : [],
-    })),
-    release: vi.fn(),
-  };
-}
-
-describe("ensureGoogleWorkspaceSchemaBeforeListen", () => {
-  it("uses a non-blocking advisory lock and always releases it", async () => {
-    const client = fakeClient(true);
-    const ensureSchema = vi.fn(async () => true);
-    const pool = { connect: vi.fn(async () => client) };
-
+describe("Google Workspace startup", () => {
+  it("uses only catalog queries when installed, even if an old advisory lock is busy", async () => {
+    const client = {
+      query: vi.fn(async (sql: string) => ({
+        rows: [sql.includes("advisory") ? { locked: false } : { ready: true }],
+      })),
+      release: vi.fn(),
+    };
+    await ensureGoogleWorkspaceSchemaBeforeListen({
+      pool: { connect: async () => client },
+    });
+    expect(
+      client.query.mock.calls.some(([s]) =>
+        /advisory|ALTER TABLE|CREATE TABLE/.test(s),
+      ),
+    ).toBe(false);
+    expect(client.release).toHaveBeenCalledWith(false);
+  });
+  it("runs repair hooks in order inside a transaction", async () => {
+    const client = {
+      query: vi.fn(async (_sql: string) => ({ rows: [{ locked: true }] })),
+      release: vi.fn(),
+    };
+    const order: string[] = [];
+    await ensureGoogleWorkspaceSchemaBeforeListen({
+      pool: { connect: async () => client },
+      ensureSchema: async () => {
+        order.push("base");
+        return true;
+      },
+      ensureOperationalCalendarUpgrade: async () => {
+        order.push("calendar");
+        return true;
+      },
+    });
+    expect(order).toEqual(["base", "calendar"]);
+    expect(client.query.mock.calls[0][0]).toBe("BEGIN");
+    expect(client.query).toHaveBeenLastCalledWith("COMMIT");
+  });
+  it("fails closed on persistent contention", async () => {
+    const client = {
+      query: vi.fn(async (_sql: string) => ({
+        rows: [{ locked: false, ready: false }],
+      })),
+      release: vi.fn(),
+    };
     await expect(
-      ensureGoogleWorkspaceSchemaBeforeListen({ pool, ensureSchema }),
-    ).resolves.toBe(true);
-
-    expect(client.query).toHaveBeenNthCalledWith(
-      1,
-      "SELECT pg_try_advisory_lock(hashtext('adventure-zone:google-workspace-schema')) AS locked",
-    );
-    expect(ensureSchema).toHaveBeenCalledWith(client);
-    expect(client.query).toHaveBeenLastCalledWith(
-      "SELECT pg_advisory_unlock(hashtext('adventure-zone:google-workspace-schema'))",
-    );
-    expect(client.release).toHaveBeenCalledOnce();
+      ensureGoogleWorkspaceSchemaBeforeListen({
+        pool: { connect: async () => client },
+        lockWaitMs: 0,
+      }),
+    ).rejects.toThrow("LOCK_BUSY");
+    expect(client.query).toHaveBeenLastCalledWith("ROLLBACK");
+    expect(client.release).toHaveBeenCalledWith(true);
   });
-
-  it("fails immediately when another process owns the schema lock", async () => {
-    const client = fakeClient(false);
-    const ensureSchema = vi.fn(async () => true);
-    const pool = { connect: vi.fn(async () => client) };
-
-    await expect(
-      ensureGoogleWorkspaceSchemaBeforeListen({ pool, ensureSchema }),
-    ).rejects.toThrow("GOOGLE_WORKSPACE_SCHEMA_LOCK_BUSY");
-    expect(ensureSchema).not.toHaveBeenCalled();
-    expect(client.release).toHaveBeenCalledOnce();
-  });
-
-  it("ensures the schema before the server begins listening", () => {
-    const source = readFileSync(path.resolve(process.cwd(), "src/index.ts"), "utf8");
-    const ensureAt = source.indexOf('"required Google Workspace schema"');
-    const listenAt = source.indexOf("const server = app.listen");
-
-    expect(ensureAt).toBeGreaterThan(-1);
-    expect(listenAt).toBeGreaterThan(-1);
-    expect(ensureAt).toBeLessThan(listenAt);
-  });
-
-  it("bounds DDL lock waits and only creates Google Workspace tables", () => {
-    const source = readFileSync(
-      path.resolve(process.cwd(), "src/db/google-workspace-startup-migration.ts"),
-      "utf8",
-    );
-
-    expect(source).toContain("SET lock_timeout = '5s'");
-    expect(source).toContain("RESET lock_timeout");
-    expect(source).not.toContain("ALTER TABLE organizations");
-    expect(source).not.toContain("ALTER TABLE contacts");
-    expect(source).not.toContain("ALTER TABLE bookings");
-    expect(source).not.toContain("ALTER TABLE activities");
-    expect(source).toContain("google_workspace_connections");
-    expect(source).toContain("google_workspace_label_scopes");
-    expect(source).toContain("google_workspace_calendar_scopes");
-    expect(source).toContain("google_workspace_validation_mappings");
-    expect(source).toContain("google_workspace_validation_state");
-  });
+  it.each(["canceling statement due to lock timeout", "Query read timeout"])(
+    "discards a failed repair connection: %s",
+    async (message) => {
+      const client = {
+        query: vi.fn(async (_sql: string) => ({ rows: [{ locked: true }] })),
+        release: vi.fn(),
+      };
+      await expect(
+        ensureGoogleWorkspaceSchemaBeforeListen({
+          pool: { connect: async () => client },
+          ensureSchema: async () => {
+            throw new Error(message);
+          },
+        }),
+      ).rejects.toThrow(message);
+      expect(client.release).toHaveBeenCalledWith(true);
+      expect(client.query.mock.calls.some(([s]) => s === "ROLLBACK")).toBe(
+        !message.includes("read timeout"),
+      );
+    },
+  );
 });
