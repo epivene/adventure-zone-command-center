@@ -23,6 +23,10 @@ interface MigrationPool {
 
 const migrationFiles = [
   {
+    name: "20261015_reversible_profile_duplicates.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.profile_merge_journal') IS NOT NULL AND to_regclass(current_schema() || '.profile_duplicate_dismissals') IS NOT NULL AS ready",
+  },
+  {
     name: "014_act_review_bulk_decisions.sql",
     markerSql: `SELECT EXISTS (
       SELECT 1 FROM information_schema.columns
@@ -822,4 +826,5 @@ export async function runActReviewMigrations(options?: {
     client.release();
   }
 }
+
 

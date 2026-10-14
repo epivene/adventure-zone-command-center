@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { DuplicateCreationWarning } from "@/components/profiles/duplicate-creation-warning";
 import { useLocation } from "wouter";
 import { browserProfileDraftStore, type ProfileDraft, type ProfileDraftContact } from "@/lib/profile-draft";
 
@@ -223,6 +224,7 @@ export function EventProfileForm({
 
   return (
     <form className="grid gap-6" noValidate onSubmit={handleSubmit}>
+      <DuplicateCreationWarning name={eventName} city={city} region={region} />
       {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800" role="alert">{error}</p> : null}
 
       {showRecovered ? (

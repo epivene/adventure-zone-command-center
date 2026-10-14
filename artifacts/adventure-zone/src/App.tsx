@@ -1,3 +1,4 @@
+import ProfileDuplicatesPage from "./pages/ProfileDuplicatesPage";
 import { RemindersProvider, RemindersPage } from "@/features/deadline-rules/reminders";
 import { WorkspaceSessionProvider } from "@/features/assistant-workspace/WorkspaceSessionProvider";
 import AssistantOfflinePage from "@/pages/AssistantOfflinePage";
@@ -398,7 +399,8 @@ function AdminProtectedApp() {
           <Route path="/settings/reminders" component={RemindersPage} />
           <Route path="/settings/chatgpt-connection" component={SettingsChatGPTConnectionPage} />
           <Route path="/chatgpt-connection/consent" component={ChatGPTConnectionConsentPage} />
-          <Route path="/profiles/:profileId" component={EventProfilePage} />
+          <Route path="/profiles/duplicate-review" component={ProfileDuplicatesPage} />
+                <Route path="/profiles/:profileId" component={EventProfilePage} />
           <Route path="/profiles" component={OrganizationsPage} />
           <Route path="/organizations"><ProfilesRedirect /></Route>
           <Route path="/event-families/:id"><EventFamilyPage /></Route>
@@ -489,4 +491,5 @@ export default function App() {
     </QueryClientProvider>
   );
 }
+
 
