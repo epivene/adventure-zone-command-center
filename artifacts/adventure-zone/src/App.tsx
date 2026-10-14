@@ -1,3 +1,4 @@
+import { RemindersProvider, RemindersPage } from "@/features/deadline-rules/reminders";
 import { WorkspaceSessionProvider } from "@/features/assistant-workspace/WorkspaceSessionProvider";
 import AssistantOfflinePage from "@/pages/AssistantOfflinePage";
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
@@ -369,7 +370,7 @@ function BossProtectedApp() {
 function AdminProtectedApp() {
   return (
     <AssistantContextProvider><WorkspaceSessionProvider>
-      <AppShell>
+      <RemindersProvider><AppShell>
         <Switch>
           <Route path="/assistant/workspace/:conversationId">{() => null}</Route>
           <Route path="/assistant/workspace">{() => null}</Route>
@@ -394,6 +395,7 @@ function AdminProtectedApp() {
           <Route path="/contacts/:id/edit"><ContactEditPage /></Route>
           <Route path="/contacts/:id">{(params)=><ContactDetailPage contactId={params.id}/>}</Route>
           <Route path="/contacts" component={ContactsPage} />
+          <Route path="/settings/reminders" component={RemindersPage} />
           <Route path="/settings/chatgpt-connection" component={SettingsChatGPTConnectionPage} />
           <Route path="/chatgpt-connection/consent" component={ChatGPTConnectionConsentPage} />
           <Route path="/profiles/:profileId" component={EventProfilePage} />
@@ -447,7 +449,7 @@ function AdminProtectedApp() {
           <Route path="/manager-issues" component={ManagerIssuesAdminPage} />
           <Route component={NotFound} />
         </Switch>
-      </AppShell>
+      </AppShell></RemindersProvider>
     </WorkspaceSessionProvider></AssistantContextProvider>
   );
 }
@@ -487,3 +489,4 @@ export default function App() {
     </QueryClientProvider>
   );
 }
+

@@ -1,3 +1,4 @@
+import * as deadlineRulesSchema from "./deadline-rules-schema";
 import * as chatgptConnectionSchema from "./chatgpt-connection-schema";
 import * as legPlanningSchema from "./leg-planning-schema";
 import * as assistantWorkspaceSchema from "./assistant-workspace-schema";
@@ -89,6 +90,7 @@ import * as outreachPlannerSchema from "./outreach-planner-schema";
 type DatabaseSchema = typeof legPlanningSchema & typeof chatgptConnectionSchema & typeof assistantWorkspaceSchema &
   typeof outreachPlannerSchema &
   typeof coreSchema &
+  typeof deadlineRulesSchema &
   typeof eventFamilySchema &
   typeof paperNoteSchema &
   typeof businessSourceSchema &
@@ -130,6 +132,7 @@ const schema: DatabaseSchema = {
   ...assistantWorkspaceSchema,
   ...outreachPlannerSchema,
   ...coreSchema,
+  ...deadlineRulesSchema,
   ...eventFamilySchema,
   ...paperNoteSchema,
   ...businessSourceSchema,
@@ -204,3 +207,4 @@ export * from "./outreach-planner-schema";
 export * from "./assistant-workspace-schema";
 
 export * from "./chatgpt-connection-schema";
+

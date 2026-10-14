@@ -737,6 +737,10 @@ const migrationFiles = [
       AND column_name IN ('rig_fit_confirmed_on', 'hookups_confirmed_on', 'overnight_confirmed_on')
       AND data_type = 'date'`,
   },
+  {
+    name: "20261014_deadline_rules.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.deadline_evaluation_state') IS NOT NULL AND to_regclass(current_schema() || '.deadline_notifications') IS NOT NULL AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='deadline_booking_status_event' AND tgrelid='bookings'::regclass) AS ready",
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
@@ -818,3 +822,4 @@ export async function runActReviewMigrations(options?: {
     client.release();
   }
 }
+

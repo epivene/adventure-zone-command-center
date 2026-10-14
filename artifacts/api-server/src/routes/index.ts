@@ -1,3 +1,4 @@
+import { createDeadlineRulesRouter } from "./deadline-rules";
 import { createBookingDateRepairsRouter } from "./booking-date-repairs";
 import { createEmailThreadAttentionRouter } from "./email-thread-attention";
 import { createEmailAttentionService } from "../features/google-workspace/email-thread-attention-runtime";
@@ -315,6 +316,7 @@ router.use(businessSourceDocumentLinksRouter);
 router.use(businessDocumentsRouter);
 router.use(businessDocumentImportsRouter);
 router.use(profileSourceDocumentsRouter);
+router.use(createDeadlineRulesRouter());
 router.use(todayRouter);
 router.use(opportunityEmailLiveRuntimeRouter);
 router.use(assistantCommandJobsRouter);
@@ -390,3 +392,4 @@ router.use(invoicesRouter);
 router.use("/follow-ups", followUpsRouter);
 
 export default router;
+
