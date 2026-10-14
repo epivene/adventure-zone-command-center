@@ -78,8 +78,11 @@ router.get("/google-workspace/operational-calendar/bookings/search", async (req,
     return;
   }
   try {
-    const candidates = await new OperationalCalendarLinkRepository(db).searchExistingBookings(query.data);
-    res.json({ candidates });
+    const repository = new OperationalCalendarLinkRepository(db);
+    const [candidates, profiles] = await Promise.all([
+      repository.searchExistingBookings(query.data), repository.searchExistingProfiles(query.data),
+    ]);
+    res.json({ candidates, profiles });
   } catch (error) {
     req.log.error({ err: error }, "Calendar booking search failed");
     res.status(500).json({ error: "Could not search existing profiles and bookings." });
@@ -191,3 +194,4 @@ router.post("/google-workspace/operational-calendar/reviews/:reviewId/resolve", 
 });
 
 export default router;
+

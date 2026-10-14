@@ -1,3 +1,4 @@
+import { OperationalCalendarProfileResults, type CalendarProfileResult } from "@/components/google-workspace/operational-calendar-profile-results";
 import { OperationalCalendarBookingSearch } from "@/components/google-workspace/operational-calendar-booking-search";
 import { ScheduleDateIssues } from "@/components/schedule/schedule-date-issues";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -73,7 +74,12 @@ function reviewDetails(review: OperationalCalendarReview) {
         return typeof candidate.bookingId === "string" && typeof candidate.bookingName === "string";
       })
     : [];
-  return { parsed, google, candidateBookings };
+  const candidateProfiles = Array.isArray(proposed.candidateProfiles)
+    ? proposed.candidateProfiles.filter((value): value is CalendarProfileResult => {
+      const profile = asRecord(value);
+      return typeof profile.profileId === "string" && typeof profile.profileName === "string";
+    }) : [];
+  return { parsed, google, candidateBookings, candidateProfiles };
 }
 
 function formatReviewDate(value: unknown) {
@@ -117,7 +123,7 @@ function OperationalReviewQueue({
       </div>
       <div className="grid gap-3">
         {reviews.map((review) => {
-          const { parsed, google, candidateBookings } = reviewDetails(review);
+          const { parsed, google, candidateBookings, candidateProfiles } = reviewDetails(review);
           const packageKey = packageByReview[review.id] || (["zone", "pirates", "warrior"].includes(String(parsed.packageKey)) ? parsed.packageKey as "zone" | "pirates" | "warrior" : undefined);
           const cancelled = parsed.calendarState === "cancelled" || /\bcancel(?:led|ed)\b/i.test(String(google.summary ?? ""));
           const selectedBookingId = selectedBookingByReview[review.id] ?? "";
@@ -145,7 +151,7 @@ function OperationalReviewQueue({
 
               {candidateBookings.length ? (
                 <fieldset className="mt-4 grid gap-2">
-                  <legend className="text-sm font-bold text-slate-900">Competing existing profiles</legend>
+                  <legend className="text-sm font-bold text-slate-900">Possible existing bookings — check the year</legend>
                   {candidateBookings.map((candidate) => {
                     const candidateStart = formatReviewDate(candidate.startsAt);
                     const candidateEnd = formatReviewDate(candidate.endsAt);
@@ -170,9 +176,10 @@ function OperationalReviewQueue({
                     );
                   })}
                 </fieldset>
-              ) : (
-                <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">No automatic match was found. Search your existing profiles below.</p>
-              )}
+              ) : !candidateProfiles.length ? (
+                <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">No name-based suggestion was found. Search your existing profiles below.</p>
+              ) : null}
+              <OperationalCalendarProfileResults profiles={candidateProfiles} />
               <OperationalCalendarBookingSearch
                 disabled={busyReviewId !== null}
                 selectedBookingId={selectedBookingId}
@@ -437,4 +444,5 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
 export default function CalendarPage() {
   return <div className="mx-auto max-w-7xl"><CalendarContent /></div>;
 }
+
 

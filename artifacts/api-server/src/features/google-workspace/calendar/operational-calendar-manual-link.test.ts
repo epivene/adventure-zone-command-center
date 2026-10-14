@@ -70,3 +70,35 @@ describe("manual calendar linking", () => {
     expect(writes).toEqual([]);
   });
 });
+
+
+it("refreshes empty saved candidates and exposes a profile with no booking without writes", async () => {
+  const insert = vi.fn(), update = vi.fn();
+  const db: any = {
+    insert, update,
+    select: () => {
+      let rows: any[] = [];
+      const chain: any = {
+        from: (table: unknown) => {
+          rows = table === googleOperationalCalendarReviews ? [
+            { id: "review", proposedChanges: { parsed: { eventName: "Blanding City Fall Festival" }, google: {} } },
+            { id: "no-booking", proposedChanges: { parsed: { eventName: "HAFFE Convention 2026" }, google: {} } },
+          ] : table === organizations ? [
+            { profileId: "blanding", profileName: "City of Blanding", city: "Blanding", region: "UT" },
+            { profileId: "haffe", profileName: "HAFFE Convention", city: null, region: null },
+          ] : table === bookings ? [
+            { bookingId: "booking", profileId: "blanding", bookingName: "Fall 2026", profileName: "City of Blanding", city: "Blanding", region: "UT" },
+          ] : [];
+          return chain;
+        },
+        where: () => chain, leftJoin: () => chain, orderBy: () => chain,
+        then: (resolve: (rows: any[]) => unknown) => Promise.resolve(rows).then(resolve),
+      };
+      return chain;
+    },
+  };
+  const reviews = await new OperationalCalendarLinkRepository(db).listPendingReviews();
+  expect(reviews[0].proposedChanges.candidateBookings[0].bookingId).toBe("booking");
+  expect(reviews[1].proposedChanges.candidateProfiles[0].profileId).toBe("haffe");
+  expect(insert).not.toHaveBeenCalled(); expect(update).not.toHaveBeenCalled();
+});

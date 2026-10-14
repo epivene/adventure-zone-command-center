@@ -39,3 +39,13 @@ it("shows errors and supports retry and empty results", async () => {
   fireEvent.click(screen.getByRole("button"));
   await waitFor(() => expect(screen.getByRole("status").textContent).toContain("No bookings found"));
 });
+it("shows an existing profile even when it has no matching booking", async () => {
+  search.mockResolvedValue({ candidates: [], profiles: [{ profileId: "haffe-id", profileName: "HAFFE Convention", city: null, region: null }] });
+  render(<OperationalCalendarBookingSearch disabled={false} selectedBookingId="" onSelect={() => {}} />);
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "HAFFE" } });
+  fireEvent.click(screen.getByRole("button"));
+  const link = await screen.findByRole("link", { name: "HAFFE Convention" });
+  expect(link.getAttribute("href")).toBe("/profiles/haffe-id");
+  expect(screen.queryByText(/No bookings found/)).toBeNull();
+  expect(screen.queryByRole("radio")).toBeNull();
+});

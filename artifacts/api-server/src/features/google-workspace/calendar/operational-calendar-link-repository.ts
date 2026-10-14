@@ -1,6 +1,7 @@
+import { searchCalendarRecords, suggestCalendarProfiles } from "./operational-calendar-review-search";
 import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { createHash } from "node:crypto";
-import { and, eq, inArray, sql, ilike, or } from "drizzle-orm";
+import { and, eq, sql, isNull } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -262,14 +263,8 @@ export class OperationalCalendarLinkRepository {
         ? and(eq(googleOperationalCalendarReviews.connectionId, connectionId), pending)
         : pending,
     );
-    const candidateIds = [...new Set(reviews.flatMap((review) => {
-      const proposed = reviewChanges(review.proposedChanges);
-      return Array.isArray(proposed.candidateBookingIds)
-        ? proposed.candidateBookingIds.filter((value): value is string => typeof value === "string")
-        : [];
-    }))];
-    if (!candidateIds.length) return reviews;
-
+    if (!reviews.length) return reviews;
+    const profiles = await this.loadSearchProfiles();
     const candidates = await this.db.select({
       bookingId: bookings.id,
       profileId: organizations.id,
@@ -283,40 +278,64 @@ export class OperationalCalendarLinkRepository {
     }).from(bookings)
       .leftJoin(organizations, eq(bookings.organizationId, organizations.id))
       .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
-      .where(inArray(bookings.id, candidateIds));
+      .where(isNull(organizations.consolidatedIntoId));
     const byId = new Map(candidates.map((candidate) => [candidate.bookingId, candidate]));
     return reviews.map((review) => {
       const proposed = reviewChanges(review.proposedChanges);
       const ids = Array.isArray(proposed.candidateBookingIds)
         ? proposed.candidateBookingIds.filter((value): value is string => typeof value === "string")
         : [];
+      const suggestedProfiles = suggestCalendarProfiles({
+        eventName: proposed.parsed?.eventName,
+        summary: proposed.google?.summary,
+        city: proposed.parsed?.city,
+        region: proposed.parsed?.region,
+        managerToken: proposed.parsed?.managerToken,
+      }, profiles);
+      const suggestedIds = new Set(suggestedProfiles.map(profile => profile.profileId));
+      const candidateBookings = [...new Map([
+        ...ids.map(id => byId.get(id)).filter((candidate): candidate is typeof candidates[number] => Boolean(candidate)),
+        ...candidates.filter(candidate => candidate.profileId && suggestedIds.has(candidate.profileId)),
+      ].map(candidate => [candidate.bookingId, candidate])).values()];
       return {
         ...review,
         proposedChanges: {
           ...review.proposedChanges,
-          candidateBookings: ids
-            .map((id) => byId.get(id))
-            .filter((candidate): candidate is typeof candidates[number] => Boolean(candidate)),
+          candidateBookings,
+          candidateProfiles: suggestedProfiles.filter(profile => !candidateBookings.some(booking => booking.profileId === profile.profileId)),
         },
       };
     });
   }
 
+  private async loadSearchProfiles() {
+    return this.db.select({ profileId: organizations.id, profileName: organizations.name,
+      city: organizations.city, region: organizations.region }).from(organizations)
+      .where(isNull(organizations.consolidatedIntoId)).orderBy(organizations.name, organizations.id);
+  }
+
+  async searchExistingProfiles(query: string) {
+    return searchCalendarRecords(query, await this.loadSearchProfiles(), profile =>
+      [profile.profileName, profile.city ?? "", profile.region ?? ""]);
+  }
+
   async searchExistingBookings(query: string) {
-    // No date/status/leg filters: older and cancelled bookings must be findable.
-    const pattern = '%' + query.trim().replace(/[\\%_]/g, '\\$&') + '%';
-    return this.db.select({
+    // Same forgiving token/typo matching as profile search, across all years/statuses.
+    const candidates = await this.db.select({
       bookingId: bookings.id, profileId: organizations.id,
       bookingName: bookings.name, profileName: organizations.name,
       city: bookings.city, region: bookings.region,
       startsAt: bookings.startsAt, endsAt: bookings.endsAt,
       travelLegName: travelLegs.name,
+      profileCity: organizations.city, profileRegion: organizations.region,
     }).from(bookings)
       .leftJoin(organizations, eq(bookings.organizationId, organizations.id))
       .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
-      .where(or(ilike(bookings.name, pattern), ilike(organizations.name, pattern),
-        ilike(bookings.city, pattern), ilike(organizations.city, pattern)))
-      .orderBy(bookings.name, bookings.id).limit(50);
+      .where(isNull(organizations.consolidatedIntoId))
+      .orderBy(bookings.name, bookings.id);
+    return searchCalendarRecords(query, candidates, candidate => [candidate.bookingName,
+      candidate.profileName ?? "", candidate.city, candidate.region,
+      candidate.profileCity ?? "", candidate.profileRegion ?? ""]);
   }
 
   async resolveReview(input: {
@@ -511,4 +530,5 @@ export class OperationalCalendarLinkRepository {
     return legs.find((leg: { name: string }) => normalize(leg.name) === normalize(managerToken))?.id ?? null;
   }
 }
+
 

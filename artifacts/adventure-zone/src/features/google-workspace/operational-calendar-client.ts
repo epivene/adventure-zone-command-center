@@ -1,3 +1,4 @@
+import type { CalendarProfileResult } from "@/components/google-workspace/operational-calendar-profile-results";
 import { apiFetch } from "@/lib/auth-token";
 
 async function json<T>(response: Response): Promise<T> {
@@ -135,7 +136,8 @@ export async function syncOperationalCalendarBooking(bookingId: string) {
 
 
 export async function searchOperationalCalendarBookings(query: string) {
-  return json<{ candidates: OperationalCalendarCandidate[] }>(await apiFetch(
+  return json<{ candidates: OperationalCalendarCandidate[]; profiles?: CalendarProfileResult[] }>(await apiFetch(
     `/google-workspace/operational-calendar/bookings/search?q=${encodeURIComponent(query.trim())}`,
   ));
 }
+

@@ -1,3 +1,4 @@
+import { OperationalCalendarProfileResults, type CalendarProfileResult } from "./operational-calendar-profile-results";
 import { useRef, useState } from "react";
 import { searchOperationalCalendarBookings, type OperationalCalendarCandidate } from "@/features/google-workspace/operational-calendar-client";
 
@@ -7,6 +8,7 @@ export function OperationalCalendarBookingSearch({ disabled, selectedBookingId, 
   onSelect: (bookingId: string) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [profiles, setProfiles] = useState<CalendarProfileResult[]>([]);
   const [results, setResults] = useState<OperationalCalendarCandidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -18,12 +20,14 @@ export function OperationalCalendarBookingSearch({ disabled, selectedBookingId, 
     setLoading(true);
     setError(null);
     setResults([]);
+    setProfiles([]);
     setSearched(false);
     onSelect("");
     try {
       const response = await searchOperationalCalendarBookings(query);
       if (version !== request.current) return;
       setResults(response.candidates);
+      setProfiles((response.profiles ?? []).filter(profile => !response.candidates.some(candidate => candidate.profileId === profile.profileId)));
       setSearched(true);
     } catch {
       if (version === request.current) setError("Could not search profiles. Try again.");
@@ -45,6 +49,7 @@ export function OperationalCalendarBookingSearch({ disabled, selectedBookingId, 
             ++request.current;
             setQuery(event.target.value);
             setResults([]);
+    setProfiles([]);
             setSearched(false);
             setLoading(false);
             setError(null);
@@ -57,7 +62,7 @@ export function OperationalCalendarBookingSearch({ disabled, selectedBookingId, 
     </form>
     <p className="text-xs text-slate-600">Searches all seasons and booking statuses. Select the correct booking year before linking.</p>
     {error ? <p role="alert">{error}</p> : null}
-    {searched && !results.length ? <p role="status">No bookings found. Try a shorter name or city. If the profile has no booking yet, open Profiles and add a booking to that existing profile.</p> : null}
+    {searched && !results.length && !profiles.length ? <p role="status">No bookings found. Try a shorter name or city. If the profile has no booking yet, open Profiles and add a booking to that existing profile.</p> : null}
     {results.length ? <fieldset className="grid gap-2">
       <legend className="text-sm font-bold">Existing bookings</legend>
       {results.map(candidate => <label key={candidate.bookingId} className="flex gap-3 rounded-lg border p-3">
@@ -70,6 +75,8 @@ export function OperationalCalendarBookingSearch({ disabled, selectedBookingId, 
         </span>
       </label>)}
     </fieldset> : null}
+    <OperationalCalendarProfileResults profiles={profiles} />
     {results.length === 50 ? <p>Showing the first 50 bookings. Narrow the search to find yours.</p> : null}
   </div>;
 }
+
