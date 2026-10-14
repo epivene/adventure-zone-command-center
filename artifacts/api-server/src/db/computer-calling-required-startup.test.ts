@@ -1,132 +1,104 @@
-import { describe, expect, it, vi } from "vitest";
-
-vi.hoisted(() => {
-  process.env.DATABASE_URL ||=
-    "postgres://postgres:postgres@127.0.0.1:5432/test";
-});
-
+import { afterEach, describe, expect, it, vi } from "vitest";
+vi.mock("@workspace/db", () => ({ pool: {} }));
 import { ensureComputerCallingSchemaBeforeListen } from "./computer-calling-required-startup";
-
-function createStartupPool(options?: { failSchema?: boolean }) {
-  const queries: string[] = [];
+import { computerCallingReadySql } from "./computer-calling-required-startup";
+function fixture(ready: boolean[], locks = [true], failure?: Error) {
+  const query = vi.fn(async (sql: string) => {
+    if (sql === computerCallingReadySql)
+      return { rows: [{ ready: ready.length > 1 ? ready.shift() : ready[0] }] };
+    if (sql.includes("pg_try_advisory_xact_lock"))
+      return {
+        rows: [{ locked: locks.length > 1 ? locks.shift() : locks[0] }],
+      };
+    if (sql.includes("CREATE TABLE") && failure) throw failure;
+    return { rows: [] };
+  });
   const release = vi.fn();
-  const client = {
-    async query(sql: string) {
-      queries.push(sql);
-      if (sql.includes("pg_try_advisory_lock"))
-        return { rows: [{ locked: true }] };
-      if (
-        options?.failSchema &&
-        sql.includes("CREATE TABLE IF NOT EXISTS computer_call_sessions")
-      ) {
-        throw new Error("schema failed");
-      }
-      return { rows: [] };
-    },
-    release,
-  };
-
   return {
-    queries,
+    query,
     release,
-    pool: {
-      async connect() {
-        return client;
-      },
-    },
+    pool: { connect: async () => ({ query, release }) },
   };
 }
-
-describe("ensureComputerCallingSchemaBeforeListen", () => {
-  it("installs the complete provider-neutral computer calling schema", async () => {
-    const { pool, queries, release } = createStartupPool();
-
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.useRealTimers();
+});
+describe("computer calling startup", () => {
+  it("skips DDL and advisory locks when installed", async () => {
+    const f = fixture([true], [false]);
     await expect(
-      ensureComputerCallingSchemaBeforeListen({ pool }),
+      ensureComputerCallingSchemaBeforeListen({ pool: f.pool }),
     ).resolves.toBe(true);
-
-    const schemaQueries = queries.filter((sql) =>
-      sql.includes("CREATE TABLE IF NOT EXISTS computer_call_sessions"),
+    expect(f.query.mock.calls.some(([s]) => s.includes("CREATE TABLE"))).toBe(
+      false,
     );
-    expect(schemaQueries).toHaveLength(1);
-    expect(schemaQueries[0]).toContain(
-      "direction text NOT NULL DEFAULT 'outbound'",
+    expect(f.query.mock.calls.some(([s]) => s.includes("advisory"))).toBe(
+      false,
     );
-    expect(schemaQueries[0]).toContain(
-      "method text NOT NULL DEFAULT 'browser_voip'",
-    );
-    expect(schemaQueries[0]).toContain(
-      "computer_call_sessions_direction_valid",
-    );
-    expect(schemaQueries[0]).toContain("computer_call_sessions_method_valid");
-    expect(schemaQueries[0]).toContain("computer_call_sessions_status_valid");
-    expect(schemaQueries[0]).toContain(
-      "computer_call_sessions_duration_seconds_nonnegative",
-    );
-    expect(schemaQueries[0]).toContain("call_sessions_method_valid");
-    expect(schemaQueries[0]).toContain("'browser_voip'");
-    expect(queries).toEqual([
-      expect.stringContaining("pg_try_advisory_lock"),
+    expect(f.release).toHaveBeenCalledWith(false);
+  });
+  it("migrates a missing schema inside bounded transaction and verifies it", async () => {
+    const f = fixture([false, false, true]);
+    await ensureComputerCallingSchemaBeforeListen({ pool: f.pool });
+    const sql = f.query.mock.calls.map(([s]) => s);
+    expect(sql.slice(0, 3)).toEqual([
       "BEGIN",
-      expect.stringContaining(
-        "CREATE TABLE IF NOT EXISTS computer_call_sessions",
-      ),
-      "COMMIT",
-      expect.stringContaining("pg_advisory_unlock"),
+      "SET LOCAL lock_timeout = '5s'",
+      "SET LOCAL statement_timeout = '20s'",
     ]);
-    expect(release).toHaveBeenCalledOnce();
+    expect(sql.find((s) => s.includes("CREATE TABLE"))).not.toMatch(
+      /BEGIN;|COMMIT;/,
+    );
+    expect(sql.at(-1)).toBe("COMMIT");
   });
-
-  it("can install the schema twice without error", async () => {
-    const { pool, queries, release } = createStartupPool();
-
-    await expect(
-      ensureComputerCallingSchemaBeforeListen({ pool }),
-    ).resolves.toBe(true);
-    await expect(
-      ensureComputerCallingSchemaBeforeListen({ pool }),
-    ).resolves.toBe(true);
-
-    expect(
-      queries.filter((sql) =>
-        sql.includes("CREATE TABLE IF NOT EXISTS computer_call_sessions"),
-      ),
-    ).toHaveLength(2);
-    expect(release).toHaveBeenCalledTimes(2);
+  it("rechecks after another deploy installs schema", async () => {
+    const f = fixture([false, true]);
+    await ensureComputerCallingSchemaBeforeListen({ pool: f.pool });
+    expect(f.query.mock.calls.some(([s]) => s.includes("CREATE TABLE"))).toBe(
+      false,
+    );
   });
-
-  it("rolls back a failed schema transaction before unlocking and releasing", async () => {
-    const { pool, queries, release } = createStartupPool({ failSchema: true });
-
-    await expect(
-      ensureComputerCallingSchemaBeforeListen({ pool }),
-    ).rejects.toThrow("schema failed");
-
-    expect(queries.at(-2)).toBe("ROLLBACK");
-    expect(queries.at(-1)).toContain("pg_advisory_unlock");
-    expect(release).toHaveBeenCalledOnce();
+  it("waits through brief lock contention", async () => {
+    vi.useFakeTimers();
+    const f = fixture([false, true], [false, true]);
+    const work = ensureComputerCallingSchemaBeforeListen({
+      pool: f.pool,
+    });
+    await vi.runAllTimersAsync();
+    await work;
+    expect(f.release).toHaveBeenCalledWith(false);
   });
-
-  it("fails startup when the schema advisory lock is busy", async () => {
-    const release = vi.fn();
-    const client = {
-      async query(sql: string) {
-        if (sql.includes("pg_try_advisory_lock"))
-          return { rows: [{ locked: false }] };
-        return { rows: [] };
-      },
-      release,
-    };
-
+  it("fails closed and discards connection after persistent contention", async () => {
+    const f = fixture([false], [false]);
     await expect(
       ensureComputerCallingSchemaBeforeListen({
-        pool: {
-          async connect() {
-            return client;
-          },
-        },
+        pool: f.pool,
+        lockWaitMs: 0,
       }),
-    ).rejects.toThrow("COMPUTER_CALLING_SCHEMA_LOCK_BUSY");
-    expect(release).toHaveBeenCalledOnce();
+    ).rejects.toThrow("LOCK_BUSY");
+    expect(f.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(f.release).toHaveBeenCalledWith(true);
   });
+  it("rolls back an incomplete repair", async () => {
+    const f = fixture([false]);
+    await expect(
+      ensureComputerCallingSchemaBeforeListen({ pool: f.pool }),
+    ).rejects.toThrow("INCOMPLETE");
+    expect(f.query).toHaveBeenCalledWith("ROLLBACK");
+    expect(f.release).toHaveBeenCalledWith(true);
+  });
+  it.each(["canceling statement due to lock timeout", "Query read timeout"])(
+    "cleans up %s",
+    async (message) => {
+      const f = fixture([false], [true], new Error(message));
+      await expect(
+        ensureComputerCallingSchemaBeforeListen({ pool: f.pool }),
+      ).rejects.toThrow(message);
+      expect(f.release).toHaveBeenCalledWith(true);
+      expect(f.query.mock.calls.some(([s]) => s === "ROLLBACK")).toBe(
+        !message.includes("read timeout"),
+      );
+    },
+  );
 });
