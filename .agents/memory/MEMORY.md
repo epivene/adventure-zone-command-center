@@ -29,3 +29,4 @@
 - [Manager crew offline authorization](manager-crew-offline-boundary.md) — cache only saved logistics; connectivity fallback never overrides denial or revocation.
 - [Browser offline emulation](browser-offline-emulation.md) — SW navigation can reset reported connectivity; prove disconnection with traffic counters, not navigator.onLine alone.
 - [Profile email access by role](profile-email-access.md) — Office uses its own drafts; Boss reads approved conversations through its read-only email routes.
+- [GitHub API source sync](github-api-source-sync.md) — API tree paths are repository-relative, not artifact-relative; verify changed paths and branch ancestry before updating main.
