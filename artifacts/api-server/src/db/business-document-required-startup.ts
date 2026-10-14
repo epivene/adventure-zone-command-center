@@ -11,6 +11,16 @@ const BUSINESS_DOCUMENT_CATEGORY_VALUES = "'contract','invoice','proposal','coi'
 
 export const BUSINESS_DOCUMENT_CATEGORY_REPAIR_SQL = `
 DO $invoice_category$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint
+    WHERE conrelid=to_regclass(current_schema()||'.business_documents')
+      AND conname='business_documents_category_valid' AND contype='c' AND convalidated
+      AND regexp_replace(pg_get_expr(conbin, conrelid), '[()[:space:]]', '', 'g') =
+        'category=ANYARRAY[${BUSINESS_DOCUMENT_CATEGORY_VALUES.split(",").map(value => value.replaceAll("'", "''") + "::text").join(",")}]')
+    AND NOT EXISTS (SELECT 1 FROM pg_constraint
+      WHERE conrelid=to_regclass(current_schema()||'.business_documents')
+        AND conname='business_documents_category_check') THEN
+    RETURN;
+  END IF;
   ALTER TABLE business_documents
     DROP CONSTRAINT IF EXISTS business_documents_category_valid;
   ALTER TABLE business_documents
@@ -50,9 +60,11 @@ CREATE TABLE IF NOT EXISTS business_document_versions (
   created_by text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), UNIQUE (document_id, version_number)
 );
 CREATE INDEX IF NOT EXISTS business_document_versions_document_created_idx ON business_document_versions (document_id, created_at DESC);
-DO $$ BEGIN ALTER TABLE business_documents ADD CONSTRAINT business_documents_current_version_fk
+DO $$ BEGIN
+IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid=to_regclass(current_schema()||'.business_documents') AND conname='business_documents_current_version_fk') THEN
+ALTER TABLE business_documents ADD CONSTRAINT business_documents_current_version_fk
   FOREIGN KEY (current_version_id) REFERENCES business_document_versions(id) ON DELETE SET NULL;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+END IF; END $$;
 CREATE TABLE IF NOT EXISTS business_document_links (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), document_id uuid NOT NULL REFERENCES business_documents(id) ON DELETE CASCADE,
   target_kind text NOT NULL CHECK (target_kind IN ('profile','booking','event_family')),
@@ -126,7 +138,10 @@ CREATE TABLE IF NOT EXISTS business_document_import_items (
   UNIQUE (run_id, source_external_id)
 );
 CREATE INDEX IF NOT EXISTS business_document_import_items_run_status_idx ON business_document_import_items (run_id, status);
-ALTER TABLE design_certificates ADD COLUMN IF NOT EXISTS document_id uuid REFERENCES business_documents(id) ON DELETE SET NULL;
+DO $$ BEGIN
+IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='design_certificates' AND column_name='document_id') THEN
+ALTER TABLE design_certificates ADD COLUMN document_id uuid REFERENCES business_documents(id) ON DELETE SET NULL;
+END IF; END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS design_certificates_document_unique ON design_certificates (document_id) WHERE document_id IS NOT NULL;
 `;
 
@@ -143,3 +158,4 @@ export async function ensureBusinessDocumentSchemaBeforeListen(
     client.release?.();
   }
 }
+

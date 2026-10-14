@@ -1,27 +1,7 @@
-import type { Pool } from "pg";
 import { pool as defaultPool } from "@workspace/db";
 
-const advisoryLockSql =
-  "SELECT pg_advisory_lock(hashtext('adventure-zone:profile-touch-schema'))";
-const advisoryUnlockSql =
-  "SELECT pg_advisory_unlock(hashtext('adventure-zone:profile-touch-schema'))";
-
-/**
- * Maintain a dedicated CRM recency clock for the Profiles directory.
- * Generic organizations.updated_at is intentionally NOT used because background
- * and maintenance writes can make untouched profiles appear recently worked.
- */
-export async function ensureProfileTouchSchema(
-  pool: Pool = defaultPool,
-): Promise<void> {
-  const client = await pool.connect();
-  let locked = false;
-
-  try {
-    await client.query(advisoryLockSql);
-    locked = true;
-
-    await client.query(`
+// Schema repair only. Existing contact consolidation decisions are preserved.
+const ensureSchemaSql = `
       CREATE TABLE IF NOT EXISTS contact_consolidations (
         source_contact_id uuid PRIMARY KEY REFERENCES contacts(id) ON DELETE CASCADE,
         canonical_contact_id uuid NOT NULL REFERENCES contacts(id) ON DELETE RESTRICT,
@@ -32,145 +12,6 @@ export async function ensureProfileTouchSchema(
 
       CREATE INDEX IF NOT EXISTS contact_consolidations_canonical_idx
         ON contact_consolidations (canonical_contact_id);
-
-      DELETE FROM contact_consolidations;
-
-      WITH contact_identity AS (
-        SELECT
-          c.id AS contact_id,
-          CASE
-            WHEN nullif(lower(btrim(c.email)), '') IS NOT NULL THEN
-              'email:'
-              || regexp_replace(lower(btrim(concat_ws(' ', c.first_name, c.last_name))), '[^a-z0-9]+', '', 'g')
-              || ':' || lower(btrim(c.email))
-            WHEN nullif(btrim(c.normalized_phone), '') IS NOT NULL THEN
-              'phone:'
-              || regexp_replace(lower(btrim(concat_ws(' ', c.first_name, c.last_name))), '[^a-z0-9]+', '', 'g')
-              || ':' || btrim(c.normalized_phone)
-            ELSE NULL
-          END AS identity_key,
-          EXISTS (
-            SELECT 1 FROM organization_contacts oc
-            WHERE oc.contact_id = c.id AND oc.active = true AND oc.is_primary = true
-          ) AS is_primary,
-          EXISTS (
-            SELECT 1 FROM organization_contacts oc
-            WHERE oc.contact_id = c.id AND oc.active = true AND oc.source = 'local'
-          ) AS has_local_relationship,
-          c.normalized_phone IS NOT NULL AS has_phone,
-          c.updated_at
-        FROM contacts c
-      ), duplicate_identity_keys AS (
-        SELECT DISTINCT candidate.identity_key
-        FROM contact_identity candidate
-        JOIN organization_contacts relationship
-          ON relationship.contact_id = candidate.contact_id
-         AND relationship.active = true
-        WHERE candidate.identity_key IS NOT NULL
-          AND candidate.identity_key NOT IN ('email::', 'phone::')
-        GROUP BY relationship.organization_id, candidate.identity_key
-        HAVING count(DISTINCT candidate.contact_id) > 1
-      ), contact_candidates AS (
-        SELECT identity.*
-        FROM contact_identity identity
-        JOIN duplicate_identity_keys duplicate
-          ON duplicate.identity_key = identity.identity_key
-      ), ranked_contact_candidates AS (
-        SELECT
-          contact_id,
-          identity_key,
-          first_value(contact_id) OVER (
-            PARTITION BY identity_key
-            ORDER BY is_primary DESC, has_local_relationship DESC, has_phone DESC, updated_at DESC, contact_id
-          ) AS canonical_contact_id,
-          row_number() OVER (
-            PARTITION BY identity_key
-            ORDER BY is_primary DESC, has_local_relationship DESC, has_phone DESC, updated_at DESC, contact_id
-          ) AS duplicate_rank
-        FROM contact_candidates
-      )
-      INSERT INTO contact_consolidations (
-        source_contact_id,
-        canonical_contact_id,
-        consolidated_at
-      )
-      SELECT contact_id, canonical_contact_id, now()
-      FROM ranked_contact_candidates
-      WHERE duplicate_rank > 1
-        AND contact_id <> canonical_contact_id;
-
-      WITH preferred_relationships AS (
-        SELECT DISTINCT ON (relationship.organization_id, mapping.canonical_contact_id)
-          relationship.organization_id,
-          mapping.canonical_contact_id AS contact_id,
-          relationship.role,
-          relationship.source
-        FROM contact_consolidations mapping
-        JOIN organization_contacts relationship
-          ON relationship.contact_id = mapping.source_contact_id
-         AND relationship.active = true
-        ORDER BY
-          relationship.organization_id,
-          mapping.canonical_contact_id,
-          relationship.is_primary DESC,
-          CASE WHEN relationship.source = 'local' THEN 0 ELSE 1 END,
-          relationship.updated_at DESC,
-          relationship.id
-      )
-      INSERT INTO organization_contacts (
-        organization_id,
-        contact_id,
-        role,
-        is_primary,
-        active,
-        source,
-        created_at,
-        updated_at
-      )
-      SELECT
-        organization_id,
-        contact_id,
-        role,
-        false,
-        true,
-        source,
-        now(),
-        now()
-      FROM preferred_relationships
-      ON CONFLICT (organization_id, contact_id) DO UPDATE
-      SET
-        role = coalesce(organization_contacts.role, excluded.role),
-        active = true,
-        source = CASE
-          WHEN organization_contacts.source = 'local' OR excluded.source = 'local' THEN 'local'
-          ELSE organization_contacts.source
-        END,
-        updated_at = now();
-
-      INSERT INTO audit_entries (
-        entity_type,
-        entity_id,
-        action,
-        before,
-        after,
-        created_at
-      )
-      SELECT
-        'contact',
-        mapping.source_contact_id,
-        'consolidate_duplicate',
-        jsonb_build_object('sourceContactId', mapping.source_contact_id),
-        jsonb_build_object('canonicalContactId', mapping.canonical_contact_id),
-        mapping.consolidated_at
-      FROM contact_consolidations mapping
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM audit_entries audit
-        WHERE audit.entity_type = 'contact'
-          AND audit.entity_id = mapping.source_contact_id
-          AND audit.action = 'consolidate_duplicate'
-          AND audit.after ->> 'canonicalContactId' = mapping.canonical_contact_id::text
-      );
 
       ALTER TABLE organizations
         ADD COLUMN IF NOT EXISTS filler boolean DEFAULT false NOT NULL;
@@ -520,11 +361,97 @@ export async function ensureProfileTouchSchema(
       FROM local_activity_profiles p
       WHERE o.id = p.profile_id
         AND p.changed_at > COALESCE(o.last_worked_at, o.created_at);
-    `);
-  } finally {
-    if (locked) {
-      await client.query(advisoryUnlockSql).catch(() => undefined);
+`;
+
+export const profileTouchReadySql = `SELECT
+ NOT EXISTS(SELECT 1 FROM (VALUES ('filler'),('filler_reason'),('filler_changed_at'),('last_worked_at')) e(name)
+ WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='organizations' AND column_name=e.name))
+ AND NOT EXISTS(SELECT 1 FROM (VALUES ('source_contact_id'),('canonical_contact_id'),('consolidated_at')) e(name)
+ WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='contact_consolidations' AND column_name=e.name))
+ AND NOT EXISTS(SELECT 1 FROM (VALUES ('organizations_last_worked_at_idx'),('contact_consolidations_canonical_idx')) e(name)
+ WHERE NOT EXISTS(SELECT 1 FROM pg_index WHERE indexrelid=to_regclass(current_schema()||'.'||e.name) AND indisvalid))
+ AND EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid=to_regclass(current_schema()||'.organizations') AND conname='organizations_filler_reason_required' AND convalidated)
+ AND to_regprocedure(current_schema()||'.touch_profile(uuid,timestamp with time zone)') IS NOT NULL
+ AND NOT EXISTS(SELECT 1 FROM (VALUES
+('organizations','organizations_touch_profile_work','touch_profile_from_organization_edit',19),
+('organization_locations','organization_locations_touch_profile_work','touch_profile_from_organization_location',29),
+('activities','activities_touch_profile','touch_profile_from_activity',29),
+('activity_associations','activity_associations_touch_profile','touch_profile_from_activity_association',29),
+('contacts','contacts_touch_profile_work','touch_profile_from_contact',29),
+('organization_contacts','organization_contacts_touch_profile_work','touch_profile_from_organization_contact',29),
+('bookings','bookings_touch_profile_work','touch_profile_from_booking',29),
+('follow_ups','follow_ups_touch_profile_work','touch_profile_from_follow_up',29)
+ ) e(table_name,trigger_name,function_name,event_type)
+ WHERE NOT EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid=to_regclass(current_schema()||'.'||e.table_name)
+ AND t.tgname=e.trigger_name AND t.tgfoid=to_regprocedure(current_schema()||'.'||e.function_name||'()')
+ AND t.tgtype=e.event_type AND t.tgenabled IN ('O','A') AND NOT t.tgisinternal
+ AND t.tgnargs=0 AND t.tgqual IS NULL AND cardinality(t.tgattr::smallint[])=0)) AS ready`;
+
+async function isProfileTouchSchemaReady(client: Client): Promise<boolean> {
+  return (await client.query(profileTouchReadySql)).rows[0]?.ready === true;
+}
+const advisoryTryLockSql =
+  "SELECT pg_try_advisory_xact_lock(hashtext('adventure-zone:profile-touch-schema')) AS locked";
+
+type Client = {
+  query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }>;
+  release(destroy?: boolean): void;
+};
+type Pool = { connect(): Promise<Client> };
+
+export async function ensureProfileTouchSchema(
+  pool: Pool = defaultPool as unknown as Pool,
+  options?: { lockWaitMs?: number },
+): Promise<void> {
+  const client = await pool.connect();
+  let inTransaction = false;
+  let destroy = false;
+  try {
+    await client.query("BEGIN");
+    inTransaction = true;
+    // Server-side limits cancel blocked work before the pool's 60s read timeout.
+    // SET LOCAL never leaks a timeout setting into unrelated pooled requests.
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query("SET LOCAL statement_timeout = '20s'");
+    if (await isProfileTouchSchemaReady(client)) {
+      await client.query("COMMIT");
+      inTransaction = false;
+      return;
     }
-    client.release();
+    const deadline =
+      Date.now() + Math.max(0, Math.min(options?.lockWaitMs ?? 10_000, 10_000));
+    for (;;) {
+      const result = await client.query(advisoryTryLockSql);
+      if (result.rows[0]?.locked === true) break;
+      if (Date.now() >= deadline)
+        throw new Error("PROFILE_TOUCH_SCHEMA_LOCK_BUSY");
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(250, Math.max(1, deadline - Date.now()))),
+      );
+    }
+    // A competing deploy may have finished while we waited for the lock.
+    if (!(await isProfileTouchSchemaReady(client))) {
+      await client.query(ensureSchemaSql);
+    }
+    if (!(await isProfileTouchSchemaReady(client))) {
+      throw new Error("PROFILE_TOUCH_SCHEMA_INCOMPLETE");
+    }
+    await client.query("COMMIT");
+    inTransaction = false;
+    return;
+  } catch (error) {
+    // A client-side timeout can leave work running on this connection. Never
+    // return a failed migration connection or its locks to the request pool.
+    destroy = true;
+    const connectionUnusable =
+      error instanceof Error &&
+      /query read timeout|connection terminated|connection closed/i.test(
+        error.message,
+      );
+    if (inTransaction && !connectionUnusable)
+      await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release(destroy);
   }
 }
