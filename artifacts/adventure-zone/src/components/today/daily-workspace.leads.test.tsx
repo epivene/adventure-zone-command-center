@@ -95,6 +95,7 @@ describe("lead review workspace", () => {
 
     expect(screen.getByTestId("row-work-decision:lead-1")).toBeInTheDocument();
     expect(screen.getByTestId("row-work-decision:booking-2")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Daily work queue" }).parentElement?.className).toContain("min-w-0");
     fireEvent.click(screen.getByTestId("button-work-view-confirmed"));
 
     expect(screen.queryByTestId("row-work-decision:lead-1")).not.toBeInTheDocument();
@@ -102,5 +103,26 @@ describe("lead review workspace", () => {
 
     fireEvent.change(screen.getByTestId("input-work-search"), { target: { value: "Mountain" } });
     expect(screen.getByText("No records match this view. Try another view or clear your search.")).toBeInTheDocument();
+  });
+
+  it("keeps the selected next action full-width on narrow screens", async () => {
+    apiGet.mockResolvedValue({ legAssignment: null, legAlternatives: [], allTravelLegs: [] });
+    render(<DailyWorkspace
+      queue={{ active: [], completedToday: [], needsAttention: [] } as any}
+      followUps={[]}
+      decisions={[{ id: "lead-1", name: "Mountain Film Festival", status: "researching", organizationId: "profile-1" }]}
+      travelLegs={[]}
+      callingEnabled={false}
+      onChanged={vi.fn().mockResolvedValue(undefined)}
+      onClear={vi.fn().mockResolvedValue(undefined)}
+      onSnooze={vi.fn().mockResolvedValue(undefined)}
+      busy={false}
+      leadsOnly
+    />);
+    const action = screen.getByRole("button", { name: "Schedule follow-up" });
+    expect(action.className).toContain("w-full");
+    expect(action.className).toContain("min-h-11");
+    expect(screen.getByTestId("button-work-view-all").className).toContain("min-h-11");
+    expect(screen.getByRole("region", { name: "Selected next step" }).className).toContain("min-w-0");
   });
 });

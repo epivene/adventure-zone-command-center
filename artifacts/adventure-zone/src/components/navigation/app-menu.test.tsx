@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { getAppMenuSearchItems } from "./app-menu";
 
 const source = readFileSync("src/components/navigation/app-menu.tsx", "utf8");
 const mobile = readFileSync("src/components/navigation/mobile-bottom-nav.tsx", "utf8");
@@ -19,6 +20,18 @@ describe("owner inquiry navigation menu", () => {
     expect(mobile).toContain("websiteInquiryCount={websiteInquiryCount}");
     expect(mobile).toContain("searchItems={searchItems}");
     expect(source).toContain('<ToolFinder items={searchItems} variant="menu" />');
+  });
+
+  it("includes Website Inquiries in the Booking tool finder without adding it to the mobile bar", () => {
+    const results = getAppMenuSearchItems("booking");
+    const inquiry = results.find(item => item.href === "/website-inquiries");
+    expect(inquiry).toMatchObject({
+      label: "Website Inquiries",
+      category: "Booking tools",
+      keywords: ["web", "inquiry", "inquiries", "website form", "contact form", "lead"],
+    });
+    expect(mobile).toContain("bookingNavigation(true)");
+    expect(mobile).not.toContain('href: "/website-inquiries"');
   });
 
   it("hides the Office Coordinator shortcut from the Booking menu", () => {

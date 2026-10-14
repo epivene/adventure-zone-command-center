@@ -94,6 +94,12 @@ describe("workspace-aware Admin shell", () => {
     expect(mobileSource).toContain("<AppMenu workspace={workspace} mobile websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} searchItems={searchItems} />");
   });
 
+  it("reserves space below mobile content for the fixed navigation and clips horizontal overflow", () => {
+    expect(shellSource).toContain("min-w-0 overflow-x-clip");
+    expect(shellSource).toContain("pb-32 md:min-h-screen");
+    expect(mobileSource).toContain("env(safe-area-inset-bottom)");
+  });
+
   it("restores a saved Booking destination from Marketing", () => {
     expect(shellSource).toContain("readBookingReturnPath");
     expect(shellSource).toContain('label: "Back to Booking"');

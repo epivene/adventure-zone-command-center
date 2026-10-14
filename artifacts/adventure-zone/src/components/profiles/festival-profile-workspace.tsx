@@ -76,9 +76,9 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
   return <section className="grid min-w-0 max-w-full grid-cols-1 gap-5 text-foreground" aria-label="Festival profile workspace">
     <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
       <div>
-        <Button variant="ghost" size="sm" onClick={onBack}>Back to {originLabel}</Button>
+        <Button className="min-h-11 sm:min-h-8" variant="ghost" size="sm" onClick={onBack}>Back to {originLabel}</Button>
         <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-primary">Adventure Zone · Organizer profile</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">{profile.place.name}</h1>
+        <h1 className="mt-1 break-words text-3xl font-bold tracking-tight sm:text-4xl">{profile.place.name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{[profile.place.city, profile.place.region].filter(Boolean).join(", ")}</p>
       </div>
       {ratingSummary?.count ? <Badge variant="outline">{ratingSummary.average?.toFixed(1) ?? "—"} · {ratingSummary.count} reviews</Badge> : <Badge variant="outline">No reviews yet</Badge>}
@@ -87,7 +87,7 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
       relatedActivity={profileEmails ? <ProfileLatestEmail key={`email-${profile.id}`} profileId={profile.id} gmail={profileEmails} compact /> : null} />
     {savedNotice ? <p role="status" className="text-sm font-semibold text-primary">Event-year details saved.</p> : null}
     <div className="grid min-w-0 grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.9fr)]">
-      <div className="grid min-w-0 gap-4">
+      <div className="order-last grid min-w-0 gap-4 lg:order-first">
         <Card>
           <CardHeader className="flex-col items-stretch gap-3 space-y-0 sm:flex-row sm:items-end sm:justify-between">
             <div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Festival edition</p><CardTitle className="mt-1">{year} event record</CardTitle></div>
@@ -113,10 +113,10 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
           </CardContent>
         </Card>
       </div>
-      <aside className="grid content-start gap-4" aria-label="Next action and organizer summary">
+      <aside className="order-first grid min-w-0 content-start gap-4 lg:order-last" aria-label="Next action and organizer summary">
         <Card><CardHeader><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Next action</p><CardTitle>{nextFollowUp ? `Follow up${contact ? ` with ${contact.name}` : ""}` : "Choose the next useful step"}</CardTitle></CardHeader><CardContent className="grid gap-3">
           <p className="text-sm text-muted-foreground">{nextFollowUp ? `${nextFollowUp.kind.replaceAll("_", " ")} · ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: BUSINESS_TIME_ZONE }).format(new Date(nextFollowUp.dueAt))}` : "No open follow-up. Schedule one when the organizer needs another contact."}</p>
-          <Button className="w-fit" onClick={onFollowUp}>Schedule follow-up</Button>
+          <Button className="min-h-11 w-full sm:min-h-9 sm:w-fit" onClick={onFollowUp}>Schedule follow-up</Button>
            <div className="border-t border-border pt-3"><p className="font-semibold">Organizer contact</p></div>
           <Detail label="Primary contact" value={contact ? `${contact.name}${contact.role ? ` · ${contact.role}` : ""}` : null} />
           {contact?.email ? <a className="break-all text-sm text-primary underline" href={`mailto:${contact.email}`}>{contact.email}</a> : null}

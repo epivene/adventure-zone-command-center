@@ -21,7 +21,7 @@ import { IncomingAvailabilityControl } from "@/components/calls/incoming-availab
 import { IncomingCallPanel } from "@/components/calls/incoming-call-panel";
 import { getGoogleWorkspaceValidationReview } from "@/features/google-workspace/google-workspace-client";
 
-type PrimaryNavigationItem = { href: string; label: string; icon: LucideIcon; keywords?: string[] };
+type PrimaryNavigationItem = { href: string; label: string; icon: LucideIcon; keywords?: readonly string[] };
 
 const AssistantDrawer = lazy(() => import("@/components/assistant/assistant-drawer").then(({ AssistantDrawer }) => ({ default: AssistantDrawer })));
 const OfficeCoordinatorAttention = lazy(() => import("@/components/today/office-coordinator-attention").then(({ OfficeCoordinatorAttention }) => ({ default: OfficeCoordinatorAttention })));
@@ -56,7 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const bookingReturnPath = workspace === "marketing" ? readBookingReturnPath() : null;
   const primaryItems = primaryNavigation(workspace, bookingReturnPath);
   const searchItems = [
-    ...primaryItems.map(item => ({ href: item.href, label: item.label, category: "Workspace", keywords: item.keywords })),
+    ...primaryItems.map(item => ({ href: item.href, label: item.label, category: "Workspace", keywords: item.keywords ? [...item.keywords] : undefined })),
     ...getAppMenuSearchItems(workspace),
   ];
   const [assistantRequested, setAssistantRequested] = useState(false);
@@ -188,7 +188,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         </aside>
       ) : null}
-      <div className={cn(showWorkspaceNavigation && "md:ml-60")}>
+      <div className={cn("min-w-0 overflow-x-clip", showWorkspaceNavigation && "md:ml-60")}>
       {!immersiveProfile ? (
         <header data-assistant-shell-header className="sticky top-0 z-20 hidden border-b border-border bg-card/95 backdrop-blur md:block print:hidden">
           <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2.5 lg:px-6">
@@ -215,7 +215,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       ) : null}
 
       <div className="flex justify-end px-3 pt-2 md:hidden print:hidden"><ReminderBell /></div>
-      <main className={cn("min-h-screen px-3 py-4 pb-24 md:px-8 md:py-7 md:pb-8 print:min-h-0 print:p-0", assistantWorkspace && "md:px-4 md:py-4")}>
+      <main className={cn("min-h-[100dvh] min-w-0 px-3 py-4 pb-32 md:min-h-screen md:px-8 md:py-7 md:pb-8 print:min-h-0 print:p-0", assistantWorkspace && "md:px-4 md:py-4")}>
         {location === "/today" ? <Suspense fallback={null}><div className="mx-auto mb-6 max-w-5xl"><OfficeCoordinatorAttention attention={officeAttention} /></div></Suspense> : null}
         {children}
         <div className="print:hidden"><IncomingCallPanel /></div>

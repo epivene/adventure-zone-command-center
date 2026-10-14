@@ -130,15 +130,15 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
     await action(validSelected);
     setSelected([]);
   }
-  return <div className="grid gap-5 lg:grid-cols-2">
-    <section className="grid content-start gap-3" aria-label="Daily work queue">
+  return <div className="grid min-w-0 gap-4 lg:grid-cols-2 lg:gap-5">
+    <section className="grid min-w-0 content-start gap-3" aria-label="Daily work queue">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-xl font-bold">Today's work</h2>
         <p className="text-sm text-muted-foreground">Select a record to see its next step</p>
       </div>
       <Card className="min-w-0">
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle>{leadsOnly ? "Open leads" : "Your work"}</CardTitle><Badge variant="outline">{open.length} open</Badge>
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+          <CardTitle className="min-w-0">{leadsOnly ? "Open leads" : "Your work"}</CardTitle><Badge className="shrink-0" variant="outline">{open.length} open</Badge>
         </CardHeader>
         <CardContent className="grid gap-3">
           <div className="grid gap-3">
@@ -146,6 +146,7 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
               {availableViews.map(({ value, label, count }) => (
                 <Button
                   aria-pressed={workView === value}
+                  className="min-h-11 sm:min-h-8"
                   data-testid={`button-work-view-${value}`}
                   key={value}
                   onClick={() => setWorkView(value)}
@@ -164,7 +165,7 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
               value={search}
             />
           </div>
-          {decisions.length ? <Button size="sm" variant="ghost" aria-label="Manage next steps" disabled={locked} onClick={() => { setManage(value => !value); setSelected([]); }}>{manage ? "Done managing" : "Manage next steps"}</Button> : null}
+          {decisions.length ? <Button className="min-h-11 sm:min-h-8" size="sm" variant="ghost" aria-label="Manage next steps" disabled={locked} onClick={() => { setManage(value => !value); setSelected([]); }}>{manage ? "Done managing" : "Manage next steps"}</Button> : null}
           {manage ? <div className="grid gap-3 rounded-lg border border-border p-3">
             <p className="text-sm text-muted-foreground">Manage bookings without a future reminder.</p>
             {decisions.map(decision => <div key={decision.id} className="flex items-center gap-2">
@@ -173,15 +174,15 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
               <Label htmlFor={`manage-${decision.id}`}>{decision.name}</Label>
             </div>)}
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" disabled={locked || !validSelected.length} onClick={() => void bulk(onClear)}>Clear selected</Button>
-              <Button size="sm" variant="outline" disabled={locked || !validSelected.length} onClick={() => void bulk(onSnooze)}>Snooze selected 1 week</Button>
+              <Button className="min-h-11 sm:min-h-8" size="sm" variant="outline" disabled={locked || !validSelected.length} onClick={() => void bulk(onClear)}>Clear selected</Button>
+              <Button className="min-h-11 sm:min-h-8" size="sm" variant="outline" disabled={locked || !validSelected.length} onClick={() => void bulk(onSnooze)}>Snooze selected 1 week</Button>
             </div>
           </div> : filteredWork.length ? <RadioGroup aria-label="Select work item" value={work?.id ?? ""} onValueChange={id => { if (!locked) { setActiveId(id); setFormOpen(false); } }} className="gap-0">
             {renderedWork.map(item => <div className="flex items-start gap-3 border-t border-border py-3" key={item.id} data-testid={`row-work-${item.id}`} data-work-item-id={item.id}>
               <RadioGroupItem id={`daily-${item.id}`} value={item.id} disabled={locked} className="mt-1" />
               <Label htmlFor={`daily-${item.id}`} className="grid min-w-0 flex-1 cursor-pointer gap-1">
-                <span className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold">{item.name}</span><span className="text-xs text-muted-foreground">{dueLabel(item)}</span></span>
-                <span className="text-sm text-muted-foreground">{item.kind} · {item.reason}</span>
+                <span className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1"><span className="min-w-0 break-words font-semibold">{item.name}</span><span className="shrink-0 text-xs text-muted-foreground">{dueLabel(item)}</span></span>
+                <span className="break-words text-sm text-muted-foreground">{item.kind} · {item.reason}</span>
                 {workStatus(item) ? <Badge className="w-fit" variant={isConfirmedWork(item) ? "outline" : "secondary"}>{workStatus(item).replaceAll("_", " ")}</Badge> : null}
                 {item.location ? <span className="text-xs text-muted-foreground">{item.location}</span> : null}
                 {leadDate(item) ? <span className="text-xs text-muted-foreground">Event: {leadDate(item)}</span> : null}
@@ -189,19 +190,19 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
               </Label>
             </div>)}
           </RadioGroup> : visible.length ? <p className="text-sm text-muted-foreground">No records match this view. Try another view or clear your search.</p> : <p className="text-sm text-muted-foreground">Nothing needs action right now.</p>}
-          {!manage && filteredWork.length > 8 ? <Button size="sm" variant="ghost" disabled={locked} onClick={() => setVisibleCount(value => value >= filteredWork.length ? 8 : value + 8)}>{visibleCount >= filteredWork.length ? "Show less" : `Show more (${filteredWork.length - visibleCount} remaining)`}</Button> : null}
+          {!manage && filteredWork.length > 8 ? <Button className="min-h-11 sm:min-h-8" size="sm" variant="ghost" disabled={locked} onClick={() => setVisibleCount(value => value >= filteredWork.length ? 8 : value + 8)}>{visibleCount >= filteredWork.length ? "Show less" : `Show more (${filteredWork.length - visibleCount} remaining)`}</Button> : null}
         </CardContent>
       </Card>
       <Card><CardContent className="flex flex-wrap items-center justify-between gap-3">
         <div><p className="font-semibold">Waiting &amp; scheduled</p><p className="text-sm text-muted-foreground">{later.length} loaded items</p></div>
-        <Button size="sm" variant="outline" disabled={locked} aria-expanded={showLater} onClick={() => { setShowLater(value => !value); setFormOpen(false); }}>{showLater ? "Hide later work" : "View later work"}</Button>
+        <Button className="min-h-11 sm:min-h-8" size="sm" variant="outline" disabled={locked} aria-expanded={showLater} onClick={() => { setShowLater(value => !value); setFormOpen(false); }}>{showLater ? "Hide later work" : "View later work"}</Button>
       </CardContent></Card>
     </section>
-    <section className="grid content-start gap-3" aria-label="Selected next step">
+    <section className="grid min-w-0 content-start gap-3" aria-label="Selected next step">
       <h2 className="text-xl font-bold">Next step</h2>
       <Card className="min-w-0">
         {work ? <>
-          <CardHeader><CardTitle>{work.name}</CardTitle><p className="text-sm text-muted-foreground">{[work.location, leadDate(work), work.kind].filter(Boolean).join(" · ")}</p></CardHeader>
+          <CardHeader><CardTitle className="break-words">{work.name}</CardTitle><p className="break-words text-sm text-muted-foreground">{[work.location, leadDate(work), work.kind].filter(Boolean).join(" · ")}</p></CardHeader>
           <CardContent className="grid gap-4">
             {work.bookingId ? <section aria-label="Leg assignment" className="grid gap-3 rounded-lg border border-border p-4">
               <p className="font-semibold">{canCorrectLeg ? "Suggested leg" : "Leg assignment"}</p>
@@ -227,12 +228,12 @@ export function DailyWorkspace({ queue, followUps, decisions, travelLegs, callin
                 // A saved reminder must not be re-submitted if only the refresh fails.
                 try { await onChanged(); } finally { setFormOpen(false); }
               }} /> :
-                <div className="flex flex-wrap gap-2">
-                  {work.decision && !work.followUp && work.organizationId && !isConversation ? <Button disabled={locked} onClick={() => setFormOpen(true)}>Schedule follow-up</Button> :
-                    <Button asChild><Link onClick={remember} href={work.followUp?.kind === "call" && callingEnabled ? callWorkspaceHref(work.followUp) : work.href}>{work.followUp?.kind === "call" && callingEnabled ? "Open call workspace" : isConversation ? "Open conversation" : "Open profile"}</Link></Button>}
-                  {isConversation && work.decision && work.organizationId ? <Button variant="outline" disabled={locked} onClick={() => setFormOpen(true)}>Schedule follow-up</Button> : null}
-                  {work.followUp ? <Button variant="outline" disabled={locked} onClick={() => setFormOpen(true)}>Reschedule</Button> : null}
-                  {work.decision ? <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" disabled={locked} aria-label={`More actions for ${work.name}`}>More</Button></DropdownMenuTrigger>
+              <div className="flex flex-wrap gap-2">
+                  {work.decision && !work.followUp && work.organizationId && !isConversation ? <Button className="min-h-11 w-full sm:min-h-9 sm:w-auto" disabled={locked} onClick={() => setFormOpen(true)}>Schedule follow-up</Button> :
+                    <Button className="min-h-11 w-full sm:min-h-9 sm:w-auto" asChild><Link onClick={remember} href={work.followUp?.kind === "call" && callingEnabled ? callWorkspaceHref(work.followUp) : work.href}>{work.followUp?.kind === "call" && callingEnabled ? "Open call workspace" : isConversation ? "Open conversation" : "Open profile"}</Link></Button>}
+                  {isConversation && work.decision && work.organizationId ? <Button className="min-h-11 w-full sm:min-h-9 sm:w-auto" variant="outline" disabled={locked} onClick={() => setFormOpen(true)}>Schedule follow-up</Button> : null}
+                  {work.followUp ? <Button className="min-h-11 w-full sm:min-h-9 sm:w-auto" variant="outline" disabled={locked} onClick={() => setFormOpen(true)}>Reschedule</Button> : null}
+                  {work.decision ? <DropdownMenu><DropdownMenuTrigger asChild><Button className="min-h-11 sm:min-h-9" variant="outline" disabled={locked} aria-label={`More actions for ${work.name}`}>More</Button></DropdownMenuTrigger>
                     <DropdownMenuContent>
                       <DropdownMenuItem asChild><Link onClick={remember} href={profileHref}>Open profile</Link></DropdownMenuItem>
                       <DropdownMenuItem disabled={locked} onSelect={() => void onSnooze([work.decision!.id])}>Snooze 1 week</DropdownMenuItem>

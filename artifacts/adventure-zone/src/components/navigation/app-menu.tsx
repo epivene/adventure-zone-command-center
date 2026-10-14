@@ -125,6 +125,11 @@ export function getAppMenuSearchItems(workspace: AdminWorkspace): ToolFinderItem
     keywords: item.keywords,
     category: group.label,
   })));
+  const mobileBookingSearchItems: ToolFinderItem[] = workspace === "booking"
+    ? bookingItems
+      .filter(item => item.href === "/website-inquiries")
+      .map(item => ({ ...item, category: "Booking tools" }))
+    : [];
   const commonItems: ToolFinderItem[] = [
     { href: "/business-documents", label: "All documents", category: "Documents", keywords: ["files", "insurance", "COI"] },
     { href: "/invoices-contracts", label: "Contracts & Invoices", category: "Documents", keywords: ["invoice", "contract"] },
@@ -132,7 +137,7 @@ export function getAppMenuSearchItems(workspace: AdminWorkspace): ToolFinderItem
     { href: "/assistant/workspace", label: "Assistant workspace", category: "Tools", keywords: ["assistant", "help"] },
   ];
   const uniqueItems = new Map<string, ToolFinderItem>();
-  for (const item of [...groupedItems, ...commonItems]) {
+  for (const item of [...groupedItems, ...mobileBookingSearchItems, ...commonItems]) {
     if (!uniqueItems.has(item.href)) uniqueItems.set(item.href, item);
   }
   return [...uniqueItems.values()];
