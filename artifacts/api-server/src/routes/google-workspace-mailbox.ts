@@ -12,6 +12,7 @@ const page = z.object({
   connectionId: accountId.optional(),
 });
 function errorStatus(code: string) {
+  if (code === "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED") return 429;
   if (/NOT_CONNECTED|REAUTHORIZATION|CONNECTION_CHANGED|CONFLICT|DRAFT_CHANGED|OUTCOME_UNCERTAIN/.test(code)) return 409;
   if (/SOURCE_NOT_FOUND|TARGET_NOT_FOUND/.test(code)) return 404;
   return 503;
@@ -28,7 +29,15 @@ export function createGoogleMailboxRouter(service = new GoogleMailboxService()) 
       catch (error) {
         const code = error instanceof Error && error.message.startsWith("GOOGLE_WORKSPACE_")
           ? error.message : "GOOGLE_WORKSPACE_MAILBOX_UNAVAILABLE";
-        res.status(errorStatus(code)).json({ error: code });
+        const status = errorStatus(code);
+        if (status === 429) {
+          const supplied = Number((error as { retryAfterSeconds?: number }).retryAfterSeconds);
+          const retryAfterSeconds = Number.isFinite(supplied) && supplied > 0 ? Math.ceil(supplied) : 60;
+          res.set("Retry-After", String(retryAfterSeconds));
+          res.status(status).json({ error: code, retryAfterSeconds });
+          return;
+        }
+        res.status(status).json({ error: code });
       }
     };
   }
@@ -60,3 +69,4 @@ export function createGoogleMailboxRouter(service = new GoogleMailboxService()) 
   return router;
 }
 export default createGoogleMailboxRouter();
+
