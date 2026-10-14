@@ -1,3 +1,4 @@
+import { createProfileDuplicatesRouter } from "./profile-duplicates";
 import { createDeadlineRulesRouter } from "./deadline-rules";
 import { createBookingDateRepairsRouter } from "./booking-date-repairs";
 import { createEmailThreadAttentionRouter } from "./email-thread-attention";
@@ -330,6 +331,7 @@ router.use(bookingsRouter);
 router.use(contactsRouter);
 router.use(organizationMembershipRouter);
 router.use(organizationForgivingSearchRouter);
+router.use(createProfileDuplicatesRouter());
 router.use(organizationsRouter);
 router.use(calendarRouter);
 router.use(routesMapRouter);
@@ -392,4 +394,5 @@ router.use(invoicesRouter);
 router.use("/follow-ups", followUpsRouter);
 
 export default router;
+
 

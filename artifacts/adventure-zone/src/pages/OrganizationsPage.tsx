@@ -115,11 +115,6 @@ export default function OrganizationsPage() {
     } finally { setDupLoading(false); }
   }, []);
 
-  function openDuplicates() {
-    setShowDuplicates(true);
-    void loadDuplicates();
-  }
-
   function closeDuplicates() {
     setShowDuplicates(false);
     setDupGroups(null);
@@ -183,7 +178,7 @@ export default function OrganizationsPage() {
           <section className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3" aria-label="Profile utilities">
             <div className="flex flex-wrap items-center gap-2">
               <EventFamilySuggestions compact onChanged={loadProfiles} />
-              <button className="button-secondary text-sm" onClick={openDuplicates} type="button">Find duplicates</button>
+              <Link className="button-secondary text-sm" href="/profiles/duplicate-review">Find duplicates</Link>
               <Button variant="outline" onClick={() => setFestivalNetOpen(true)} type="button">Import FestivalNet PDF</Button>
             </div>
           </section>
@@ -195,3 +190,4 @@ export default function OrganizationsPage() {
     </div>
   );
 }
+
