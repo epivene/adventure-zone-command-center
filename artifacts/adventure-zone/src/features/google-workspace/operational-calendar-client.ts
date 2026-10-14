@@ -112,6 +112,7 @@ export async function resolveOperationalCalendarReview(
   reviewId: string,
   resolution: "link_existing" | "create_new",
   bookingId?: string,
+  packageKey?: "zone" | "pirates" | "warrior",
 ) {
   return json<{ ok: true; state: "accepted"; bookingId: string; created: boolean }>(await apiFetch(
     `/google-workspace/operational-calendar/reviews/${encodeURIComponent(reviewId)}/resolve`,
@@ -119,7 +120,7 @@ export async function resolveOperationalCalendarReview(
       method: "POST",
       body: JSON.stringify({
         resolution,
-        ...(bookingId ? { bookingId } : {}),
+        ...(bookingId ? { bookingId } : {}), ...(packageKey ? { packageKey } : {}),
       }),
     },
   ));
@@ -129,5 +130,12 @@ export async function syncOperationalCalendarBooking(bookingId: string) {
   return json<OperationalCalendarSyncResult>(await apiFetch(
     `/google-workspace/operational-calendar/bookings/${encodeURIComponent(bookingId)}/sync`,
     { method: "POST" },
+  ));
+}
+
+
+export async function searchOperationalCalendarBookings(query: string) {
+  return json<{ candidates: OperationalCalendarCandidate[] }>(await apiFetch(
+    `/google-workspace/operational-calendar/bookings/search?q=${encodeURIComponent(query.trim())}`,
   ));
 }

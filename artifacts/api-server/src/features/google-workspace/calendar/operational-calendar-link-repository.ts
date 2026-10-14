@@ -1,6 +1,6 @@
 import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { createHash } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, ilike, or } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -302,10 +302,28 @@ export class OperationalCalendarLinkRepository {
     });
   }
 
+  async searchExistingBookings(query: string) {
+    // No date/status/leg filters: older and cancelled bookings must be findable.
+    const pattern = '%' + query.trim().replace(/[\\%_]/g, '\\$&') + '%';
+    return this.db.select({
+      bookingId: bookings.id, profileId: organizations.id,
+      bookingName: bookings.name, profileName: organizations.name,
+      city: bookings.city, region: bookings.region,
+      startsAt: bookings.startsAt, endsAt: bookings.endsAt,
+      travelLegName: travelLegs.name,
+    }).from(bookings)
+      .leftJoin(organizations, eq(bookings.organizationId, organizations.id))
+      .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
+      .where(or(ilike(bookings.name, pattern), ilike(organizations.name, pattern),
+        ilike(bookings.city, pattern), ilike(organizations.city, pattern)))
+      .orderBy(bookings.name, bookings.id).limit(50);
+  }
+
   async resolveReview(input: {
     reviewId: string;
     resolution: "link_existing" | "create_new";
     bookingId?: string;
+    packageKey?: OperationalCalendarPackageKey;
     reviewedBy: string;
   }): Promise<{ state: "accepted"; bookingId: string; created: boolean }> {
     return reconcileCapacityFacts(this.db, "operational-calendar-link",async (tx) => {
@@ -322,7 +340,7 @@ export class OperationalCalendarLinkRepository {
       const changes = reviewChanges(review.proposedChanges);
       const parsed = changes.parsed ?? {};
       const google = changes.google ?? {};
-      const packageKeyValue = parsed.packageKey;
+      const packageKeyValue = input.packageKey ?? parsed.packageKey;
       if (packageKeyValue !== "zone" && packageKeyValue !== "pirates" && packageKeyValue !== "warrior") {
         throw new Error("GOOGLE_OPERATIONAL_CALENDAR_PACKAGE_REQUIRED");
       }
@@ -340,14 +358,10 @@ export class OperationalCalendarLinkRepository {
       const eventName = parsed.eventName?.trim() || google.summary?.trim() || "David calendar event";
       const city = parsed.city?.trim() || null;
       const region = parsed.region?.trim().toUpperCase() || null;
-      const candidateIds = Array.isArray(changes.candidateBookingIds)
-        ? changes.candidateBookingIds.filter((value): value is string => typeof value === "string")
-        : [];
-
       let bookingId: string;
       let created = false;
       if (input.resolution === "link_existing") {
-        if (!input.bookingId || (candidateIds.length > 0 && !candidateIds.includes(input.bookingId))) {
+        if (!input.bookingId) {
           throw new Error("GOOGLE_OPERATIONAL_CALENDAR_CANDIDATE_INVALID");
         }
         const [existing] = await tx.select().from(bookings)
@@ -355,31 +369,12 @@ export class OperationalCalendarLinkRepository {
           .limit(1)
           .for("update");
         if (!existing) throw new Error("GOOGLE_OPERATIONAL_CALENDAR_BOOKING_NOT_FOUND");
-        const legId = await this.findLegId(tx, parsed.managerToken);
-        await tx.update(bookings).set({
-          name: eventName,
-          status: "confirmed",
-          probability: "definite" as any,
-          startsAt: publicDates.startsAt,
-          endsAt: publicDates.endsAt,
-          travelLegId: legId ?? existing.travelLegId,
-          city: city ?? existing.city,
-          region: region ?? existing.region,
-          address1: parseAddressLine(parsed.addressText) ?? existing.address1,
-          notes: parsed.originalDescription?.trim() || null,
-          updatedAt: new Date(),
-        }).where(eq(bookings.id, existing.id));
-        if (existing.organizationId) {
-          await tx.update(organizations).set({
-            name: eventName,
-            city: city ?? undefined,
-            region: region ?? undefined,
-            address1: parseAddressLine(parsed.addressText) ?? undefined,
-            updatedAt: new Date(),
-          }).where(eq(organizations.id, existing.organizationId));
-        }
+        // Linking establishes identity; it does not authorize overwriting CRM facts.
         bookingId = existing.id;
       } else {
+        if (parsed.calendarState === "cancelled" || /\bcancel(?:led|ed)\b/i.test(google.summary ?? "")) {
+          throw new Error("GOOGLE_OPERATIONAL_CALENDAR_CANCELLED_CREATE_BLOCKED");
+        }
         if (!city || !region) throw new Error("GOOGLE_OPERATIONAL_CALENDAR_LOCATION_REQUIRED");
         const legId = await this.findLegId(tx, parsed.managerToken);
         const [organization] = await tx.insert(organizations).values({
@@ -412,23 +407,25 @@ export class OperationalCalendarLinkRepository {
         created = true;
       }
 
-      const templates = await tx.select({ id: packageTemplates.id, code: packageTemplates.code })
-        .from(packageTemplates);
-      const template = templates.find((item) => packageCodeCandidates(packageKey).includes(item.code));
-      if (!template) throw new Error("GOOGLE_OPERATIONAL_CALENDAR_PACKAGE_TEMPLATE_NOT_FOUND");
-      await tx.insert(bookingPackageSelections).values({
-        bookingId,
-        packageTemplateId: template.id,
-      }).onConflictDoNothing();
-      await tx.insert(bookingOperationalWindows).values({
-        bookingId,
-        startsAt: reservedStart,
-        endsAt: reservedEnd,
-        source: "google_calendar",
-      }).onConflictDoUpdate({
-        target: bookingOperationalWindows.bookingId,
-        set: { startsAt: reservedStart, endsAt: reservedEnd, source: "google_calendar", updatedAt: new Date() },
-      });
+      if (created) {
+        const templates = await tx.select({ id: packageTemplates.id, code: packageTemplates.code })
+          .from(packageTemplates);
+        const template = templates.find((item) => packageCodeCandidates(packageKey).includes(item.code));
+        if (!template) throw new Error("GOOGLE_OPERATIONAL_CALENDAR_PACKAGE_TEMPLATE_NOT_FOUND");
+        await tx.insert(bookingPackageSelections).values({
+          bookingId,
+          packageTemplateId: template.id,
+        }).onConflictDoNothing();
+        await tx.insert(bookingOperationalWindows).values({
+          bookingId,
+          startsAt: reservedStart,
+          endsAt: reservedEnd,
+          source: "google_calendar",
+        }).onConflictDoUpdate({
+          target: bookingOperationalWindows.bookingId,
+          set: { startsAt: reservedStart, endsAt: reservedEnd, source: "google_calendar", updatedAt: new Date() },
+        });
+      }
 
       const snapshot = {
         imported: true,
@@ -452,6 +449,15 @@ export class OperationalCalendarLinkRepository {
         lastErrorCode: null,
         updatedAt: new Date(),
       };
+      const [conflictingLink] = await tx.select().from(googleOperationalCalendarLinks).where(and(
+        eq(googleOperationalCalendarLinks.connectionId, review.connectionId),
+        eq(googleOperationalCalendarLinks.calendarId, review.calendarId),
+        eq(googleOperationalCalendarLinks.bookingId, bookingId),
+        eq(googleOperationalCalendarLinks.packageKey, packageKey),
+      )).limit(1);
+      if (conflictingLink && conflictingLink.googleEventId !== review.googleEventId) {
+        throw new Error("GOOGLE_OPERATIONAL_CALENDAR_BOOKING_ALREADY_LINKED");
+      }
       if (review.linkId) {
         await tx.update(googleOperationalCalendarLinks).set(savedLink)
           .where(eq(googleOperationalCalendarLinks.id, review.linkId));
@@ -485,7 +491,7 @@ export class OperationalCalendarLinkRepository {
         { field: "reservation_start", kind: "verified_reservation", value: google.startDate!, semantics: "inclusive_date" },
         { field: "reservation_end", kind: "verified_reservation", value: google.endDateExclusive!, semantics: "exclusive_date" },
       ];
-      for (const endpoint of proof) {
+      for (const endpoint of (created ? proof : [])) {
         await tx.execute(sql`
           INSERT INTO booking_date_evidence
             (booking_id, field, kind, value, semantics, revision, source_type, source_id, source_revision, actor)
@@ -505,3 +511,4 @@ export class OperationalCalendarLinkRepository {
     return legs.find((leg: { name: string }) => normalize(leg.name) === normalize(managerToken))?.id ?? null;
   }
 }
+
