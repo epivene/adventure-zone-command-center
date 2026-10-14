@@ -1,3 +1,4 @@
+import { ProfileDeadlines } from "@/features/deadline-rules/reminders";
 import { ProfileLegOperations } from '@/components/bookings/profile-leg-operations';
 import { ownerOperationsClient } from '@/features/bookings/booking-leg-operations-client';
 import { useBookingOperationsRevision } from '@/features/bookings/booking-operations-changes';
@@ -214,6 +215,7 @@ export default function EventProfilePage() {
         <FollowUpDialog key={profileId} open={followUpOpen} onOpenChange={changeFollowUpOpen} profileId={profileId} profileName={profileLabel} contactId={contactId ?? data.selectedContactId} bookingId={bookingId} onSaved={() => { void loadProfile(); }} />
         {profileId ? <AssistantContextRegistration kind="organization" label={profileLabel} recordId={profileId} /> : null}
 
+        {profileId ? <ProfileDeadlines key={profileId} profileId={profileId} /> : null}
         <FestivalProfileWorkspace key={profileId} profile={data} ratingSummary={data.wrapUpRatingSummary} profileEmails={profileEmails}
           onFollowUp={() => setFollowUpOpen(true)} onBack={goBack} originLabel={profileOrigin} onNoteSaved={loadProfile}
           toolsOpen={profileEditing || Boolean(profileSection) || action === "call" || researchOpen}
@@ -331,3 +333,4 @@ export default function EventProfilePage() {
     </ProfilePageFrame>
   );
 }
+

@@ -1,3 +1,4 @@
+import { UpcomingDeadlines } from "@/features/deadline-rules/reminders";
 import { MasterWorkQueue } from "@/components/today/master-work-queue";
 import { DailyWorkspace } from "@/components/today/daily-workspace";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
@@ -193,6 +194,7 @@ export default function TodayPage({ leadsOnly = false }: { leadsOnly?: boolean }
       <p className="text-sm text-muted-foreground">Open leads without a future reminder. Scheduled work remains in Today.</p>
       <div className="flex flex-wrap gap-2"><Button asChild variant="outline" size="sm"><Link href="/today">Today</Link></Button><Button asChild variant="ghost" size="sm"><Link href="/profiles">All profiles</Link></Button><Button asChild variant="ghost" size="sm"><Link href="/imports/leads">Import leads</Link></Button></div>
       {nextStepError ? <p role="alert" className="text-sm text-destructive">{nextStepError} <Button variant="outline" size="sm" onClick={() => void refreshToday().catch(() => {})}>Refresh</Button></p> : null}
+      <UpcomingDeadlines />
       <DailyWorkspace key="leads" leadsOnly queue={coerceMasterTodayQueue({})} decisions={leads}
         followUps={followUps.filter((item: any) => leadIds.has(item.bookingId))} travelLegs={dashboard.travelLegs ?? []}
         callingEnabled={callingConfig.assistedCallingEnabled} onChanged={refreshToday} onClear={clearNextSteps} onSnooze={snoozeNextSteps} busy={nextStepBusy} />
@@ -301,3 +303,4 @@ export default function TodayPage({ leadsOnly = false }: { leadsOnly?: boolean }
     </div>
   );
 }
+

@@ -11,6 +11,9 @@ services:
     startCommand: pnpm --filter @workspace/db run-migrations && node artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/healthz
     envVars:
+      # Reminder evaluation runs in the existing API process; no paid add-on.
+      - key: DEADLINE_EMAIL_ENABLED
+        value: "false"
       - key: NODE_ENV
         value: production
       # Render PostgreSQL external connection string (with SSL added automatically
@@ -148,3 +151,4 @@ services:
       # its URL.
       - key: VITE_API_BASE_URL
         sync: false
+

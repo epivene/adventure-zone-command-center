@@ -1,3 +1,4 @@
+import { createDeadlineWorker } from "./features/deadline-rules/worker";
 import { workspaceStartup } from "./features/assistant-workspace/startup";
 import { readModelConfig } from "./features/assistant-workspace/model-config";
 import {startWorkspaceRuntime} from "./features/assistant-workspace/runtime";
@@ -280,6 +281,7 @@ let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let opportunityEmailLoop:
   Awaited<ReturnType<typeof createOpportunityEmailWorkerLoop>> | null = null;
 let shutdownRequested = false;
+const deadlineWorker = createDeadlineWorker(err => logger.error({err}, "Deadline evaluation failed"));
 const voicemailRetentionLoop = new VoicemailRetentionWorkerLoop(
   new VoicemailRetentionWorker(db, () => {
     const config = readInboundCallingConfig(process.env);
@@ -325,6 +327,7 @@ const shutdown = createActServerShutdown({
       marketingCampaignLoop.close(),
       earlyBirdPromoLoop.close(),
       eventDateCoverageLoop.close(),
+      deadlineWorker.close(),
     ]);
   },
   closeServer() {
@@ -612,6 +615,7 @@ async function startBackgroundWorkers() {
   marketingCampaignLoop.start();
   earlyBirdPromoLoop.start();
   eventDateCoverageLoop.start();
+  deadlineWorker.start();
 
   try {
     opportunityEmailLoop = await createOpportunityEmailWorkerLoop();
@@ -663,5 +667,6 @@ async function startBackgroundWorkers() {
     );
   }
 }
+
 
 

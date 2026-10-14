@@ -1,3 +1,4 @@
+import { ReminderBell } from "@/features/deadline-rules/reminders";
 import { bookingNavigation } from "@/features/navigation/booking-navigation";
 import { Link, useLocation } from "wouter";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
@@ -199,6 +200,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             ) : null}
             <div className={cn("flex items-center gap-1.5", showWorkspaceNavigation && "ml-auto")}>
               {workspace === "booking" ? <IncomingAvailabilityControl /> : null}
+              <ReminderBell />
               {workspace === "booking" ? <AddMenu /> : null}
               <AppMenu workspace={workspace} unreadMessages={unreadMessages} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} />
             </div>
@@ -212,6 +214,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       ) : null}
 
+      <div className="flex justify-end px-3 pt-2 md:hidden print:hidden"><ReminderBell /></div>
       <main className={cn("min-h-screen px-3 py-4 pb-24 md:px-8 md:py-7 md:pb-8 print:min-h-0 print:p-0", assistantWorkspace && "md:px-4 md:py-4")}>
         {location === "/today" ? <Suspense fallback={null}><div className="mx-auto mb-6 max-w-5xl"><OfficeCoordinatorAttention attention={officeAttention} /></div></Suspense> : null}
         {children}
@@ -225,3 +228,4 @@ export function AppShell({ children }: { children: ReactNode }) {
     </div></IncomingCallingProvider>
   );
 }
+
