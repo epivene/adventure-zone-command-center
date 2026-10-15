@@ -34,7 +34,7 @@ export function emailAttentionTools(
       scope: "crm:read" as ConnectionScope,
       readOnly: true,
       description:
-        "Preview filing a verified Gmail conversation under a profile and keeping ongoing work in Needs Attention. Unknown event year must be null. Does not change Gmail; preview expires in 15 minutes. Stop for ambiguous or conflicting matches." + " " + emailReviewToolReminder,
+        "Preview filing a verified Gmail conversation under a profile and keeping ongoing work in Needs Attention. Unknown event year must be null. Does not change Gmail; preview expires in 15 minutes. Investigate conflicting mappings using read_email_filing_conflicts and the preview_email_mapping_repair/repair_email_profile_mapping workflow. Re-preview filing after a verified authorized repair. Stop only when identity remains ambiguous or a permission/tool blocker remains; never force a match." + " " + emailReviewToolReminder,
       schema: attentionInputSchema,
       call: (a: any) => call(() => service!.preview(actor, a)),
     },
