@@ -1,3 +1,4 @@
+import { conventionTools, type ConnectionConventionService } from "./convention-tools";
 import { inquiryProcessInput, inquiryProcessApplyInput } from "./website-inquiry-processing";
 import { mappingRepairInput, mappingRepairApplyInput } from "./email-mapping-repair-service";
 import type { WebsiteInquiryReads } from "./website-inquiry-reads";
@@ -24,6 +25,7 @@ import { appRecordsInput, appRecordInput } from "./profile-record-reads";
 import { closeFollowupSchema, type DraftFollowupService } from "./draft-followup-service";
 import type { OperationStore } from "./operation-store";
 export type ConnectionServices = {
+  conventions?: ConnectionConventionService;
   inquiries?: WebsiteInquiryReads;
   today?: TodayReadService;
   draftFiling?: GmailDraftFilingService;
@@ -93,7 +95,7 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
     },
     {
       name: "list_app_records", scope: "crm:read", readOnly: true,
-      description: "List saved app records across profiles or optionally one profile: full activities/notes, contacts/phones, locations, bookings, dates, follow-ups, family notes, attendance, paper notes, promotions, saved emails and reviews, documents, contract versions/legal text, invoices/payments and edit history. Follow nextCursor; use read_app_record for complete content. Missing sources return unavailable, not empty. Saved archives are not live Gmail; metadata is not file content. Does not modify records, mark reviews or call paid app AI.",
+      description: "List saved app records across profiles or optionally one profile. For Dave/Boss use boss_assignments, boss_work_requests, boss_work_request_history, boss_convention_submissions and boss_template_reviews; omit profileId for unassigned work. Convention plans use convention_editions, convention_members and convention_history. Also supports: full activities/notes, contacts/phones, locations, bookings, dates, follow-ups, family notes, attendance, paper notes, promotions, saved emails and reviews, documents, contract versions/legal text, invoices/payments and edit history. Follow nextCursor; use read_app_record for complete content. Missing sources return unavailable, not empty. Saved archives are not live Gmail; metadata is not file content. Does not modify records, mark reviews or call paid app AI.",
       schema: appRecordsInput,
       call: a => s.reads.records(p,a),
     },
@@ -364,5 +366,7 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       schema: inquiryProcessApplyInput.extend({requestKey}),
       call: ({requestKey,...a}) => { if (!s.inquiries) throw new Error("WEBSITE_INQUIRY_READ_UNAVAILABLE"); return s.inquiries.processing.apply(p,{requestKey},a); } },
   );
+  tools.push(...conventionTools(s.conventions, p));
   return tools;
 }
+

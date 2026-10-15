@@ -1,3 +1,4 @@
+import { ConnectionConventionService } from "./convention-tools";
 import { WebsiteInquiryReads } from "./website-inquiry-reads";
 import { WebsiteInquiryReviewService } from "../website-inquiries/website-inquiry-review-service";
 import { DrizzleWebsiteInquiryRepository } from "../website-inquiries/website-inquiry-repository";
@@ -155,6 +156,7 @@ export function mountChatGPTConnection(
         });
       },
       services: {
+        conventions: new ConnectionConventionService(db),
         inquiries: new WebsiteInquiryReads(db, new WebsiteInquiryReviewService({repository:new DrizzleWebsiteInquiryRepository(appDatabase)}), appOrigin),
         today: new TodayReadService(db,now=>loadMasterTodayQueue(appDatabase,now)),
         attention: createEmailAttentionService(db),
@@ -170,3 +172,4 @@ export function mountChatGPTConnection(
     }),
   );
 }
+
