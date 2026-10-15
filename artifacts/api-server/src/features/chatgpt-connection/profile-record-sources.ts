@@ -4,6 +4,110 @@
  * New app sections must add a reviewed projection and database coverage test.
  */
 export const recordSources = {
+
+  "boss_assignments": {
+    "section": "boss_assignments",
+    "table": "boss_assignments",
+    "fields": [
+      "id",
+      "assignee_kind",
+      "office_account_id",
+      "title",
+      "details",
+      "priority",
+      "due_at",
+      "status",
+      "completed_at",
+      "created_by_boss_id",
+      "created_at",
+      "updated_at"
+    ],
+    "where": "false",
+    "time": "updated_at",
+    "label": "title"
+  },
+  "boss_work_requests": {
+    "section": "boss_work_requests",
+    "table": "boss_work_requests",
+    "fields": [
+      "id",
+      "type",
+      "state",
+      "priority",
+      "title",
+      "instructions",
+      "due_at",
+      "assigned_boss_account_id",
+      "completed_at",
+      "created_at",
+      "updated_at"
+    ],
+    "where": "r.id IN (SELECT request_id FROM boss_convention_submissions WHERE applied_organization_id=$1)",
+    "time": "updated_at",
+    "label": "title"
+  },
+  "boss_work_request_history": {
+    "section": "boss_work_request_history",
+    "table": "boss_work_request_events",
+    "fields": [
+      "id",
+      "request_id",
+      "actor_kind",
+      "actor_id",
+      "prior_state",
+      "new_state",
+      "note",
+      "metadata",
+      "created_at"
+    ],
+    "where": "r.request_id IN (SELECT request_id FROM boss_convention_submissions WHERE applied_organization_id=$1)",
+    "time": "created_at",
+    "label": "new_state"
+  },
+  "boss_convention_submissions": {
+    "section": "boss_convention_submissions",
+    "table": "boss_convention_submissions",
+    "fields": [
+      "id",
+      "request_id",
+      "boss_account_id",
+      "payload",
+      "edit_version",
+      "applied_organization_id",
+      "applied_contact_id",
+      "applied_follow_up_id",
+      "applied_at",
+      "created_at",
+      "updated_at"
+    ],
+    "where": "r.applied_organization_id=$1",
+    "time": "updated_at",
+    "label": "id"
+  },
+  "boss_template_reviews": {
+    "section": "boss_template_reviews",
+    "table": "communication_template_reviews",
+    "fields": [
+      "id",
+      "request_id",
+      "template_id",
+      "template_version",
+      "content_fingerprint",
+      "subject_snapshot",
+      "body_snapshot",
+      "body_format_snapshot",
+      "decision",
+      "note",
+      "decided_by_boss_account_id",
+      "decided_at",
+      "created_at",
+      "updated_at"
+    ],
+    "where": "false",
+    "time": "updated_at",
+    "label": "subject_snapshot"
+  }
+,
   "profiles": {
     "section": "profiles",
     "table": "organizations",
@@ -851,4 +955,5 @@ export const recordSources = {
     "label": "kind"
   }
 } as const;
-export const recordSections = ["profiles","contacts","contact_phones","locations","bookings","activities","manager_reviews","contract_drafts","contract_versions","contract_files","contract_status_history","coi_drafts","invoices","invoice_payments","event_families","family_notes","organization_phones","paper_notes","attendance_history","promotions","documents","document_links","document_reviews","document_history","profile_edit_history","email_threads","email_messages","email_files","email_reviews","followups","event_dates","research_runs","convention_members","research_sources","research_suggestions","convention_editions","convention_history"] as const;
+export const recordSections = ["boss_assignments","boss_work_requests","boss_work_request_history","boss_convention_submissions","boss_template_reviews","profiles","contacts","contact_phones","locations","bookings","activities","manager_reviews","contract_drafts","contract_versions","contract_files","contract_status_history","coi_drafts","invoices","invoice_payments","event_families","family_notes","organization_phones","paper_notes","attendance_history","promotions","documents","document_links","document_reviews","document_history","profile_edit_history","email_threads","email_messages","email_files","email_reviews","followups","event_dates","research_runs","convention_members","research_sources","research_suggestions","convention_editions","convention_history"] as const;
+
