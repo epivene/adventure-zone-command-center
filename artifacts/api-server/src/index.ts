@@ -4,6 +4,7 @@ import {startWorkspaceRuntime} from "./features/assistant-workspace/runtime";
 import {installApprovedWorkspaceRules} from "./features/assistant-workspace/seed";
 import { ensureAssistantWorkspaceSchema } from "./db/assistant-workspace-startup-migration";
 import { randomUUID } from "node:crypto";
+import { evaluateReminders } from "./features/deadline-reminders/deadline-reminder-service";
 
 import app from "./app";
 import { logger } from "./lib/logger";
@@ -280,6 +281,7 @@ let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let opportunityEmailLoop:
   Awaited<ReturnType<typeof createOpportunityEmailWorkerLoop>> | null = null;
 let shutdownRequested = false;
+let reminderTimer: ReturnType<typeof setInterval> | null = null;
 const voicemailRetentionLoop = new VoicemailRetentionWorkerLoop(
   new VoicemailRetentionWorker(db, () => {
     const config = readInboundCallingConfig(process.env);
@@ -323,6 +325,7 @@ const shutdown = createActServerShutdown({
       googleDriveBackupLoop?.close(),
       voicemailRetentionLoop.close(),
       marketingCampaignLoop.close(),
+      Promise.resolve().then(() => { if (reminderTimer) clearInterval(reminderTimer); reminderTimer = null; }),
       earlyBirdPromoLoop.close(),
       eventDateCoverageLoop.close(),
     ]);
@@ -590,6 +593,13 @@ async function runPostListenMaintenance() {
 
 async function startBackgroundWorkers() {
   if (shutdownRequested) return;
+  // Render's existing API process runs scheduled work. The owner read endpoint
+  // also evaluates on load when a free instance has been asleep.
+  const refreshReminders = () => {
+    void evaluateReminders().catch((err) => logger.error({ err }, "Reminder evaluation failed"));
+  };
+  refreshReminders();
+  reminderTimer = setInterval(refreshReminders, 60 * 60_000);
   leadScoutLoop.start();
   scoutAlertLoop.start();
   websiteInquiryAlertLoop.start();
