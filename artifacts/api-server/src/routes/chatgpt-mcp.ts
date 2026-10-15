@@ -1,3 +1,4 @@
+import { authenticateConnectionRequest } from "../features/chatgpt-connection/request-authentication";
 import express, { Router } from "express";
 import { hostHeaderValidation } from "@modelcontextprotocol/express";
 import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
@@ -42,20 +43,8 @@ export function createChatGPTMcpRouter(deps: {
         .status(405)
         .set("Allow", "POST")
         .json({ error: "METHOD_NOT_ALLOWED" });
-    let p: ConnectionPrincipal;
-    try {
-      const header = req.get("Authorization");
-      if (!header?.startsWith("Bearer ")) throw Error();
-      p = await deps.verify(header.slice(7));
-    } catch {
-      return res
-        .status(401)
-        .set(
-          "WWW-Authenticate",
-          `Bearer resource_metadata="${new URL(deps.resource).origin}/.well-known/oauth-protected-resource/api/chatgpt/mcp"`,
-        )
-        .json({ error: "invalid_token" });
-    }
+    const p = await authenticateConnectionRequest(req, res, deps);
+    if (!p) return;
     const rate = (
       await deps.db.query(
         `INSERT INTO chatgpt_rate_windows(connection_id,window_start,calls) VALUES($1,date_trunc('minute',clock_timestamp()),1) ON CONFLICT(connection_id) DO UPDATE SET calls=CASE WHEN chatgpt_rate_windows.window_start=excluded.window_start THEN LEAST(chatgpt_rate_windows.calls+1,$2+1) ELSE 1 END,window_start=excluded.window_start RETURNING calls, GREATEST(1,CEIL(EXTRACT(EPOCH FROM (window_start + interval '1 minute' - clock_timestamp()))))::integer AS retry_after_seconds`,
@@ -92,4 +81,5 @@ export function createChatGPTMcpRouter(deps: {
   });
   return router;
 }
+
 
