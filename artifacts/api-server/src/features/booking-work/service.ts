@@ -177,7 +177,15 @@ export class BookingWorkService {
           a.assignedTo?.kind === "connection" &&
           a.assignedTo.id === p.connectionId;
         if (mode === "claim" ? a.assignedTo !== null : !mine)
-          throw new ConnectionError("WORK_NOT_ASSIGNED", 409);
+          throw new ConnectionError("WORK_NOT_ASSIGNED", 409, JSON.stringify({
+            message: "No work was changed. Read the current card before recovering its assignment.",
+            id: a.id, revision: a.revision, assignedTo: a.assignedTo,
+            currentConnectionId: p.connectionId,
+            recovery: a.assignedTo === null
+              ? "Claim this unassigned card with claim_existing_booking_work using its current revision, then update using the returned revision."
+              : "This card belongs to another actor. Ask the owner to reassign this existing card in the app. A reconnect or old timestamp is not permission to take over; do not create a duplicate card.",
+            href: `/profiles/${a.profileId}`,
+          }));
         await this.links(tx, a, patch);
         const assigned =
           mode === "release"
@@ -258,3 +266,4 @@ export class BookingWorkService {
     });
   }
 }
+

@@ -19,7 +19,7 @@ export function bookingWorkTools(
     call: (a: any) => Promise<unknown>,
   ) => ({ name, scope, readOnly, schema, description, call });
   const safety =
-    " Coordination metadata only: never sends email, schedules a worker or invokes paid app AI. Preserve user edits and verify receipts. If work is already assigned, use its review link; do not take over.";
+    " Coordination metadata only: never sends email, schedules a worker or invokes paid app AI. Preserve user edits and verify receipts. On WORK_NOT_ASSIGNED read_booking_work: if unassigned, claim_existing_booking_work with its current revision, then update with the returned revision. If assigned to another actor (including an older connection), report its ID and review link for owner reassignment. Never take over based on age/reconnection or create a duplicate card.";
   return [
     make(
       "list_booking_work",
@@ -77,3 +77,4 @@ export function bookingWorkTools(
     ),
   ];
 }
+
