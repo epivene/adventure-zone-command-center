@@ -123,6 +123,7 @@ describe("convention connector", () => {
     expect(
       conventionTools(service, p).map((t) => [t.name, t.scope, t.readOnly]),
     ).toEqual([
+      ["update_convention_game_card", "crm:update", false],
       ["preview_convention_additions", "crm:read", true],
       ["add_convention_members", "crm:append", false],
     ]);
@@ -176,6 +177,74 @@ it("executes every new Boss projection against the app migration schemas", async
         [null],
       );
     }
+  } finally {
+    await db.close();
+  }
+});
+
+it("updates the actual game response, preserves roster data, audits and rejects stale or unauthorized edits", async () => {
+  const { db, service } = await fixture();
+  try {
+    await service.add(p, {
+      editionId: edition,
+      rows: [
+        {
+          sourceKey: "game",
+          event: "Fair",
+          sources: "Owner",
+          notes: "Keep roster notes",
+        },
+      ],
+      expectedRevision: 1,
+      requestKey: "game",
+    });
+    const before = (await db.query<any>("SELECT * FROM convention_members"))
+      .rows[0];
+    const input = {
+      editionId: edition,
+      memberId: before.id,
+      expectedRevision: before.revision,
+      conventionResponse: {
+        met: true,
+        interested: true,
+        followUp: false,
+        contact: "Dave's contact",
+        notes: "Owner supplied conversation notes",
+      },
+    };
+    await expect(service.updateGameCard(p, input)).rejects.toThrow(
+      "CONNECTION_ACCESS_DENIED",
+    );
+    await db.exec(
+      "UPDATE chatgpt_connections SET scopes=ARRAY['crm:read','crm:append','crm:update']",
+    );
+    const writer: ConnectionPrincipal = {
+      ...p,
+      scopes: [...p.scopes, "crm:update"],
+    };
+    const result = await service.updateGameCard(writer, input);
+    expect(result.member.data.conventionResponse).toEqual(
+      input.conventionResponse,
+    );
+    expect(result.member.data.notes).toBe("Keep roster notes");
+    expect(result.member.revision).toBe(before.revision + 1);
+    expect(
+      (
+        await db.query(
+          "SELECT * FROM convention_history WHERE kind='convention_response'",
+        )
+      ).rows,
+    ).toHaveLength(1);
+    await expect(service.updateGameCard(writer, input)).rejects.toThrow(
+      "changed",
+    );
+    await db.exec("UPDATE convention_editions SET archived_at=now()");
+    await expect(
+      service.updateGameCard(writer, {
+        ...input,
+        expectedRevision: result.member.revision,
+      }),
+    ).rejects.toThrow("archived");
   } finally {
     await db.close();
   }
