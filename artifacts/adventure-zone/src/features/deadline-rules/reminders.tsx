@@ -7,7 +7,7 @@ import { apiGet, apiPost, apiPut } from "@/lib/auth-token";
 type Item={sourceKey:string;organizationId:string;profileName:string;kind:string;label:string;dueOn:string|null;offsets:number[]|null;completed:boolean;editable:boolean};
 type Notice=AttentionNotice;
 type Summary={upcoming:Item[];notifications:Notice[];count:number;lastEvaluatedAt:string|null};
-const Context=createContext<{data:Summary|null;error:string;refresh:()=>Promise<void>}>({data:null,error:"",refresh:async()=>{}});
+const Context=createContext<{data:Summary|null;error:string;refresh:()=>Promise<void>;reload:()=>Promise<void>}>({data:null,error:"",refresh:async()=>{},reload:async()=>{}});
 export function RemindersProvider({children}:{children:ReactNode}) {
   const [data,setData]=useState<Summary|null>(null),[error,setError]=useState("");
   const [location]=useLocation();
@@ -33,7 +33,7 @@ export function RemindersProvider({children}:{children:ReactNode}) {
     const timer=setInterval(()=>{if(!document.hidden)void load();},5*60*1000);
     return()=>{clearInterval(timer);requestVersion.current++;viewVersion.current++;};
   },[load,fullDetails]);
-  return <Context.Provider value={{data,error,refresh}}>{children}</Context.Provider>;
+  return <Context.Provider value={{data,error,refresh,reload:load}}>{children}</Context.Provider>;
 }
 export function ReminderBell(){
   const {data,error}=useContext(Context);
@@ -151,12 +151,13 @@ function RuleEditor({rule,onSaved}:{rule?:Rule;onSaved:()=>Promise<void>}){
   </form>;
 }
 export function RemindersPage(){
-  const {data,error,refresh}=useContext(Context);
+  const {data,error,refresh,reload}=useContext(Context);
   const [rules,setRules]=useState<Rule[]>([]),[ruleError,setRuleError]=useState(""),[email,setEmail]=useState({enabled:false,providerConfigured:false});
   async function load(){try{const result=await apiGet<{rules:Rule[];email:typeof email}>("/deadline-rules");setRules(result.rules);setEmail(result.email);setRuleError("");}catch{setRuleError("Could not load rules.");}}
   useEffect(()=>{void load();},[]);
   async function saved(){await load();await refresh();}
-  async function dismiss(id:string){try{await apiPost(`/deadline-rules/notifications/${id}/dismiss`,{});await refresh();}catch{setRuleError("Could not dismiss reminder.");}}
+  // Dismissal changes an existing notice only; it must not evaluate every rule.
+  async function dismiss(id:string){try{await apiPost(`/deadline-rules/notifications/${id}/dismiss`,{});await reload();}catch{setRuleError("Could not dismiss reminder.");}}
   return <div className="mx-auto grid max-w-5xl gap-5">
     <header><h1 className="text-2xl font-bold">Attention view</h1><p className="text-sm text-muted-foreground">Dates use Mountain time. Checks run every 15 minutes while the app server is awake. Use Check reminders to run a check now.</p></header>
     <button type="button" className="button-secondary justify-self-start" onClick={()=>void refresh()}>Check reminders</button>
