@@ -10,6 +10,7 @@ import {
 import {
   ProfileLastResortDialog,
   useProfileLastResortState,
+  type ProfileLastResortState,
 } from "@/components/profiles/profile-last-resort-action";
 import {
   DropdownMenu,
@@ -22,6 +23,7 @@ import {
 
 export function ProfileActionsMenu({
   profileId,
+  loadedLastResortState,
   contactId,
   onAddNote,
   showAddNote = true,
@@ -33,6 +35,7 @@ export function ProfileActionsMenu({
   callHref,
 }: {
   profileId: string;
+  loadedLastResortState?: ProfileLastResortState;
   contactId?: string | null;
   onAddNote?: () => void;
   showAddNote?: boolean;
@@ -46,7 +49,7 @@ export function ProfileActionsMenu({
   const [lastResortOpen, setLastResortOpen] = useState(false);
   const [fillerOpen, setFillerOpen] = useState(false);
   const [eventFamilyOpen, setEventFamilyOpen] = useState(false);
-  const { state: lastResortState, refresh: refreshLastResort } = useProfileLastResortState(profileId);
+  const { state: lastResortState, refresh: refreshLastResort } = useProfileLastResortState(profileId, loadedLastResortState);
   const { state: fillerState, refresh: refreshFiller } = useProfileFillerState(profileId);
   const fullProfile = `/profiles/${profileId}`;
   const withContact = contactId ? `${fullProfile}?contactId=${encodeURIComponent(contactId)}` : fullProfile;
