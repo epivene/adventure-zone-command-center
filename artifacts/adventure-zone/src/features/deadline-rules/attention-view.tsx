@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { Link } from "wouter";
 
-export type AttentionNotice = { id:string; organizationId:string; profileName:string; title:string; dueOn:string|null; triggerType?:string; deadlineKind?:string|null };
+export type AttentionNotice = { id:string; organizationId:string; profileName:string; title:string; dueOn:string|null; triggerType?:string; deadlineKind?:string|null; attentionState?:"waiting_reply"|null };
 export function attentionDay(now=new Date()) {
   return new Intl.DateTimeFormat("en-CA",{timeZone:"America/Denver",year:"numeric",month:"2-digit",day:"2-digit"}).format(now);
 }
 export function groupAttentionNotices(notices:AttentionNotice[],today:string) {
-  const groups:{due:AttentionNotice[];upcoming:AttentionNotice[];dormant:AttentionNotice[];pastEvents:AttentionNotice[];other:AttentionNotice[]}={due:[],upcoming:[],dormant:[],pastEvents:[],other:[]};
+  const groups:{due:AttentionNotice[];upcoming:AttentionNotice[];waiting:AttentionNotice[];dormant:AttentionNotice[];pastEvents:AttentionNotice[];other:AttentionNotice[]}={due:[],upcoming:[],waiting:[],dormant:[],pastEvents:[],other:[]};
   for(const notice of notices){
-    if(notice.triggerType==="inactive") groups.dormant.push(notice);
+    if(notice.attentionState==="waiting_reply" && notice.deadlineKind==="next_action") groups.waiting.push(notice);
+    else if(notice.triggerType==="inactive") groups.dormant.push(notice);
     else if(notice.deadlineKind==="event" && notice.dueOn && notice.dueOn<today) groups.pastEvents.push(notice);
     else if(notice.dueOn && notice.dueOn<=today) groups.due.push(notice);
     else if(notice.dueOn && notice.dueOn>today) groups.upcoming.push(notice);
@@ -43,6 +44,7 @@ export function AttentionView({notices,today=attentionDay(),onDismiss}:{notices:
     <p className="text-sm text-muted-foreground">{notices.length} active reminders across all sections. Dates use Mountain time. Opening a section does not mark anything done.</p>
     <section className="rounded-xl border border-primary/30 bg-card p-4"><h2 className="text-lg font-bold">Due now ({groups.due.length})</h2><p className="text-sm text-muted-foreground">Today and overdue work. Older follow-ups stay here until reviewed.</p><NoticeList notices={groups.due} label="Due now" onDismiss={onDismiss}/></section>
     <section className="rounded-xl border border-border bg-card p-4"><h2 className="text-lg font-bold">Upcoming ({groups.upcoming.length})</h2><p className="text-sm text-muted-foreground">Future reminders, soonest first.</p><NoticeList notices={groups.upcoming} label="Upcoming" onDismiss={onDismiss}/></section>
+    <section className="rounded-xl border border-border bg-card p-4"><h2 className="text-lg font-bold">Waiting on replies ({groups.waiting.length})</h2><p className="text-sm text-muted-foreground">Reviewed as waiting on a customer. Original follow-up dates remain visible, including overdue dates. Check the latest email before acting; this section does not monitor the mailbox or mark work done.</p><NoticeList notices={groups.waiting} label="Waiting on replies" onDismiss={onDismiss}/></section>
     <SecondarySection title="Dormant prospects" description="No recent activity. These are outreach opportunities, not dated commitments." notices={groups.dormant} onDismiss={onDismiss}/>
     <SecondarySection title="Past event dates" description="The event date has passed. Review the profile for unfinished work; these reminders have not been completed or dismissed." notices={groups.pastEvents} onDismiss={onDismiss}/>
     {groups.other.length?<section className="rounded-xl border border-border bg-card p-4"><h2 className="text-lg font-bold">Other reminders ({groups.other.length})</h2><p className="text-sm text-muted-foreground">Undated reminders that need review.</p><NoticeList notices={groups.other} label="Other reminders" onDismiss={onDismiss}/></section>:null}

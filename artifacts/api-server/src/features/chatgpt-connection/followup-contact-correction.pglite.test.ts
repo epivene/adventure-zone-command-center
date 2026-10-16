@@ -47,6 +47,18 @@ it("rejects unrelated or inactive contacts and keeps booking reassignment forbid
   expect((await f.db.query<{ contact_id: string }>("SELECT contact_id FROM follow_ups")).rows[0].contact_id).toBe(oldContact);
   expect((await f.db.query("SELECT * FROM audit_entries")).rows).toHaveLength(0);
 });
+it("preserves original text for ordinary edits and rolls back if history fails", async () => {
+  const { input, oldContact } = await setup();
+  const edit={...input,contactId:oldContact,kind:"[Waiting on reply] Sent Oct 15; checked Oct 16."};
+  const result=await service.saveFollowup(f.principal,{requestKey:"reviewed-waiting"},edit);
+  expect(await service.saveFollowup(f.principal,{requestKey:"reviewed-waiting"},edit)).toEqual(result);
+  const audit=(await f.db.query("SELECT * FROM audit_entries")).rows;
+  expect(audit).toHaveLength(1);
+  expect(audit[0]).toMatchObject({action:"edit",before:{kind:input.kind},after:{kind:edit.kind,completedAt:null}});
+  await f.db.exec("DROP TABLE audit_entries");
+  await expect(service.saveFollowup(f.principal,{requestKey:"failed-text-edit"},{...edit,expectedRevision:result.revision,kind:"Do not persist"})).rejects.toThrow();
+  expect((await f.db.query("SELECT kind FROM follow_ups WHERE id=$1",[input.followupId])).rows[0]).toMatchObject({kind:edit.kind});
+});
 it("rolls back the contact correction when its audit cannot be saved", async () => {
   const { input, oldContact } = await setup();
   await f.db.exec("DROP TABLE audit_entries");

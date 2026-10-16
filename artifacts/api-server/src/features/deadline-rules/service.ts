@@ -165,6 +165,7 @@ export class DeadlineRulesService {
     const today=businessDay(new Date());
     const deadlines=await readDeadlines(this.db);
     const kinds=new Map(deadlines.map(d=>[d.sourceKey,d.kind]));
+    const sources=new Map(deadlines.map(d=>[d.sourceKey,d]));
     const items=deadlines.filter(d=>!d.completed && d.dueOn && daysBetween(today,d.dueOn)>=0 && daysBetween(today,d.dueOn)<=30)
       .sort((a,b)=>a.dueOn!.localeCompare(b.dueOn!) || a.profileName.localeCompare(b.profileName));
     const notices=await this.db.query(`SELECT n.id,n.organization_id AS "organizationId",o.name AS "profileName",n.title,
@@ -174,9 +175,15 @@ export class DeadlineRulesService {
       WHERE n.active AND n.dismissed_at IS NULL AND r.enabled AND o.consolidated_into_id IS NULL
       ORDER BY n.due_on NULLS LAST,n.created_at DESC`);
     const state=await this.db.query("SELECT last_evaluated_at FROM deadline_evaluation_state WHERE id=1");
-    return { upcoming:items,notifications:notices.rows.filter(n=>n.actions.includes("notify")||n.actions.includes("badge")).map(({occurrenceKey,...notice})=>({
-        ...notice,deadlineKind:kinds.get(occurrenceKey.replace(/:\d{4}-\d{2}-\d{2}:[^:]+$/, ""))??null,
-      })),
+    return { upcoming:items,notifications:notices.rows.filter(n=>n.actions.includes("notify")||n.actions.includes("badge")).map(({occurrenceKey,...notice})=>{
+        const sourceKey=occurrenceKey.replace(/:\d{4}-\d{2}-\d{2}:[^:]+$/, "");
+        const source=sources.get(sourceKey);
+        // Use the reviewed task immediately; do not rewrite notification history
+        // or run reminder evaluation just to display an edited follow-up.
+        const task=sourceKey.startsWith("followup:")?source?.label:undefined;
+        return {...notice,title:task??notice.title,deadlineKind:kinds.get(sourceKey)??null,
+          attentionState:task?.startsWith("[Waiting on reply] ")?"waiting_reply":null};
+      }),
       count:notices.rows.filter(n=>n.actions.includes("badge")).length,lastEvaluatedAt:state.rows[0]?.last_evaluated_at??null };
   }
 }
