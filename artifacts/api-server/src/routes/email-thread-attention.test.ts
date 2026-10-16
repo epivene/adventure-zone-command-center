@@ -7,6 +7,9 @@ it("requires owner authentication and rejects malformed decisions before service
  process.env.SESSION_SECRET="email-attention-test-secret";
  const app=express();app.use(express.json());app.use("/attention",createEmailThreadAttentionRouter({} as any));
  expect((await request(app).post("/attention/preview").send({})).status).toBe(401);
+ expect((await request(app).get("/attention/pilot")).status).toBe(401);
+ expect((await request(app).post("/attention/pilot/sync").send({})).status).toBe(401);
  const token=issueToken()!.token;
  expect((await request(app).post("/attention/apply").auth(token,{type:"bearer"}).send({send:true})).status).toBe(400);
+ expect((await request(app).post("/attention/pilot/sync").auth(token,{type:"bearer"}).send({send:true})).status).toBe(400);
 });

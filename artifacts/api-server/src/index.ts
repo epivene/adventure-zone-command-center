@@ -188,6 +188,7 @@ const paperNoteLoop = new PaperNoteWorkerLoop({
 });
 
 const gmailProfileLinkSweepLoop = new GoogleSentProfileLinkSweepLoop({
+  pilot: {run: async () => { const {pilotSync}=await import("./features/google-workspace/google-pilot-sync-runtime"); await pilotSync.run(); }},
   recent: new GoogleRecentValidationService(),
   sentSweep: new GoogleSentProfileLinkSweepService(),
   clock: { now: () => new Date() },

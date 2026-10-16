@@ -1376,6 +1376,7 @@ export function createGoogleWorkspaceReadClient(input: {
         return [{
           id: message.id,
           internalDateMs: Number.isFinite(rawInternalDate) ? rawInternalDate : null,
+          labelIds: labels,
           from: headerValue(headers, "From"),
           to: headerValue(headers, "To"),
           cc: headerValue(headers, "Cc"),

@@ -38,6 +38,7 @@ export class GoogleSentProfileLinkSweepLoop {
     sentSweep: Sweep;
     clock: Clock;
     scheduler: GoogleSentProfileLinkSweepLoopScheduler;
+    pilot?: { run(): Promise<void> };
   }) {}
 
   start(): void {
@@ -77,6 +78,8 @@ export class GoogleSentProfileLinkSweepLoop {
 
   private async runStep(): Promise<void> {
     const now = this.dependencies.clock.now();
+    try { if(this.dependencies.pilot) await this.dependencies.pilot.run(); }
+    catch { logger.warn("Three-customer Gmail pilot sync deferred"); }
     try {
       const result = await this.dependencies.recent.run(
         GOOGLE_RECENT_EMAIL_SYNC_LIMIT,
