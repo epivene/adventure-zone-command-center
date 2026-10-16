@@ -27,6 +27,7 @@ type FileAccess = {
   copyApprovedThreadAttachments(input: {
     organizationId: string;
     threadId: string;
+    detail?: GoogleThreadDetail;
   }): Promise<GoogleProfileFile[]>;
 };
 
@@ -156,6 +157,7 @@ export class GoogleProfileEmailArchiveService {
           const files = await this.files.copyApprovedThreadAttachments({
             organizationId: input.organizationId,
             threadId: input.gmailThreadId,
+            detail,
           });
           state = attachmentState(detail, files);
         } catch {
