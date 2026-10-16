@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { pool as defaultPool } from "@workspace/db";
 
 import { PostgresGoogleConnectionRepository } from "./google-connection-repository";
-import type { GoogleWorkspaceReadClient } from "./google-api-types";
+import type { GoogleWorkspaceReadClient, GoogleThreadDetail } from "./google-api-types";
 import { PostgresGoogleValidationRepository } from "./google-validation-repository";
 import {
   GoogleCloudPrivateObjectStorage,
@@ -290,6 +290,7 @@ export class GoogleProfileFileService {
   async copyApprovedThreadAttachments(input: {
     organizationId: string;
     threadId: string;
+    detail?: GoogleThreadDetail;
   }): Promise<GoogleProfileFile[]> {
     const owns = await this.validation.organizationOwnsApprovedThread(input);
     if (!owns) throw new Error("GOOGLE_WORKSPACE_PROFILE_THREAD_NOT_FOUND");
@@ -299,7 +300,12 @@ export class GoogleProfileFileService {
     if (!client.getThreadDetail || !client.getAttachment) {
       throw new Error("GOOGLE_WORKSPACE_PROFILE_FILES_UNAVAILABLE");
     }
-    const detail = await client.getThreadDetail(input.threadId);
+    // Reuse the archive's snapshot: Gmail attachment handles can differ on a
+    // second read, which otherwise leaves successfully copied files "partial".
+    const detail = input.detail ?? await client.getThreadDetail(input.threadId);
+    if (detail.id !== input.threadId) {
+      throw new Error("GOOGLE_WORKSPACE_PROFILE_THREAD_NOT_FOUND");
+    }
 
     for (const message of detail.messages) {
       for (const attachment of message.attachments) {
