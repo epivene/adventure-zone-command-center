@@ -4,7 +4,7 @@ import { useProfileLastResortState } from "./profile-last-resort-action";
 const apiGet = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth-token", () => ({ apiGet }));
 vi.mock("@/actions/organizations", () => ({ setLastResortAction: vi.fn() }));
-beforeEach(() => apiGet.mockReset());
+beforeEach(() => { apiGet.mockReset(); });
 it("uses the loaded profile without another request and accepts updated props", () => {
   const { result, rerender } = renderHook(({ value }) => useProfileLastResortState("a", value), { initialProps: { value: { lastResort: true, lastResortReason: "Past experience" } } });
   expect(result.current.state).toEqual({ lastResort: true, lastResortReason: "Past experience" });
