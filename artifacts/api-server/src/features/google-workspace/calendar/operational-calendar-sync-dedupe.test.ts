@@ -69,3 +69,22 @@ describe("OperationalCalendarSyncService duplicate prevention", () => {
     expect(createEvent).not.toHaveBeenCalled();
   });
 });
+
+describe("profile-reviewed calendar ownership", () => {
+  it("does not replace a reviewed entry with the legacy inferred projection", async () => {
+    const client = { getEvent: vi.fn(), listEvents: vi.fn(), createEvent: vi.fn(), updateEvent: vi.fn() };
+    const links = { findByBookingPackage: vi.fn(async () => ({lastAppSnapshot:{profilePreviewId:"preview"}})),
+      saveSuccessfulSync: vi.fn(), recordSyncError: vi.fn(), createReview: vi.fn() };
+    const service = new OperationalCalendarSyncService(
+      {createOperationalCalendarClient:async()=>({connectionId:"c",calendarId:"cal",client})},
+      {loadConfirmedBooking:async()=>({bookingId:"b",managerName:"Owner",eventName:"Fair",city:"Town",region:"CO",
+        actualEventDateText:"July 21",reservedStart:new Date("2027-07-19"),reservedEnd:new Date("2027-07-23"),packages:["zone"]}),
+       saveOperationalWindow:vi.fn()},
+      links as any,
+    );
+    await expect(service.syncConfirmedBooking("b")).resolves.toEqual({state:"review_required",created:0,updated:0,reviewCount:1});
+    expect(client.createEvent).not.toHaveBeenCalled();
+    expect(client.updateEvent).not.toHaveBeenCalled();
+    expect(links.saveSuccessfulSync).not.toHaveBeenCalled();
+  });
+});

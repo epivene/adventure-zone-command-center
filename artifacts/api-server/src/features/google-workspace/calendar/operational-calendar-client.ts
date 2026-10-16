@@ -4,6 +4,8 @@ const tokenEndpoint = "https://oauth2.googleapis.com/token";
 const calendarBaseEndpoint = "https://www.googleapis.com/calendar/v3/calendars";
 
 export type OperationalCalendarEventInput = {
+  /** Optional stable Google event identity for retry-safe creation. */
+  id?: string;
   summary: string;
   description: string;
   startDate: string;
@@ -194,6 +196,7 @@ export function createOperationalCalendarClient(input: {
   function eventBody(event: OperationalCalendarEventInput) {
     validateEventInput(event);
     return JSON.stringify({
+      ...(event.id ? { id: event.id } : {}),
       summary: event.summary.trim(),
       description: event.description,
       start: { date: event.startDate },
