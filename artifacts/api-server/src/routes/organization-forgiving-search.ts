@@ -116,18 +116,22 @@ router.get("/organizations", async (req: Request, res: Response, next: NextFunct
   try {
     const terms = buildProfileSearchTerms(query.search);
     if (!terms.length) return next();
-    const candidatePage = await new DrizzleOrganizationRepository(db).listOrganizations({
+    const repository = new DrizzleOrganizationRepository(db);
+    const candidateQuery = {
       ...query,
       search: "",
       showMembers: true,
       includeRetired: true,
       page: 1,
       pageSize: MAX_SEARCH_CANDIDATES,
-    });
+    };
+    const candidateIds = await repository.listOrganizationIds(candidateQuery);
     const matchedIds = await matchedOrganizationIds(
       terms,
-      candidatePage.records.map((record) => record.id),
+      candidateIds,
     );
+    // Only matched profiles need bookings, dates, contacts and card enrichment.
+    const candidatePage = await repository.listOrganizations(candidateQuery, [...matchedIds.keys()]);
     const matchedRecords = candidatePage.records
       .filter((record) => matchedIds.has(record.id))
       .sort((left, right) => (matchedIds.get(left.id) ?? 0) - (matchedIds.get(right.id) ?? 0));
