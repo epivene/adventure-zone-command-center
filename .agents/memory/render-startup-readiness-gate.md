@@ -14,3 +14,9 @@ Bind the HTTP port before long database startup so Render can detect the service
 **Why:** Render can terminate a healthy build before the API opens a port when serialized production schema checks exceed its port-detection window. Opening normal traffic before approved-profile maintenance settles lets page fan-out and polling compete with imports for the default ten-connection pool, causing acquisition timeouts; replaying the full archive on every deployment extends that outage unnecessarily.
 
 **How to apply:** Close the gate before binding; allow exact liveness and authenticated internal-import routing; finish required startup and settle handled maintenance; open readiness; then start workers. Preserve fail-closed shutdown for required errors.
+
+Required-schema probes must be narrowly scoped to the target catalog objects, with server-side timeouts shorter than the client's read timeout. Use transaction-scoped schema locks and bounded contention waits; discard failed connections rather than returning them to the pool.
+
+**Why:** A Render startup timed out in a schema-readiness query, followed by a restart that immediately failed on the same schema's advisory lock. Client read timeouts do not prove PostgreSQL stopped working or released session locks.
+
+**How to apply:** Keep timeout settings transaction-local, keep nested helpers in the same outer transaction, and destroy read-timed-out connections without queuing cleanup SQL behind the stalled query. Do not bypass required schema checks to make health green.

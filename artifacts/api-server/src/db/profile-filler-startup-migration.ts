@@ -7,47 +7,46 @@ type MigrationClient = {
 };
 
 const profileFillerReadinessSql = `
+  with target as materialized (
+    select to_regclass(current_schema() || '.organizations') as oid
+  ), filler_columns as materialized (
+    select a.attrelid, a.attnum, a.attname, a.atttypid, a.attnotnull
+    from pg_attribute a
+    join target t on t.oid = a.attrelid
+    where a.attnum > 0 and not a.attisdropped
+      and a.attname in ('filler', 'filler_reason', 'filler_changed_at')
+  ), filler_constraint as materialized (
+    select c.oid, c.contype, c.convalidated
+    from pg_constraint c
+    join target t on t.oid = c.conrelid
+    where c.conname = 'organizations_filler_reason_required'
+  )
   select (
-    to_regclass(current_schema() || '.organizations') is not null
+    target.oid is not null
     and (
       select count(*) = 3
-      from information_schema.columns
-      where table_schema = current_schema()
-        and table_name = 'organizations'
-        and column_name in ('filler', 'filler_reason', 'filler_changed_at')
-    )
-    and not exists (
-      select 1
-      from information_schema.columns
-      where table_schema = current_schema()
-        and table_name = 'organizations'
-        and (
-          (column_name = 'filler' and (data_type <> 'boolean' or is_nullable <> 'NO'))
-          or (column_name in ('filler_reason', 'filler_changed_at') and is_nullable <> 'YES')
-          or (column_name = 'filler_reason' and data_type <> 'text')
-          or (column_name = 'filler_changed_at' and data_type <> 'timestamp with time zone')
-        )
+      from filler_columns
+      where (attname = 'filler' and atttypid = 'boolean'::regtype and attnotnull)
+        or (attname = 'filler_reason' and atttypid = 'text'::regtype and not attnotnull)
+        or (attname = 'filler_changed_at' and atttypid = 'timestamptz'::regtype and not attnotnull)
     )
     and exists (
       select 1
-      from information_schema.columns
-      where table_schema = current_schema()
-        and table_name = 'organizations'
-        and column_name = 'filler'
-        and data_type = 'boolean'
-        and lower(column_default) like '%false%'
+      from filler_columns a
+      join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
+      where a.attname = 'filler'
+        and lower(pg_get_expr(d.adbin, d.adrelid)) = 'false'
     )
     and exists (
       select 1
-      from pg_constraint
-      where conrelid = to_regclass(current_schema() || '.organizations')
-        and conname = 'organizations_filler_reason_required'
-        and contype = 'c'
+      from filler_constraint
+      where contype = 'c'
         and convalidated
         and regexp_replace(lower(pg_get_constraintdef(oid)), '\\s+', '', 'g')
           = 'check(((notfiller)or(nullif(btrim(filler_reason),''''::text)isnotnull)))'
     )
   ) as ready
+  from target
 `;
 
 async function loadProfileFillerMigrationSql() {
@@ -76,18 +75,19 @@ async function loadProfileFillerMigrationSql() {
     : new Error("Profile filler migration could not be loaded.");
 }
 
-async function isProfileFillerSchemaReady(client: MigrationClient): Promise<boolean> {
+export async function isProfileFillerSchemaReady(client: MigrationClient): Promise<boolean> {
   const result = await client.query(profileFillerReadinessSql);
   return result.rows[0]?.["ready"] === true;
 }
 
 export async function ensureProfileFillerSchema(
   client: MigrationClient,
-  options?: { loadSql?: () => Promise<string> },
+  options?: { loadSql?: () => Promise<string>; inTransaction?: boolean },
 ): Promise<boolean> {
   if (await isProfileFillerSchemaReady(client)) return false;
 
-  await client.query("BEGIN");
+  const ownsTransaction = !options?.inTransaction;
+  if (ownsTransaction) await client.query("BEGIN");
   try {
     const sql = await (options?.loadSql ?? loadProfileFillerMigrationSql)();
     await client.query(sql);
@@ -98,10 +98,10 @@ export async function ensureProfileFillerSchema(
       );
     }
 
-    await client.query("COMMIT");
+    if (ownsTransaction) await client.query("COMMIT");
     return true;
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
+    if (ownsTransaction) await client.query("ROLLBACK").catch(() => undefined);
     throw error;
   }
 }

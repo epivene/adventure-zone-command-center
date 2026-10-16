@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import TaxReceiptsPage from "./TaxReceiptsPage";
-import { downloadAccountantPackage, listRecords } from "@/features/agent-tax/client";
+import { listRecords } from "@/features/agent-tax/client";
+import { downloadAccountantPackage } from "@/features/agent-tax/package-download";
 
 vi.mock("@/features/agent-tax/client", () => ({
   listRecords: vi.fn(),
   exportCsv: vi.fn(),
-  downloadAccountantPackage: vi.fn(),
   describeError: (error: Error) => error.message,
+}));
+vi.mock("@/features/agent-tax/package-download", () => ({
+  downloadAccountantPackage: vi.fn(),
 }));
 vi.mock("@/components/agent-tax/RecordFormDialog", () => ({ RecordFormDialog: () => null }));
 vi.mock("@/components/agent-tax/ConfirmDialogs", () => ({ DeleteRecordDialog: () => null }));

@@ -12,7 +12,8 @@ import { RecordList } from "@/components/agent-tax/RecordList";
 import { PayTab } from "@/components/agent-tax/PayTab";
 import { EstimateTab } from "@/components/agent-tax/EstimateTab";
 import { SummaryCards } from "@/components/agent-tax/SummaryCards";
-import { describeError, downloadAccountantPackage, exportCsv, listRecords, type RecordsResponse, type TaxRecord } from "@/features/agent-tax/client";
+import { describeError, exportCsv, listRecords, type RecordsResponse, type TaxRecord } from "@/features/agent-tax/client";
+import { downloadAccountantPackage } from "@/features/agent-tax/package-download";
 
 const LIMIT = 25;
 

@@ -3,7 +3,9 @@ import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it, vi } from "vitest";
 
-import { ensureProfileFillerSchema } from "./profile-filler-startup-migration";
+import {
+  ensureProfileFillerSchema, isProfileFillerSchemaReady,
+} from "./profile-filler-startup-migration";
 
 function fakeClient(readiness: boolean | (() => boolean)) {
   const queries: string[] = [];
@@ -21,6 +23,38 @@ function fakeClient(readiness: boolean | (() => boolean)) {
 }
 
 describe("ensureProfileFillerSchema", () => {
+  it("checks actual catalog metadata and repairs missing columns without touching unrelated constraints", async () => {
+    const db = new PGlite();
+    try {
+      await db.exec("create table organizations (id uuid primary key, name text not null)");
+      const migrationSql = await readFile(
+        new URL("../../../../lib/db/migrations/20260829_profile_filler.sql", import.meta.url),
+        "utf8",
+      );
+      const client = {
+        async query(sql: string) {
+          if (sql.includes("as ready")) return db.query<Record<string, unknown>>(sql);
+          await db.exec(sql);
+          return { rows: [] };
+        },
+      };
+      expect(await isProfileFillerSchemaReady(client)).toBe(false);
+      await expect(ensureProfileFillerSchema(client, { loadSql: async () => migrationSql }))
+        .resolves.toBe(true);
+      expect(await isProfileFillerSchemaReady(client)).toBe(true);
+      const loadSql = vi.fn(async () => migrationSql);
+      await expect(ensureProfileFillerSchema(client, { loadSql })).resolves.toBe(false);
+      expect(loadSql).not.toHaveBeenCalled();
+      await db.exec("alter table organizations alter column filler set default true");
+      expect(await isProfileFillerSchemaReady(client)).toBe(false);
+      await db.exec("alter table organizations alter column filler set default false");
+      await db.exec("alter table organizations alter column filler_reason set not null");
+      expect(await isProfileFillerSchemaReady(client)).toBe(false);
+    } finally {
+      await db.close();
+    }
+  }, 15_000);
+
   it("applies the repository migration twice without replacing the valid constraint", async () => {
     const client = new PGlite();
     try {
@@ -148,5 +182,17 @@ describe("ensureProfileFillerSchema", () => {
 
     expect(h.queries).toContain("ROLLBACK");
     expect(h.queries).not.toContain("COMMIT");
+  });
+
+  it("leaves transaction ownership to the required startup wrapper", async () => {
+    let repaired = false;
+    const h = fakeClient(() => repaired);
+    await expect(ensureProfileFillerSchema(h.client, {
+      inTransaction: true,
+      loadSql: async () => { repaired = true; return "select 1;"; },
+    })).resolves.toBe(true);
+    expect(h.queries).not.toContain("BEGIN");
+    expect(h.queries).not.toContain("COMMIT");
+    expect(h.queries).not.toContain("ROLLBACK");
   });
 });
