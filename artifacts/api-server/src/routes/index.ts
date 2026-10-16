@@ -146,6 +146,7 @@ import { createTwilioVoiceWebhooksRouter } from "./twilio-voice-webhooks";
 import { createInboundComputerCallingRouter } from "./inbound-computer-calling";
 import { createTwilioInboundVoiceWebhooksRouter } from "./twilio-inbound-voice-webhooks";
 import { cleanupLeakedConsolidationTestFixtures } from "@/features/organizations/test-fixture-cleanup";
+import { createAgentTaxRouter } from "./agent-tax";
 import { isAssistedCallingEnabled } from "@/features/calls/assisted-calling-enabled";
 import { readComputerCallingConfig } from "@/features/calls/computer-calling-config";
 import {
@@ -201,6 +202,7 @@ const inboundVoicemailService = new InboundVoicemailService(db, () => {
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(createAgentTaxRouter());
 router.use(developmentSampleLoginsRouter);
 router.use(googleWorkspaceOAuthCallbackRouter);
 router.use(officeAuthRouter);

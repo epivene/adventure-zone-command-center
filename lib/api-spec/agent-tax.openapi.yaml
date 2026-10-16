@@ -1,0 +1,204 @@
+openapi: 3.1.0
+info: { title: Agent tax records, version: 1.0.0 }
+paths:
+  /admin/agent-tax/records:
+    get:
+      operationId: listAgentTaxRecords
+      description: Owner bearer authentication required. Never shared with other workspaces.
+      parameters:
+        - { name: year, in: query, schema: { type: integer, minimum: 1900, maximum: 2200 } }
+        - { name: q, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: Paginated records and selected-year totals independent of text search
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [records, total, years, summary, storageAvailable]
+                properties:
+                  records: { type: array, items: { $ref: "#/components/schemas/AgentTaxRecord" } }
+                  total: { type: integer }
+                  years: { type: array, items: { type: integer } }
+                  storageAvailable: { type: boolean }
+                  summary:
+                    type: object
+                    required: [incomeCents, expenseCents, netCents, recordCount]
+                    properties:
+                      incomeCents: { type: number }
+                      expenseCents: { type: number }
+                      netCents: { type: number }
+                      recordCount: { type: integer }
+    post:
+      operationId: createAgentTaxRecord
+      description: Owner-only explicit save, never submitted to classification or shared document ingestion.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentTaxInput" }
+      responses:
+        "201":
+          description: Created record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentTaxMutation" }
+  /admin/agent-tax/records/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      operationId: updateAgentTaxRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/AgentTaxInput" }
+                - type: object
+                  required: [expectedRevision]
+                  properties:
+                    expectedRevision: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Updated record; stale revisions return 409 without overwriting
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentTaxMutation" }
+    delete:
+      operationId: deleteAgentTaxRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentTaxDelete" }
+      responses:
+        "200":
+          description: Removed record; private attachment deletion is queued durably
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties: { ok: { type: boolean } }
+  /admin/agent-tax/records/{id}/file:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: downloadAgentTaxFile
+      description: Owner-authenticated file download; no signed or public URL.
+      responses:
+        "200":
+          description: Original file with private no-store headers
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+    put:
+      operationId: uploadAgentTaxFile
+      description: Owner only, maximum 15 MiB; checks actual file signatures.
+      parameters:
+        - { name: x-file-name, in: header, required: true, schema: { type: string } }
+        - { name: x-record-revision, in: header, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/pdf: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+      responses:
+        "200":
+          description: Attached file
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentTaxMutation" }
+    delete:
+      operationId: deleteAgentTaxFile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentTaxDelete" }
+      responses:
+        "200":
+          description: Record with attachment removed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentTaxMutation" }
+  /admin/agent-tax/export:
+    get:
+      operationId: exportAgentTaxRecords
+      description: Owner-only full-year CSV, with spreadsheet formula neutralization.
+      parameters:
+        - { name: year, in: query, required: true, schema: { type: integer, minimum: 1900, maximum: 2200 } }
+      responses:
+        "200":
+          description: All selected-year records, not just the visible page
+          content:
+            text/csv: { schema: { type: string } }
+  /admin/agent-tax/bookings:
+    get:
+      operationId: searchAgentTaxBookings
+      description: Owner-only booking search for optional record links
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 200 } }
+      responses:
+        "200":
+          description: Matching bookings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bookings]
+                properties:
+                  bookings:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, label]
+                      properties:
+                        id: { type: string, format: uuid }
+                        label: { type: string }
+components:
+  schemas:
+    AgentTaxInput:
+      type: object
+      required: [title, entryType, amountCents, recordDate, taxYear, category, paymentMethod, counterparty, notes, bookingId]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        entryType: { type: string, enum: [income, expense, document] }
+        amountCents: { type: integer, nullable: true, minimum: 0, maximum: 1000000000 }
+        recordDate: { type: string, format: date, nullable: true }
+        taxYear: { type: integer, minimum: 1900, maximum: 2200 }
+        category: { type: string, enum: [commission, travel, supplies, fees, tax_form, other] }
+        paymentMethod: { type: string, enum: [venmo, cash, bank, check, card, other] }
+        counterparty: { type: string, nullable: true, maxLength: 250 }
+        notes: { type: string, nullable: true, maxLength: 5000 }
+        bookingId: { type: string, format: uuid, nullable: true }
+    AgentTaxRecord:
+      allOf:
+        - { $ref: "#/components/schemas/AgentTaxInput" }
+        - type: object
+          required: [id, bookingLabel, fileName, fileMime, fileSize, revision, createdAt, updatedAt]
+          properties:
+            id: { type: string, format: uuid }
+            bookingLabel: { type: string, nullable: true }
+            fileName: { type: string, nullable: true }
+            fileMime: { type: string, nullable: true }
+            fileSize: { type: integer, nullable: true }
+            revision: { type: integer }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    AgentTaxMutation:
+      type: object
+      required: [record]
+      properties:
+        record: { $ref: "#/components/schemas/AgentTaxRecord" }
+    AgentTaxDelete:
+      type: object
+      required: [confirmation, expectedRevision]
+      properties:
+        confirmation: { type: string, enum: [DELETE] }
+        expectedRevision: { type: integer, minimum: 1 }

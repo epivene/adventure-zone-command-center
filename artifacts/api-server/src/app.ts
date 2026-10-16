@@ -66,6 +66,7 @@ app.use(
       "X-File-Name",
       "X-Document-Name",
       "X-Document-Category",
+      "X-Record-Revision",
     ],
   }),
 );

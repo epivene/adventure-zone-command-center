@@ -85,6 +85,7 @@ const adminToolsGroups: MenuGroup[] = [
     label: "Business Setup",
     items: [
       { href: "/settings/business-sources", label: "Business sources" },
+      { href: "/settings/tax-receipts", label: "Tax & receipts", keywords: ["tax", "Venmo", "receipt", "booking agent", "income", "expense"] },
       { href: "/settings/coi", label: "Certificates of insurance" },
       { href: "/settings/packages-resources", label: "Packages & resources" },
       { href: "/settings/call-scripts", label: "Call scripts" },

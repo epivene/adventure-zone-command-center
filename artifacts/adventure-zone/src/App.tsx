@@ -97,6 +97,7 @@ const SettingsGoogleWorkspacePage = lazy(() => import("@/pages/SettingsGoogleWor
 const DriveBackupPage = lazy(() => import("@/pages/DriveBackupPage"));
 const SettingsContractsPage = lazy(() => import("@/pages/SettingsContractsPage"));
 const EventDateCoveragePage = lazy(() => import("@/pages/EventDateCoveragePage"));
+const TaxReceiptsPage = lazy(() => import("@/pages/TaxReceiptsPage"));
 const BusinessDocumentsPage = lazy(() => import("@/pages/BusinessDocumentsPage"));
 const OwnerInvoicesContractsPage = lazy(() => import("@/pages/OwnerInvoicesContractsPage"));
 const OfficeInvoicesContractsPage = lazy(() => import("@/pages/OfficeInvoicesContractsPage"));
@@ -248,6 +249,7 @@ function ActMigrationRedirect() {
 function SettingsStub() {
   const tools = [
     ["ChatGPT connection", "/settings/chatgpt-connection", "Manage direct access, review profile changes and find saved app drafts."],
+    ["Tax & receipts", "/settings/tax-receipts", "Private owner record of self-employed 1099 documents, income and expenses for tax preparation."],
     ["Business sources", "/settings/business-sources", "Review protected business source files, conflicts, links, and historical terms."],
     ["Certificates of insurance", "/settings/coi", "Create, review, and renew workspace-scoped certificates linked to Studio files."],
     ["Excel lead lists", "/imports/leads", "Import Amy's event lists and review every source row before research or drafting."],
@@ -427,6 +429,7 @@ function AdminProtectedApp() {
           <Route path="/event-profiles/:id">{(params)=><Redirect to={canonicalProfilePath(params.id)} />}</Route>
           <Route path="/settings/paper-notes/:batchId">{(params)=><PaperNoteBatchReviewPage batchId={params.batchId}/>}</Route>
           <Route path="/settings/paper-notes" component={PaperNotesInboxPage} />
+          <Route path="/settings/tax-receipts" component={TaxReceiptsPage} />
           <Route path="/settings/business-sources" component={SettingsBusinessSourcesPage} />
           <Route path="/settings/coi"><CoiManagementPage mode="admin" /></Route>
           <Route path="/settings/communication-templates" component={SettingsCommunicationTemplatesPage} />

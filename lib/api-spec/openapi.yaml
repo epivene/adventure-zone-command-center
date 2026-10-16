@@ -11,6 +11,16 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /admin/agent-tax/records:
+    $ref: "./agent-tax.openapi.yaml#/paths/~1admin~1agent-tax~1records"
+  /admin/agent-tax/records/{id}:
+    $ref: "./agent-tax.openapi.yaml#/paths/~1admin~1agent-tax~1records~1{id}"
+  /admin/agent-tax/records/{id}/file:
+    $ref: "./agent-tax.openapi.yaml#/paths/~1admin~1agent-tax~1records~1{id}~1file"
+  /admin/agent-tax/export:
+    $ref: "./agent-tax.openapi.yaml#/paths/~1admin~1agent-tax~1export"
+  /admin/agent-tax/bookings:
+    $ref: "./agent-tax.openapi.yaml#/paths/~1admin~1agent-tax~1bookings"
   /manager/bookings/{id}/crew-location:
     get:
       operationId: getManagerFestivalCrewLocation

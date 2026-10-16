@@ -25,3 +25,4 @@ export * from "./assistant-workspace-schema";
 
 
 export * from "./deadline-rules-schema";
+export * from "./agent-tax-schema";

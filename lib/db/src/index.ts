@@ -207,4 +207,5 @@ export * from "./outreach-planner-schema";
 export * from "./assistant-workspace-schema";
 
 export * from "./chatgpt-connection-schema";
+export * from "./agent-tax-schema";
 

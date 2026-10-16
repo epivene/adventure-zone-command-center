@@ -23,6 +23,10 @@ interface MigrationPool {
 
 const migrationFiles = [
   {
+    name: "20261016_agent_tax_records.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.agent_tax_records') IS NOT NULL AND to_regclass(current_schema() || '.agent_tax_file_deletions') IS NOT NULL AS ready",
+  },
+  {
     name: "20261015_reversible_profile_duplicates.sql",
     markerSql: "SELECT to_regclass(current_schema() || '.profile_merge_journal') IS NOT NULL AND to_regclass(current_schema() || '.profile_duplicate_dismissals') IS NOT NULL AS ready",
   },
@@ -778,7 +782,7 @@ export async function loadActReviewMigrations(): Promise<ActReviewMigration[]> {
 
 export async function ensureFestivalEditionSchema(): Promise<void> {
   const directory = await resolveMigrationDirectory();
-  const required = ["20260912_profile_booking_decisions.sql", "20260921_event_date_coverage.sql", "20261008_festival_editions.sql", "20261009_festival_crew_stops.sql", "20261009z_festival_crew_confirmations.sql"];
+  const required = ["20260912_profile_booking_decisions.sql", "20260921_event_date_coverage.sql", "20261008_festival_editions.sql", "20261009_festival_crew_stops.sql", "20261009z_festival_crew_confirmations.sql", "20261016_agent_tax_records.sql"];
   const migrations = await Promise.all(required.map(async name => {
     const migration = migrationFiles.find(item => item.name === name);
     if (!migration) throw new Error(`Required profile migration is missing: ${name}`);
