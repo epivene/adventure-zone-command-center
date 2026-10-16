@@ -32,8 +32,10 @@ describe("profile calendar dates and retry identity", () => {
   });
   it("requires exact public fields and an active event for readback", () => {
     const input={summary:"Fair",description:"EVENT DATES: 2027-07-21",startDate:"2027-07-19",endDateExclusive:"2027-07-23"};
-    const event={...input,id:"id",etag:"v1",updated:null,status:"confirmed"};
+    const event={...input,id:"id",etag:"v1",updated:null,status:"confirmed",eventKind:"all_day" as const};
     expect(sameEvent(event,input)).toBe(true);
+    expect(sameEvent({...event,eventKind:"timed"},input)).toBe(false);
+    expect(sameEvent({...event,eventKind:undefined},input)).toBe(false);
     expect(sameEvent({...event,description:"different"},input)).toBe(false);
     expect(sameEvent({...event,status:"cancelled"},input)).toBe(false);
     expect(sameEvent(null,input)).toBe(false);

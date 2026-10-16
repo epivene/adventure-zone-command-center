@@ -30,7 +30,7 @@ export function reviewedDays(dates: ResolvedDates) {
   };
 }
 export function sameEvent(actual: OperationalCalendarEvent | null, desired: OperationalCalendarEventInput): boolean {
-  return Boolean(actual && actual.status !== "cancelled" && actual.summary === desired.summary
+  return Boolean(actual && actual.eventKind === "all_day" && actual.status !== "cancelled" && actual.summary === desired.summary
     && actual.description === desired.description && actual.startDate === desired.startDate
     && actual.endDateExclusive === desired.endDateExclusive);
 }

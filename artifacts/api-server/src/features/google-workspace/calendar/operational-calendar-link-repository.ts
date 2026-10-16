@@ -356,10 +356,24 @@ export class OperationalCalendarLinkRepository {
         return { state: "accepted", bookingId: review.bookingId, created: false };
       }
 
+      // Load authoritative provenance under lock, never trust a review's copied app payload.
+      const [reviewLink] = review.linkId ? await tx.select().from(googleOperationalCalendarLinks)
+        .where(eq(googleOperationalCalendarLinks.id, review.linkId)).limit(1).for("update") : [];
+      if (review.linkId && (!reviewLink || reviewLink.connectionId !== review.connectionId
+        || reviewLink.calendarId !== review.calendarId || reviewLink.googleEventId !== review.googleEventId)) {
+        throw new Error("GOOGLE_OPERATIONAL_CALENDAR_REVIEW_LINK_CHANGED");
+      }
+      const protectedSnapshot = reviewLink?.lastAppSnapshot?.profilePreviewId
+        ? reviewLink.lastAppSnapshot : null;
+      if (protectedSnapshot && (input.resolution !== "link_existing"
+        || input.bookingId !== reviewLink!.bookingId
+        || (input.packageKey && input.packageKey !== reviewLink!.packageKey))) {
+        throw new Error("GOOGLE_OPERATIONAL_CALENDAR_REVIEWED_IDENTITY_CHANGE_BLOCKED");
+      }
       const changes = reviewChanges(review.proposedChanges);
       const parsed = changes.parsed ?? {};
       const google = changes.google ?? {};
-      const packageKeyValue = input.packageKey ?? parsed.packageKey;
+      const packageKeyValue = input.packageKey ?? reviewLink?.packageKey ?? parsed.packageKey;
       if (packageKeyValue !== "zone" && packageKeyValue !== "pirates" && packageKeyValue !== "warrior") {
         throw new Error("GOOGLE_OPERATIONAL_CALENDAR_PACKAGE_REQUIRED");
       }
@@ -447,6 +461,11 @@ export class OperationalCalendarLinkRepository {
       }
 
       const snapshot = {
+        ...protectedSnapshot,
+        // Keep the original owner-reviewed buffers and evidence even when accepting external edits.
+        ...(protectedSnapshot ? {
+          profileReviewedSnapshot: protectedSnapshot.profileReviewedSnapshot ?? protectedSnapshot,
+        } : {}),
         imported: true,
         summary: google.summary ?? null,
         description: google.description ?? null,
