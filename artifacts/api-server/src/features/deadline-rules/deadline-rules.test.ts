@@ -37,6 +37,21 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await pg.close();});
 describe("deadline dates and rules",()=>{
+  it("shows audited follow-up edits immediately without changing notification history or rules", async () => {
+    const task=(await pg.query("INSERT INTO follow_ups(organization_id,kind,due_at) VALUES($1,'Review unsent draft','2026-10-01T15:00:00Z') RETURNING id",[profile])).rows[0] as {id:string};
+    await service.evaluate(now);
+    const before=await pg.query("SELECT * FROM deadline_notifications ORDER BY id");
+    const rules=await pg.query("SELECT * FROM deadline_rules ORDER BY id");
+    const label="[Waiting on reply] Checked Oct 16; sent Oct 15. No automatic send.";
+    await pg.query("UPDATE follow_ups SET kind=$2 WHERE id=$1",[task.id,label]);
+    const notices=(await service.summary()).notifications;
+    const notice=notices.find(n=>n.title===label);
+    expect(notice).toMatchObject({attentionState:"waiting_reply",deadlineKind:"next_action",dueOn:"2026-10-01"});
+    expect(await pg.query("SELECT * FROM deadline_notifications ORDER BY id")).toEqual(before);
+    expect(await pg.query("SELECT * FROM deadline_rules ORDER BY id")).toEqual(rules);
+    await pg.query("UPDATE follow_ups SET kind='Owner decision: reply received' WHERE id=$1",[task.id]);
+    expect((await service.summary()).notifications.find(n=>n.id===notice!.id)?.attentionState).toBeNull();
+  });
   it("labels attention sources without modifying notices or rules", async () => {
     await pg.query("INSERT INTO profile_deadlines(organization_id,kind,label,due_on) VALUES($1,'event','Old event','2026-01-01'),($1,'vendor','Old vendor task','2026-01-01')",[profile]);
     await service.evaluate(now);

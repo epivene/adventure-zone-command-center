@@ -13,6 +13,22 @@ it("partitions every notice without discarding old tasks or confusing event date
  expect(Object.values(groups).flat()).toHaveLength(notices.length);
  expect(notices[0].id).toBe("due");
 });
+it("separates explicitly reviewed waiting tasks without hiding other work for that customer",()=>{
+ const waiting={...n("waiting","2026-10-01","next_action"),attentionState:"waiting_reply" as const};
+ const decision={...n("owner-decision","2026-10-01","next_action"),organizationId:waiting.organizationId};
+ const event={...n("event","2026-10-16","event"),attentionState:"waiting_reply" as const};
+ const future={...n("future-waiting","2026-10-20","next_action"),attentionState:"waiting_reply" as const};
+ const notices=[waiting,decision,event,future];
+ const groups=groupAttentionNotices(notices,"2026-10-16");
+ expect(groups.waiting.map(n=>n.id)).toEqual(["waiting","future-waiting"]);
+ expect(groups.due.map(n=>n.id)).toEqual(["owner-decision","event"]);
+ expect(Object.values(groups).flat()).toHaveLength(4);
+ const dismiss=vi.fn();
+ render(<AttentionView notices={notices} today="2026-10-16" onDismiss={dismiss}/>);
+ expect(screen.getByRole("heading",{name:"Waiting on replies (2)"})).toBeTruthy();
+ expect(screen.getByRole("link",{name:"waiting"})).toBeTruthy();
+ expect(dismiss).not.toHaveBeenCalled();
+});
 it("uses Mountain time at the date boundary",()=>{
  expect(attentionDay(new Date("2026-10-17T01:00:00Z"))).toBe("2026-10-16");
 });

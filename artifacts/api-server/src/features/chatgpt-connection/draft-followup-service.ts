@@ -412,12 +412,10 @@ export class DraftFollowupService {
             "UPDATE follow_ups SET contact_id=$2,updated_at=GREATEST(clock_timestamp(),$3::timestamptz+interval '1 microsecond') WHERE id=$1 RETURNING *,updated_at::text AS revision",
             [row.id, input.contactId, row.revision],
           )).rows[0];
-          if (row.contact_id !== input.contactId) {
-            await tx.query(
-              `INSERT INTO audit_entries(entity_type,entity_id,action,"before","after") VALUES('follow_up',$1,'correct_contact',$2::jsonb,$3::jsonb)`,
-              [row.id, JSON.stringify(followup(row)), JSON.stringify(followup(corrected))],
-            );
-          }
+          await tx.query(
+            `INSERT INTO audit_entries(entity_type,entity_id,action,"before","after") VALUES('follow_up',$1,$2,$3::jsonb,$4::jsonb)`,
+            [row.id, row.contact_id !== input.contactId ? "correct_contact" : "edit", JSON.stringify(followup(row)), JSON.stringify(followup(corrected))],
+          );
           id = row.id;
         } else {
           const result = await service.create(
