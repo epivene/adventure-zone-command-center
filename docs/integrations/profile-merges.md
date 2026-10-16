@@ -41,6 +41,14 @@ Field-update approvals cannot authorize merges.
   without changing document terms, amounts, text or booking state. Connector lead
   identities and app-draft organization links follow the survivor. Draft revisions
   change, so stale draft edits cannot overwrite them.
+- Email attention and historical Gmail outcome associations follow the survivor.
+  Attention IDs, state, deadlines and existing audit entries are preserved; the
+  attention revision changes to reject edits prepared before the merge.
+- Drive backup jobs and file mappings keep their original source IDs, generations,
+  leases and file identities. The normal backup worker can mark retired sources
+  removed without overwriting the survivor's backups. These retained rows remain
+  part of the merge fingerprint and locks; no remote Drive operation is performed
+  by the merge.
 - Original operation receipts, approvals and immutable audit evidence remain
   historical records. The new receipt identifies removed IDs and the live profile.
 - Different complete cities/regions block connector merges. There is no connector
@@ -82,3 +90,4 @@ runs the production repository and its reference helpers; the existing PostgreSQ
 merge integration suites cover production FK/unique constraints when a disposable
 `TEST_DATABASE_URL` is available. MCP/owner HTTP and review-screen tests cover the
 actual discovery, authorization, CSRF and confirmation paths.
+
