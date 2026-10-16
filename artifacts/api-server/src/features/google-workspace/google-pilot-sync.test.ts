@@ -28,3 +28,7 @@ it("keeps bounce handling ahead of a draft", () => {
 it("preserves the reviewed owner decision when no new sent or received message exists", () => {
   expect(observePilotThread([incoming], "office@example.com", "owner_decision", "reply").state).toBe("owner_decision");
 });
+it('recognizes external sender despite our address in display name and ignores trashed drafts',()=>{
+ const result=observePilotThread([{id:'new',labelIds:['INBOX'],internalDateMs:10,from:'"owner@example.com" <customer@fair.com>',to:'owner@example.com',subject:'Reply',bodyText:'Hello'},{id:'draft',labelIds:['DRAFT','TRASH'],internalDateMs:20,from:'owner@example.com',to:'customer@fair.com',subject:'Reply',bodyText:'Discarded'}],'owner@example.com','needs_review','old');
+ expect(result.state).toBe('reply_to_review');expect(result.drafts).toHaveLength(0);
+});

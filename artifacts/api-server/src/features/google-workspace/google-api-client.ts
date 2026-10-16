@@ -1,4 +1,4 @@
-import { createMailboxChangeClient } from './google-mailbox-sync-client';
+import { createMailboxChangeClient, SyncFailure } from './google-mailbox-sync-client';
 import type {
   GoogleCalendarEvent,
   GoogleGmailDraft,
@@ -410,14 +410,17 @@ export function createGoogleWorkspaceReadClient(input: {
   async function authorizedJson(
     url: string,
     retryUnauthorized = true,
+    bounded = false,
   ): Promise<Record<string, unknown>> {
-    const token = await currentAccessToken(!retryUnauthorized);
+    const signal=bounded?AbortSignal.timeout(20_000):undefined;
+    const token = await currentAccessToken(!retryUnauthorized,signal);
     const response = await fetcher(url, {
       headers: { authorization: `Bearer ${token}` },
+      ...(signal?{signal}:{}),
     });
     if (response.status === 401 && retryUnauthorized) {
       accessToken = null;
-      return authorizedJson(url, false);
+      return authorizedJson(url, false,bounded);
     }
     if (response.status === 401) {
       throw clientError("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
@@ -438,6 +441,16 @@ export function createGoogleWorkspaceReadClient(input: {
     }
     if (!response.ok) {
       throw clientError("GOOGLE_WORKSPACE_API_REQUEST_FAILED");
+    }
+    if(bounded){
+      const maxBytes=8*1024*1024;
+      if(Number(response.headers.get('content-length'))>maxBytes){await response.body?.cancel();throw new SyncFailure('invalid','SYNC_RESPONSE_TOO_LARGE');}
+      const reader=response.body?.getReader();if(!reader)throw new SyncFailure('invalid','SYNC_INVALID_RESPONSE');
+      const chunks:Uint8Array[]=[];let bytes=0;
+      try {while(true){const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>maxBytes)throw new SyncFailure('invalid','SYNC_RESPONSE_TOO_LARGE');chunks.push(part.value);}}
+      finally {await reader.cancel();}
+      try {const value=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(!value||typeof value!=='object'||Array.isArray(value))throw Error();return value;}
+      catch {throw new SyncFailure('invalid','SYNC_INVALID_RESPONSE');}
     }
     return responseJson(response);
   }
@@ -854,7 +867,7 @@ export function createGoogleWorkspaceReadClient(input: {
       };
     },
 
-    mailboxSync: createMailboxChangeClient(authorizedJson),
+    mailboxSync: createMailboxChangeClient(url=>authorizedJson(url,true,true)),
     async getGmailDraftRaw(draftId) {
       const payload=await authorizedJson(`${draftsEndpoint}/${encodeURIComponent(draftId)}?format=raw`);
       const message=payload.message as Record<string,unknown>|undefined;
@@ -1331,14 +1344,23 @@ export function createGoogleWorkspaceReadClient(input: {
       return decodeBase64UrlBytes(payload.data);
     },
 
-    async getThreadDetail(threadId: string): Promise<GoogleThreadDetail> {
+    async getSyncThreadDetail(threadId: string): Promise<GoogleThreadDetail> {
+      return this.getThreadDetail!(threadId,{bounded:true});
+    },
+    async getThreadDetail(threadId: string,options?:{bounded:boolean}): Promise<GoogleThreadDetail> {
       const id = threadId.trim();
       if (!id) throw clientError("GOOGLE_WORKSPACE_THREAD_ID_INVALID");
       const url = new URL(`${gmailBaseEndpoint}/threads/${encodeURIComponent(id)}`);
       url.searchParams.set("format", "full");
-      const payload = await authorizedJson(url.toString());
+      const read=(url:string)=>authorizedJson(url,true,options?.bounded??false);
+      const payload = await read(url.toString());
       if (typeof payload.id !== "string" || !Array.isArray(payload.messages)) {
         throw clientError("GOOGLE_WORKSPACE_THREAD_DETAIL_INVALID");
+      }
+      if(options?.bounded&&payload.messages.length>200)throw new SyncFailure('invalid','SYNC_THREAD_REVIEW_REQUIRED');
+      async function mapParts<T,R>(items:T[],fn:(item:T)=>Promise<R>):Promise<R[]>{
+        if(!options?.bounded)return Promise.all(items.map(fn));
+        const results:R[]=[];for(const item of items)results.push(await fn(item));return results;
       }
 
       async function readablePart(value: unknown, messageId: string): Promise<Record<string, unknown>> {
@@ -1348,13 +1370,13 @@ export function createGoogleWorkspaceReadClient(input: {
         const body = part.body && typeof part.body === "object" ? part.body as Record<string, unknown> : {};
         let data = body.data;
         if ((part.mimeType === "text/html" || part.mimeType === "text/plain") && !data && typeof body.attachmentId === "string") {
-          const content = await authorizedJson(`${gmailBaseEndpoint}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(body.attachmentId)}`);
+          const content = await read(`${gmailBaseEndpoint}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(body.attachmentId)}`);
           if (typeof content.data !== "string") throw clientError("GOOGLE_WORKSPACE_THREAD_DETAIL_INVALID");
           data = content.data;
         }
-        return {...part, body: {...body, data}, ...(Array.isArray(part.parts) ? {parts: await Promise.all(part.parts.map(child => readablePart(child, messageId)))} : {})};
+        return {...part, body: {...body, data}, ...(Array.isArray(part.parts) ? {parts: await mapParts(part.parts,child => readablePart(child, messageId))} : {})};
       }
-      const messages = (await Promise.all(payload.messages.map(async (value) => {
+      const messages = (await mapParts(payload.messages,async (value) => {
         if (!value || typeof value !== "object") return [];
         const message = value as Record<string, unknown>;
         if (typeof message.id !== "string") return [];
@@ -1393,7 +1415,7 @@ export function createGoogleWorkspaceReadClient(input: {
           ...(bodies.html.trim() ? { bodyHtml: bodies.html } : {}),
           attachments: attachmentsFromPart(messagePayload, message.id),
         }];
-      }))).flat().sort((left, right) =>
+      })).flat().sort((left, right) =>
         (left.internalDateMs ?? 0) - (right.internalDateMs ?? 0) ||
         left.id.localeCompare(right.id),
       );

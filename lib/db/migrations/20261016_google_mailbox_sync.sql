@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS google_sync_accounts (
  epoch bigint NOT NULL DEFAULT 1, version bigint NOT NULL DEFAULT 0,
  checkpoint jsonb NOT NULL DEFAULT '{"phase":"boundary"}',
  lease_token uuid, lease_until timestamptz, retry_at timestamptz,
- last_success_at timestamptz, error_code text, updated_at timestamptz NOT NULL DEFAULT now()
+ last_success_at timestamptz, next_history_at timestamptz, error_code text, updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS google_sync_jobs (
  connection_id uuid NOT NULL, thread_id text NOT NULL,
@@ -33,4 +33,7 @@ CREATE TABLE IF NOT EXISTS google_sync_archive_jobs (
  profile_id uuid NOT NULL, status text NOT NULL DEFAULT 'pending',
  retry_at timestamptz NOT NULL DEFAULT now(), attempts integer NOT NULL DEFAULT 0,
  error_code text, PRIMARY KEY(connection_id,thread_id,fingerprint)
+);
+CREATE TABLE IF NOT EXISTS google_sync_enrollments (
+ connection_id uuid NOT NULL,profile_id uuid NOT NULL,PRIMARY KEY(connection_id,profile_id)
 );

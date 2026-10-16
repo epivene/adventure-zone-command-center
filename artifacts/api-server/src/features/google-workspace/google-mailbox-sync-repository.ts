@@ -7,7 +7,7 @@ export type AccountClaim={connectionId:string;email:string;mode:'shadow'|'active
 export type ThreadClaim={connectionId:string;threadId:string;generation:string;epoch:string;token:string;accountToken:string;attempts:number};
 export type ThreadResult={profileId:string|null;state:string;snapshot:Record<string,any>;availability?:string;messageIds?:string[]};
 export class SyncRepository {
- constructor(public db:SyncDatabase){}
+ constructor(public db:SyncDatabase,private accountGuard:(tx:SyncSql,connectionId:string)=>Promise<boolean>=async()=>true){}
  async configure(connectionId:string,email:string,mode:'off'|'shadow'|'active',cohortLimit:number){
   await this.db.transaction(async tx=>{
    await tx.query(`INSERT INTO google_sync_accounts(connection_id,email) VALUES($1,$2) ON CONFLICT DO NOTHING`,[connectionId,email.toLowerCase()]);
@@ -22,6 +22,7 @@ export class SyncRepository {
   const r=rows[0];return r?{connectionId,email:r.email,mode:r.mode,cohortLimit:r.cohort_limit,epoch:String(r.epoch),version:String(r.version),token,checkpoint:r.checkpoint}:null;
  }
  async valid(tx:SyncSql,a:Pick<AccountClaim,'connectionId'|'epoch'|'token'>){
+  if(!await this.accountGuard(tx,a.connectionId))return null;
   return (await tx.query(`SELECT * FROM google_sync_accounts WHERE connection_id=$1 AND epoch=$2 AND lease_token=$3 AND lease_until>now() AND mode<>'off' FOR UPDATE`,[a.connectionId,a.epoch,a.token])).rows[0];
  }
  async renew(a:AccountClaim){return (await this.db.query(`UPDATE google_sync_accounts SET lease_until=now()+interval '90 seconds' WHERE connection_id=$1 AND epoch=$2 AND lease_token=$3 AND lease_until>now() RETURNING connection_id`,[a.connectionId,a.epoch,a.token])).rows.length>0;}
@@ -36,7 +37,7 @@ export class SyncRepository {
   return this.db.transaction(async tx=>{
    const row=await this.valid(tx,a);if(!row||String(row.version)!==a.version)return false;
    await this.enqueue(a.connectionId,input.threads,tx);
-   await tx.query(`UPDATE google_sync_accounts SET checkpoint=$2::jsonb,version=version+1,last_success_at=CASE WHEN $3 THEN now() ELSE last_success_at END,error_code=NULL,updated_at=now() WHERE connection_id=$1`,[a.connectionId,JSON.stringify(input.checkpoint),input.checkpoint.phase==='ready']);return true;
+   await tx.query(`UPDATE google_sync_accounts SET checkpoint=$2::jsonb,version=version+1,last_success_at=CASE WHEN $3 THEN now() ELSE last_success_at END,next_history_at=CASE WHEN $3 THEN now()+interval '5 minutes' ELSE next_history_at END,error_code=NULL,updated_at=now() WHERE connection_id=$1`,[a.connectionId,JSON.stringify(input.checkpoint),input.checkpoint.phase==='ready']);return true;
   });
  }
  async current(a:AccountClaim):Promise<AccountClaim|null>{const r=(await this.db.query(`SELECT * FROM google_sync_accounts WHERE connection_id=$1 AND epoch=$2 AND lease_token=$3 AND lease_until>now()`,[a.connectionId,a.epoch,a.token])).rows[0];return r?{...a,version:String(r.version),checkpoint:r.checkpoint}:null;}
@@ -71,5 +72,8 @@ export class SyncRepository {
  async retryThread(c:ThreadClaim,failure:SyncFailure){
   const delay=Math.max(failure.retryAfterMs??0,Math.min(3600000,1000*2**Math.min(c.attempts,11)))+Math.floor(Math.random()*1000);
   await this.db.query(`UPDATE google_sync_jobs SET claim_token=NULL,lease_until=NULL,attempts=attempts+1,error_code=$4,retry_at=now()+($5*interval '1 millisecond') WHERE connection_id=$1 AND thread_id=$2 AND claim_token=$3 AND claim_epoch=$6`,[c.connectionId,c.threadId,c.token,failure.code,delay,c.epoch]);
+ }
+ async deferThread(c:ThreadClaim){
+  await this.db.query(`UPDATE google_sync_jobs j SET processed_generation=$4,claim_token=NULL,lease_until=NULL,error_code='SYNC_OUTSIDE_COHORT' WHERE connection_id=$1 AND thread_id=$2 AND claim_token=$3 AND EXISTS(SELECT 1 FROM google_sync_accounts a WHERE a.connection_id=j.connection_id AND a.epoch=$5 AND a.lease_token=$6 AND a.lease_until>now())`,[c.connectionId,c.threadId,c.token,c.generation,c.epoch,c.accountToken]);
  }
 }

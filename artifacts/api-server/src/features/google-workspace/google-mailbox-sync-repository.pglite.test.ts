@@ -36,3 +36,16 @@ it('fences expired and replaced account claims and preserves snapshot revisions'
  await expect(repo.configure(conn,'different@example.com','active',3)).rejects.toThrow('SYNC_ACCOUNT_CHANGED');
  }finally{await db.close();}
 });
+it('rolls back queue writes when the checkpoint fails and blocks disconnected-account saves',async()=>{
+ const db=await setupSyncDb();try{
+ let connected=true;const repo=new SyncRepository(db as any,async()=>connected);await repo.configure(conn,'owner@example.com','shadow',3);
+ const a=(await repo.claimAccount(conn))!;
+ await db.exec(`CREATE FUNCTION reject_checkpoint() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'checkpoint failure'; END; $$ LANGUAGE plpgsql; CREATE TRIGGER reject_checkpoint BEFORE UPDATE OF checkpoint ON google_sync_accounts FOR EACH ROW EXECUTE FUNCTION reject_checkpoint();`);
+ await expect(repo.commitPage(a,{threads:['t'],checkpoint:{phase:'ready',cursor:'42'}})).rejects.toThrow('checkpoint failure');
+ expect((await db.query('SELECT * FROM google_sync_jobs')).rows).toHaveLength(0);
+ await db.exec('DROP TRIGGER reject_checkpoint ON google_sync_accounts');
+ await repo.enqueue(conn,['t']);const [job]=await repo.claimThreads(a,1);connected=false;
+ expect(await repo.finishThread(job,{profileId:null,state:'needs_review',snapshot:{}})).toBe(false);
+ expect((await db.query('SELECT * FROM google_sync_history')).rows).toHaveLength(0);
+ }finally{await db.close();}
+});

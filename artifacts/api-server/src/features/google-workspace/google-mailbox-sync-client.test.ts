@@ -24,3 +24,11 @@ it('distinguishes expired cursor from source disappearance and retains retry del
   await expect(client({},404).api.mailboxSync!.listHistory({startHistoryId:'42'})).rejects.toMatchObject({kind:'expired_cursor'});
   await expect(client({},429).api.mailboxSync!.listHistory({startHistoryId:'42'})).rejects.toMatchObject({kind:'retryable',retryAfterMs:90000});
 });
+it('bounds sync requests and rejects oversized responses before parsing',async()=>{
+ const api=createGoogleWorkspaceReadClient({environment,refreshToken:'refresh',fetcher:async(url,init)=>{
+  if(String(url).includes('oauth2.googleapis.com'))return new Response(JSON.stringify({access_token:'token',expires_in:3600}));
+  expect(init?.signal).toBeDefined();
+  return new Response('{}',{headers:{'content-length':'20000000'}});
+ }});
+ await expect(api.mailboxSync!.getMailbox()).rejects.toMatchObject({kind:'invalid',code:'SYNC_RESPONSE_TOO_LARGE'});
+});
