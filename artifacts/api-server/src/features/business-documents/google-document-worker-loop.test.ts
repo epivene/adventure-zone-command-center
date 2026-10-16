@@ -10,6 +10,11 @@ class Scheduler implements GoogleDocumentWorkerLoopScheduler {
 const settle = async () => { await new Promise((resolve) => setTimeout(resolve, 0)); };
 
 describe("GoogleDocumentWorkerLoop", () => {
+  it('defers document intake while another Gmail owner is working',async()=>{
+    const scheduler=new Scheduler();const runOnce=vi.fn();
+    const loop=new GoogleDocumentWorkerLoop({worker:{runOnce},clock:{now:()=>new Date()},scheduler,runExclusive:async()=>{}});
+    loop.start();scheduler.run(0);await settle();expect(runOnce).not.toHaveBeenCalled();expect(scheduler.rows).toHaveLength(2);await loop.close();
+  });
   it("waits one hour after a run settles and never overlaps runs", async () => {
     let resolve!: () => void;
     const runOnce = vi.fn(async () => { await new Promise<void>((done) => { resolve = done; }); return {} as any; });

@@ -113,6 +113,7 @@ export type GoogleMessageMetadata = {
 };
 
 export type GoogleThreadAttachment = {
+  partId?: string;
   attachmentId: string;
   filename: string;
   mimeType: string;

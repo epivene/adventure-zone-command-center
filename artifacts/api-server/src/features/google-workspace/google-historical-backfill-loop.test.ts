@@ -33,6 +33,11 @@ async function settle(): Promise<void> {
 }
 
 describe("GoogleHistoricalBackfillLoop", () => {
+  it('does not start a batch when the shared Gmail scheduler is occupied',async()=>{
+    const scheduler=new FakeScheduler();const runNextBatch=vi.fn();
+    const loop=new GoogleHistoricalBackfillLoop({enabled:true,validation:{getStatus:async()=> 'approved'},repository:{getState:async()=>({status:'not_started'})},service:{runNextBatch},scheduler,runExclusive:async()=>{}});
+    loop.start();scheduler.run(0);await settle();expect(runNextBatch).not.toHaveBeenCalled();expect(scheduler.scheduled).toHaveLength(2);await loop.close();
+  });
   it("prepares the first approved 100-message batch, then stops at owner approval", async () => {
     const scheduler = new FakeScheduler();
     const runNextBatch = vi.fn().mockResolvedValue({ state: "awaiting_approval" });

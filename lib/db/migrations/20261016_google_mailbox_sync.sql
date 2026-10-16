@@ -37,3 +37,29 @@ CREATE TABLE IF NOT EXISTS google_sync_archive_jobs (
 CREATE TABLE IF NOT EXISTS google_sync_enrollments (
  connection_id uuid NOT NULL,profile_id uuid NOT NULL,PRIMARY KEY(connection_id,profile_id)
 );
+-- Existing mapping tables predate this additive migration. The conditional also
+-- permits isolated queue tests to install the new tables independently.
+CREATE OR REPLACE FUNCTION google_sync_mapping_changed() RETURNS trigger AS $$
+BEGIN
+ IF TG_OP='INSERT' AND COALESCE(NEW.evidence_codes,'[]'::jsonb) @> '["incremental_sync"]'::jsonb THEN RETURN NEW; END IF;
+ IF TG_OP='UPDATE' AND (OLD.connection_id,OLD.thread_id,OLD.organization_id) IS NOT DISTINCT FROM (NEW.connection_id,NEW.thread_id,NEW.organization_id) THEN RETURN NEW; END IF;
+ INSERT INTO google_sync_jobs(connection_id,thread_id)
+ SELECT NEW.connection_id,NEW.thread_id FROM google_sync_accounts a
+ WHERE a.connection_id=NEW.connection_id AND a.mode<>'off' AND NEW.thread_id IS NOT NULL
+ ON CONFLICT(connection_id,thread_id) DO UPDATE SET generation=google_sync_jobs.generation+1,retry_at=now(),updated_at=now();
+ IF TG_OP='UPDATE' AND (OLD.connection_id,OLD.thread_id) IS DISTINCT FROM (NEW.connection_id,NEW.thread_id) THEN
+  INSERT INTO google_sync_jobs(connection_id,thread_id)
+  SELECT OLD.connection_id,OLD.thread_id FROM google_sync_accounts a
+  WHERE a.connection_id=OLD.connection_id AND a.mode<>'off' AND OLD.thread_id IS NOT NULL
+  ON CONFLICT(connection_id,thread_id) DO UPDATE SET generation=google_sync_jobs.generation+1,retry_at=now(),updated_at=now();
+ END IF;
+ RETURN NEW;
+END $$ LANGUAGE plpgsql;
+DO $$ BEGIN
+ IF to_regclass('public.google_workspace_validation_mappings') IS NOT NULL THEN
+  CREATE INDEX IF NOT EXISTS google_sync_mapping_thread ON google_workspace_validation_mappings(connection_id,thread_id,organization_id);
+  IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='google_sync_mapping_changed_trigger' AND tgrelid='google_workspace_validation_mappings'::regclass) THEN
+   CREATE TRIGGER google_sync_mapping_changed_trigger AFTER INSERT OR UPDATE ON google_workspace_validation_mappings FOR EACH ROW EXECUTE FUNCTION google_sync_mapping_changed();
+  END IF;
+ END IF;
+END $$;

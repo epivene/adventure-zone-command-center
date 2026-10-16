@@ -312,8 +312,15 @@ export class GoogleProfileFileService {
     for (const message of detail.messages) {
       for (const attachment of message.attachments) {
         try {
-          const cached=existing.find(file=>file.threadId===input.threadId&&file.messageId===message.id&&file.attachmentId===attachment.attachmentId&&file.availability==='available'&&file.storageObjectKey);
-          if(cached?.storageObjectKey&&await this.storage.exists(cached.storageObjectKey))continue;
+          const samePart=(part:{filename:string;mimeType:string;sizeBytes:number})=>part.filename===attachment.filename&&part.mimeType===attachment.mimeType&&part.sizeBytes===attachment.sizeBytes;
+          // Gmail messages are immutable, but download handles may rotate. Only
+          // reuse metadata identity when that part is unambiguous in the message.
+          const unique=message.attachments.filter(samePart).length===1;
+          const cached=existing.find(file=>file.threadId===input.threadId&&file.messageId===message.id&&(file.attachmentId===attachment.attachmentId||(unique&&samePart(file)))&&file.availability==='available'&&file.storageObjectKey);
+          if(cached?.storageObjectKey&&await this.storage.exists(cached.storageObjectKey)){
+            if(cached.attachmentId!==attachment.attachmentId)await this.repository.saveFile({...cached,attachmentId:attachment.attachmentId});
+            continue;
+          }
           const bytes = await client.getAttachment({
             messageId: message.id,
             attachmentId: attachment.attachmentId,

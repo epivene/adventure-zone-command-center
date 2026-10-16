@@ -197,6 +197,7 @@ const gmailProfileLinkSweepLoop = new GoogleSentProfileLinkSweepLoop({
 });
 
 const historicalGmailBackfillLoop = new GoogleHistoricalBackfillLoop({
+  runExclusive:async work=>{const {runAuxiliaryGmail}=await import('./features/google-workspace/google-mailbox-sync-runtime');await runAuxiliaryGmail(work);},
   enabled:
     process.env.GOOGLE_WORKSPACE_SYNC_ENABLED?.trim().toLowerCase() === "true",
   validation: new PostgresGoogleValidationRepository(),
@@ -208,6 +209,7 @@ const historicalGmailBackfillLoop = new GoogleHistoricalBackfillLoop({
 
 const googleConnectionRepository = new PostgresGoogleConnectionRepository();
 const googleDocumentLoop = new GoogleDocumentWorkerLoop({
+  runExclusive:async work=>{const {runAuxiliaryGmail}=await import('./features/google-workspace/google-mailbox-sync-runtime');await runAuxiliaryGmail(work);},
   worker: new GoogleDocumentWorker({
     connection: googleConnectionRepository,
     sourceFactory: (client) => new GoogleGmailDocumentSource(client, new PostgresExistingGoogleProfileFileLookup()),

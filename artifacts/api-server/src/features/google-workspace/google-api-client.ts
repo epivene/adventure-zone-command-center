@@ -1,4 +1,5 @@
 import { createMailboxChangeClient, SyncFailure } from './google-mailbox-sync-client';
+import {scheduledGoogleFetch} from './google-scheduled-request-budget';
 import type {
   GoogleCalendarEvent,
   GoogleGmailDraft,
@@ -308,6 +309,7 @@ function attachmentsFromPart(
     filename && attachmentId
       ? [{
           attachmentId,
+          ...(typeof part.partId==='string'?{partId:part.partId}:{}),
           filename,
           mimeType:
             typeof part.mimeType === "string" && part.mimeType.trim()
@@ -332,7 +334,7 @@ export function createGoogleWorkspaceReadClient(input: {
   fetcher?: GoogleWorkspaceFetch;
   gmailDraftTimeoutMs?: number;
 }): GoogleWorkspaceReadClient & GoogleGmailLabelMutationClient {
-  const fetcher = input.fetcher ?? fetch;
+  const fetcher = scheduledGoogleFetch(input.fetcher ?? fetch);
   const gmailDraftTimeoutMs =
     typeof input.gmailDraftTimeoutMs === "number" &&
     Number.isFinite(input.gmailDraftTimeoutMs) &&
@@ -1356,7 +1358,13 @@ export function createGoogleWorkspaceReadClient(input: {
       const url = new URL(`${gmailBaseEndpoint}/threads/${encodeURIComponent(id)}`);
       url.searchParams.set("format", "full");
       const overallSignal=options?.bounded?AbortSignal.timeout(25000):undefined;
-      const read=(url:string)=>authorizedJson(url,true,options?.bounded??false,overallSignal);
+      let hydratedBytes=0,hydrationRequests=0;
+      const read=async(url:string)=>{
+        if(options?.bounded&&++hydrationRequests>20)throw new SyncFailure('invalid','SYNC_THREAD_REVIEW_REQUIRED');
+        const result=await authorizedJson(url,true,options?.bounded??false,overallSignal);
+        if(options?.bounded){hydratedBytes+=Buffer.byteLength(JSON.stringify(result));if(hydratedBytes>8*1024*1024)throw new SyncFailure('invalid','SYNC_THREAD_REVIEW_REQUIRED');}
+        return result;
+      };
       const payload = await read(url.toString());
       if (typeof payload.id !== "string" || !Array.isArray(payload.messages)) {
         throw clientError("GOOGLE_WORKSPACE_THREAD_DETAIL_INVALID");
