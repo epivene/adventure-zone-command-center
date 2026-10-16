@@ -1,4 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
+import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -11,7 +12,7 @@ afterEach(async () => {
 });
 
 describe("organization search corpus", () => {
-  it("loads every searchable field only for eligible profiles", async () => {
+  it.each(["ids", "selection"])("loads every searchable field only for eligible profiles (%s)", async (mode) => {
     const client = new PGlite();
     clients.push(client);
     await client.exec(`
@@ -39,7 +40,7 @@ describe("organization search corpus", () => {
     await client.exec(`
       insert into organizations values
         ('${eligibleId}', 'Blanding Fair', 'Blanding', 'UT', '84511', '1 Main', 'blanding.example', '435-555-1000'),
-        ('${excludedId}', 'Excluded Fair', 'Denver', 'CO', null, null, null, null);
+        ('${excludedId}', 'A Excluded Fair', 'Denver', 'CO', null, null, null, null);
       insert into contacts values
         ('20000000-0000-4000-8000-000000000001', null, 'Active', 'Organizer', null, 'active@example.com'),
         ('20000000-0000-4000-8000-000000000002', null, 'Inactive', 'Organizer', null, 'inactive@example.com'),
@@ -56,9 +57,11 @@ describe("organization search corpus", () => {
 
     const rows = await loadOrganizationSearchCorpus(
       drizzle(client) as never,
-      [eligibleId],
+      mode === "ids" ? [eligibleId] : sql`select id from organizations where region = ${"UT"} order by name, id limit 1`,
     );
 
+    const ordered = await loadOrganizationSearchCorpus(drizzle(client) as never, [eligibleId, excludedId]);
+    expect(ordered.map(row => row.id)).toEqual([excludedId, eligibleId]);
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe(eligibleId);
     expect(rows[0].searchText).toContain("Blanding Fair");

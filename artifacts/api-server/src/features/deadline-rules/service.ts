@@ -152,6 +152,15 @@ export class DeadlineRulesService {
       }
     }
   }
+  async badge() {
+    const result = await this.db.query(`SELECT
+      (SELECT count(*)::int FROM deadline_notifications n
+        JOIN organizations o ON o.id=n.organization_id JOIN deadline_rules r ON r.id=n.rule_id
+        WHERE n.active AND n.dismissed_at IS NULL AND r.enabled
+          AND o.consolidated_into_id IS NULL AND r.actions @> '["badge"]'::jsonb) AS count,
+      (SELECT last_evaluated_at FROM deadline_evaluation_state WHERE id=1) AS "lastEvaluatedAt"`);
+    return result.rows[0] ?? { count: 0, lastEvaluatedAt: null };
+  }
   async summary() {
     const today=businessDay(new Date());
     const items=(await readDeadlines(this.db)).filter(d=>!d.completed && d.dueOn && daysBetween(today,d.dueOn)>=0 && daysBetween(today,d.dueOn)<=30)

@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQLWrapper } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 
@@ -11,16 +11,17 @@ export type OrganizationSearchCorpusRow = {
 
 export async function loadOrganizationSearchCorpus(
   database: SearchDatabase,
-  organizationIds: string[],
+  organizationIds: string[] | SQLWrapper,
 ): Promise<OrganizationSearchCorpusRow[]> {
-  if (!organizationIds.length) return [];
-  const idList = sql.join(
-    organizationIds.map((id) => sql`${id}::uuid`),
-    sql.raw(", "),
-  );
+  if (Array.isArray(organizationIds) && !organizationIds.length) return [];
+  // Keep eligibility inside PostgreSQL instead of sending thousands of IDs out
+  // to the API and back as individual query parameters.
+  const eligibleSelection = Array.isArray(organizationIds)
+    ? sql`select id from organizations where id = ANY(${sql.param(organizationIds)}::uuid[])`
+    : organizationIds;
   const result = await database.execute<OrganizationSearchCorpusRow>(sql`
     with eligible_organizations as (
-      select id from organizations where id in (${idList})
+      ${eligibleSelection}
     ),
     eligible_contacts as (
       select association.contact_id
@@ -92,7 +93,7 @@ export async function loadOrganizationSearchCorpus(
     inner join eligible_organizations eligible on eligible.id = organization.id
     left join profile_contact_text profile_contacts on profile_contacts.organization_id = organization.id
     left join location_text locations on locations.organization_id = organization.id
-    order by organization.id
+    order by organization.name, organization.id
   `);
   return [...result.rows];
 }
