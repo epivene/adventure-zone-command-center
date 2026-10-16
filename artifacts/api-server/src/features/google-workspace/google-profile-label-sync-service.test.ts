@@ -144,6 +144,19 @@ function harness(enabled = true) {
 }
 
 describe("GoogleProfileLabelSyncService", () => {
+  it("adds the shared category without removing historical customer labels", async () => {
+    const h = harness();
+    h.resolver.resolve.mockResolvedValue({status: "resolved", mapping: {
+      connectionId: "conn-1", organizationId: "org-1", gmailLabelId: "Label_profiles",
+      gmailLabelName: "Profiles", state: "active", lastErrorCode: null,
+    }});
+    await h.service.assignThread({connectionId: "conn-1", messageId: "message-1", threadId: "thread-1", organizationId: "org-1", actorId: "owner", decisionRevision: "r1"});
+    expect(h.gmail.modifyThreadLabels).toHaveBeenCalledWith({threadId: "thread-1", addLabelIds: ["Label_profiles"], removeLabelIds: ["INBOX"]});
+    expect(h.labels.listManagedLabelIds).not.toHaveBeenCalled();
+    vi.mocked(h.gmail.modifyThreadLabels).mockClear();
+    await h.service.retry("mutation-1");
+    expect(h.gmail.modifyThreadLabels).toHaveBeenCalledWith({threadId: "thread-1", addLabelIds: ["Label_profiles"], removeLabelIds: ["INBOX"]});
+  });
   it("labels and archives the explicitly assigned whole thread", async () => {
     const h = harness();
 

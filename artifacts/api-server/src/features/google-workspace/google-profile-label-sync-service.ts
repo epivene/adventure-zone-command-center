@@ -4,7 +4,7 @@ import type {
   GoogleGmailMutationRecord,
   PostgresGoogleGmailMutationRepository,
 } from "./google-gmail-mutation-repository";
-import { isProfileLabelPath } from "./google-profile-label-config";
+import { isProfileLabelPath, GOOGLE_PROFILE_LABEL_ROOT } from "./google-profile-label-config";
 import type { GoogleProfileLabelRepositoryPort } from "./google-profile-label-repository";
 import type { GoogleProfileLabelResolver } from "./google-profile-label-resolver";
 
@@ -132,6 +132,7 @@ implements GoogleProfileLabelSyncServicePort {
     const queued = await this.dependencies.mutations.retryNow(mutationId, now);
     const current = queued ?? await this.dependencies.mutations.get(mutationId);
     if (!current) throw new Error("GOOGLE_WORKSPACE_GMAIL_MUTATION_NOT_FOUND");
+    if (current.state === "completed") return this.reconcileCompleted(current);
     return this.execute(current);
   }
 
@@ -212,6 +213,7 @@ implements GoogleProfileLabelSyncServicePort {
       const removeLabelIds = await this.applyCurrentProfileLabel({
         mutation: claimed,
         targetLabelId: target.gmailLabelId,
+        shared: target.gmailLabelName === GOOGLE_PROFILE_LABEL_ROOT,
         onlyWhenChanged: false,
         reuseOnly,
       });
@@ -291,6 +293,7 @@ implements GoogleProfileLabelSyncServicePort {
         await this.applyCurrentProfileLabel({
           mutation,
           targetLabelId: resolution.mapping.gmailLabelId,
+          shared: resolution.mapping.gmailLabelName === GOOGLE_PROFILE_LABEL_ROOT,
           onlyWhenChanged: true,
           reuseOnly,
         });
@@ -307,11 +310,12 @@ implements GoogleProfileLabelSyncServicePort {
     mutation: GoogleGmailMutationRecord;
     targetLabelId: string;
     onlyWhenChanged: boolean;
+    shared?: boolean;
     reuseOnly?: boolean;
   }): Promise<string[]> {
     const [managedLabelIds, gmailLabels, attachedLabelIds] = await Promise.all([
-      this.dependencies.labels.listManagedLabelIds(input.mutation.connectionId),
-      this.dependencies.gmail.listLabels(),
+      input.shared ? Promise.resolve([]) : this.dependencies.labels.listManagedLabelIds(input.mutation.connectionId),
+      input.shared ? Promise.resolve([]) : this.dependencies.gmail.listLabels(),
       this.dependencies.gmail.getThreadLabelIds(input.mutation.threadId),
     ]);
     const attached = new Set(attachedLabelIds);
