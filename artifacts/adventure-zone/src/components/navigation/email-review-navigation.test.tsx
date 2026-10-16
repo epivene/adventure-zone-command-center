@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { AppMenu } from "./app-menu";
+vi.mock("./use-document-review-count", () => ({ useDocumentReviewCount: () => 0 }));
 
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ signOut: vi.fn() }),
@@ -27,6 +28,6 @@ describe("Email Review navigation", () => {
     fireEvent.pointerDown(more, { button: 0, ctrlKey: false });
 
     const link = await screen.findByRole("menuitem", { name: "Email Review, 3 pending" });
-    expect(link).toHaveAttribute("href", "/email-review");
+    expect(link).toHaveAttribute("href", "/emails?view=review");
   });
 });

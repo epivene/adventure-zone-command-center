@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { Link } from "wouter";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, useLocation } from "wouter";
 import { Bell } from "lucide-react";
 import { apiGet, apiPost, apiPut } from "@/lib/auth-token";
 
@@ -9,13 +9,29 @@ type Summary={upcoming:Item[];notifications:Notice[];count:number;lastEvaluatedA
 const Context=createContext<{data:Summary|null;error:string;refresh:()=>Promise<void>}>({data:null,error:"",refresh:async()=>{}});
 export function RemindersProvider({children}:{children:ReactNode}) {
   const [data,setData]=useState<Summary|null>(null),[error,setError]=useState("");
-  const refresh=useCallback(async()=>{
+  const [location]=useLocation();
+  const fullDetails=location==="/leads" || location==="/settings/reminders";
+  const requestVersion=useRef(0),viewVersion=useRef(0);
+  const load=useCallback(async()=>{
+    const version=++requestVersion.current;
     try{
-      await apiPost("/deadline-rules/evaluate",{});
-      setData(await apiGet<Summary>("/deadline-rules/summary"));setError("");
-    }catch{setError("Reminders could not be checked. Try again.");}
-  },[]);
-  useEffect(()=>{void refresh();const timer=setInterval(()=>void refresh(),5*60*1000);return()=>clearInterval(timer);},[refresh]);
+      const result=fullDetails
+        ? await apiGet<Summary>("/deadline-rules/summary")
+        : { ...await apiGet<Pick<Summary,"count"|"lastEvaluatedAt">>("/deadline-rules/badge"), upcoming:[], notifications:[] };
+      if(version===requestVersion.current){setData(result);setError("");}
+    }catch{if(version===requestVersion.current)setError("Reminders could not be checked. Try again.");}
+  },[fullDetails]);
+  const refresh=useCallback(async()=>{
+    const view=viewVersion.current;
+    try{await apiPost("/deadline-rules/evaluate",{});if(view===viewVersion.current)await load();}
+    catch{if(view===viewVersion.current)setError("Reminders could not be checked. Try again.");}
+  },[load]);
+  useEffect(()=>{
+    if(fullDetails)setData(null);
+    void load();
+    const timer=setInterval(()=>{if(!document.hidden)void load();},5*60*1000);
+    return()=>{clearInterval(timer);requestVersion.current++;viewVersion.current++;};
+  },[load,fullDetails]);
   return <Context.Provider value={{data,error,refresh}}>{children}</Context.Provider>;
 }
 export function ReminderBell(){
@@ -141,7 +157,7 @@ export function RemindersPage(){
   async function saved(){await load();await refresh();}
   async function dismiss(id:string){try{await apiPost(`/deadline-rules/notifications/${id}/dismiss`,{});await refresh();}catch{setRuleError("Could not dismiss reminder.");}}
   return <div className="mx-auto grid max-w-5xl gap-5">
-    <header><h1 className="text-2xl font-bold">Reminders &amp; rules</h1><p className="text-sm text-muted-foreground">Dates use Mountain time. Checks run every 15 minutes while the app server is awake, and when you open the app.</p></header>
+    <header><h1 className="text-2xl font-bold">Reminders &amp; rules</h1><p className="text-sm text-muted-foreground">Dates use Mountain time. Checks run every 15 minutes while the app server is awake. Use Check reminders to run a check now.</p></header>
     <button type="button" className="button-secondary justify-self-start" onClick={()=>void refresh()}>Check reminders</button>
     {error?<p role="alert">{error}</p>:null}
     {ruleError?<p role="alert">{ruleError} <button type="button" onClick={()=>void load()}>Retry</button></p>:null}
