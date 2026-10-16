@@ -22,6 +22,7 @@ export async function runMailboxTurn(input: {
   let delay = 0,
     errorCode: string | null = null;
   try {
+    if (a.cohortLimit > 0) await input.repo.deferOutsideCohort(a);
     if (input.historyDue || a.checkpoint.phase !== "ready")
       await input.ingest(a);
     const current = await input.repo.current(a);

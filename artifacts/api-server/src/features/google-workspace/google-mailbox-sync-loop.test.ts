@@ -28,8 +28,10 @@ it("processes at most 25 jobs serially and yields remaining work for another tur
     active = 0,
     maxActive = 0,
     released = false;
-  const account = { checkpoint: { phase: "ready" } };
+  const account = { checkpoint: { phase: "ready" }, cohortLimit: 3 };
+  const deferOutsideCohort = vi.fn(async () => 100);
   const repo: any = {
+    deferOutsideCohort,
     claimAccount: async () => account,
     current: async () => account,
     renew: async () => true,
@@ -56,6 +58,7 @@ it("processes at most 25 jobs serially and yields remaining work for another tur
   expect(processed).toBe(25);
   expect(maxActive).toBe(1);
   expect(released).toBe(true);
+  expect(deferOutsideCohort).toHaveBeenCalledOnce();
 });
 it("does not fetch or process anything when another worker owns the account", async () => {
   const result = await runMailboxTurn({

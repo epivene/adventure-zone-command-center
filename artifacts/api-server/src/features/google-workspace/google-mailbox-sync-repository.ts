@@ -188,6 +188,27 @@ export class SyncRepository {
       ? { ...a, version: String(r.version), checkpoint: r.checkpoint }
       : null;
   }
+  async deferOutsideCohort(a: AccountClaim): Promise<number> {
+    if (!a.cohortLimit) return 0;
+    return this.db.transaction(async tx => {
+      if (!(await this.valid(tx,a))) return 0;
+      // Classify under the same mapping/configuration locks used for saved results.
+      // Only disposable queue generations change; snapshots and business history remain.
+      await tx.query("LOCK TABLE google_workspace_validation_mappings IN SHARE MODE");
+      const {rows}=await tx.query(`WITH skipped AS (
+        SELECT j.thread_id FROM google_sync_jobs j
+        WHERE j.connection_id=$1 AND j.generation>j.processed_generation
+          AND (j.lease_until IS NULL OR j.lease_until<now())
+          AND EXISTS(SELECT 1 FROM google_workspace_validation_mappings m
+            WHERE m.connection_id=j.connection_id AND m.thread_id=j.thread_id AND m.organization_id IS NOT NULL
+            AND NOT EXISTS(SELECT 1 FROM google_sync_enrollments e WHERE e.connection_id=m.connection_id AND e.profile_id=m.organization_id)
+            AND NOT EXISTS(SELECT 1 FROM google_workspace_validation_mappings other WHERE other.connection_id=m.connection_id AND other.thread_id=m.thread_id AND other.organization_id IS DISTINCT FROM m.organization_id))
+        ORDER BY j.thread_id LIMIT 100 FOR UPDATE OF j SKIP LOCKED
+      ) UPDATE google_sync_jobs j SET processed_generation=generation,claim_token=NULL,lease_until=NULL,error_code='SYNC_OUTSIDE_COHORT'
+        FROM skipped WHERE j.connection_id=$1 AND j.thread_id=skipped.thread_id RETURNING j.thread_id`,[a.connectionId]);
+      return rows.length;
+    });
+  }
   async claimThreads(a: AccountClaim, limit: number): Promise<ThreadClaim[]> {
     return this.db.transaction(async (tx) => {
       if (!(await this.valid(tx, a))) return [];

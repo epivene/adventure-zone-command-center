@@ -16,6 +16,33 @@ export async function setupSyncDb() {
   );
   return db;
 }
+it("defers at most 100 unambiguous outside-cohort jobs without touching mappings or uncertain work", async () => {
+  const db=await setupSyncDb();
+  try {
+    const enrolled="20943487-43ec-4a11-8c67-36efefbf4efb", other="314df1f0-1ec8-4157-b98d-47cf4e1e65f8";
+    await db.exec(`CREATE TABLE google_workspace_validation_mappings(connection_id uuid,thread_id text,organization_id uuid);
+      INSERT INTO google_workspace_validation_mappings SELECT '${conn}','outside-'||i,'${other}' FROM generate_series(1,102) i;
+      INSERT INTO google_workspace_validation_mappings VALUES('${conn}','enrolled','${enrolled}'),('${conn}','conflict','${enrolled}'),('${conn}','conflict','${other}'),('${conn}','null-target',NULL);`);
+    const repo=new SyncRepository(db as any);
+    await repo.configure(conn,"owner@example.com","shadow",3);
+    await db.query("INSERT INTO google_sync_enrollments(connection_id,profile_id) VALUES($1,$2)",[conn,enrolled]);
+    const names=[...Array.from({length:102},(_,i)=>`outside-${i+1}`),"enrolled","conflict","null-target","unmapped"];
+    await repo.enqueue(conn,names);
+    const a=(await repo.claimAccount(conn))!;
+    expect(await repo.deferOutsideCohort(a)).toBe(100);
+    expect(await repo.deferOutsideCohort(a)).toBe(2);
+    expect((await db.query<any>("SELECT thread_id FROM google_sync_jobs WHERE generation>processed_generation ORDER BY thread_id")).rows.map(r=>r.thread_id)).toEqual(["conflict","enrolled","null-target","unmapped"]);
+    expect((await db.query("SELECT * FROM google_workspace_validation_mappings")).rows).toHaveLength(106);
+    expect((await db.query("SELECT * FROM google_sync_jobs")).rows).toHaveLength(106);
+    await repo.release(a);
+    await repo.configure(conn,"owner@example.com","active",0);
+    await repo.enqueue(conn,["outside-1"]);
+    const expanded=(await repo.claimAccount(conn))!;
+    expect(await repo.deferOutsideCohort(expanded)).toBe(0);
+    expect((await repo.claimThreads(expanded,25)).map(c=>c.threadId)).toContain("outside-1");
+    expect(await repo.deferOutsideCohort(a)).toBe(0);
+  } finally {await db.close();}
+});
 it("replaces rollout membership atomically and counts pilots within the limit", async () => {
   const db = await setupSyncDb();
   try {
