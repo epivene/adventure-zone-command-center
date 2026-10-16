@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
+import { AttentionView, type AttentionNotice } from "./attention-view";
 import { Bell } from "lucide-react";
 import { apiGet, apiPost, apiPut } from "@/lib/auth-token";
 
 type Item={sourceKey:string;organizationId:string;profileName:string;kind:string;label:string;dueOn:string|null;offsets:number[]|null;completed:boolean;editable:boolean};
-type Notice={id:string;organizationId:string;profileName:string;title:string;dueOn:string|null};
+type Notice=AttentionNotice;
 type Summary={upcoming:Item[];notifications:Notice[];count:number;lastEvaluatedAt:string|null};
 const Context=createContext<{data:Summary|null;error:string;refresh:()=>Promise<void>}>({data:null,error:"",refresh:async()=>{}});
 export function RemindersProvider({children}:{children:ReactNode}) {
@@ -157,18 +158,14 @@ export function RemindersPage(){
   async function saved(){await load();await refresh();}
   async function dismiss(id:string){try{await apiPost(`/deadline-rules/notifications/${id}/dismiss`,{});await refresh();}catch{setRuleError("Could not dismiss reminder.");}}
   return <div className="mx-auto grid max-w-5xl gap-5">
-    <header><h1 className="text-2xl font-bold">Reminders &amp; rules</h1><p className="text-sm text-muted-foreground">Dates use Mountain time. Checks run every 15 minutes while the app server is awake. Use Check reminders to run a check now.</p></header>
+    <header><h1 className="text-2xl font-bold">Attention view</h1><p className="text-sm text-muted-foreground">Dates use Mountain time. Checks run every 15 minutes while the app server is awake. Use Check reminders to run a check now.</p></header>
     <button type="button" className="button-secondary justify-self-start" onClick={()=>void refresh()}>Check reminders</button>
     {error?<p role="alert">{error}</p>:null}
     {ruleError?<p role="alert">{ruleError} <button type="button" onClick={()=>void load()}>Retry</button></p>:null}
-    <section className="rounded-xl border border-border bg-card p-4"><h2 className="text-lg font-bold">Active reminders ({data?.notifications.length??0})</h2>
-      <ul className="max-h-96 overflow-auto divide-y divide-border">{data?.notifications.map(n=><li key={n.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-        <div><Link href={`/profiles/${n.organizationId}`} className="font-semibold text-primary underline">{n.profileName}</Link><p className="text-sm">{n.title}</p></div>
-        <button type="button" className="button-secondary" onClick={()=>void dismiss(n.id)}>Dismiss</button>
-      </li>)}</ul>{data&&!data.notifications.length?<p>No active reminders.</p>:null}
-      <p className="mt-3 text-xs text-muted-foreground">Last checked: {data?.lastEvaluatedAt?new Date(data.lastEvaluatedAt).toLocaleString("en-US",{timeZone:"America/Denver"}):"Not yet"}</p>
-    </section>
-    <UpcomingDeadlines/>
+    {!data&&!error?<p role="status">Loading reminders…</p>:null}
+    {data?<AttentionView notices={data.notifications} onDismiss={id=>void dismiss(id)}/>:null}
+    <p className="text-xs text-muted-foreground">Last checked: {data?.lastEvaluatedAt?new Date(data.lastEvaluatedAt).toLocaleString("en-US",{timeZone:"America/Denver"}):"Not yet"}</p>
+    <details className="rounded-xl border border-border p-4"><summary className="cursor-pointer font-bold">All upcoming dates · next 30 days</summary><div className="mt-3"><UpcomingDeadlines/></div></details>
     <section className="grid gap-3"><h2 className="text-xl font-bold">Automation rules</h2>{rules.map(rule=><RuleEditor key={rule.id+JSON.stringify(rule)} rule={rule} onSaved={saved}/>)}</section>
     <details className="rounded-xl border border-border p-4"><summary className="cursor-pointer font-bold">Add a rule</summary><div className="mt-3"><RuleEditor onSaved={saved}/></div></details>
     <section className="rounded-xl border border-border bg-card p-4"><h2 className="text-lg font-bold">Email reminder setup</h2>
