@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ConnectionPrincipal, ConnectionScope } from "./contracts";
-import { BookingWorkService, workKeySchema } from "../booking-work/service";
+import { BookingWorkService, workKeySchema, recoverWorkSchema } from "../booking-work/service";
 import {
   createWorkSchema,
   filterSchema,
@@ -21,6 +21,14 @@ export function bookingWorkTools(
   const safety =
     " Coordination metadata only: never sends email, schedules a worker or invokes paid app AI. Preserve user edits and verify receipts. If work is already assigned, use its review link; do not take over.";
   return [
+    make(
+      "recover_booking_work",
+      "crm:update",
+      false,
+      recoverWorkSchema,
+      "Resume an existing card after reconnection only when its previous connection is revoked and belongs to the same owner and OAuth client. Read the card first; supply its exact revision and previousConnectionId. Preserves all progress, links, dates and status; returns an audited idempotent receipt. An active foreign assignment requires owner handoff at /settings/booking-work, never takeover or a duplicate card. Does not send mail. For outreach, determine the planned send date in the recipient timezone (8 a.m. local), calculate a 30-calendar-day offer from that date, and preserve explicitly approved campaign deadlines and deadlines already sent; do not ask the owner what today's date is.",
+      (a) => s.recover(p, a),
+    ),
     make(
       "list_booking_work",
       "crm:read",
@@ -77,3 +85,4 @@ export function bookingWorkTools(
     ),
   ];
 }
+

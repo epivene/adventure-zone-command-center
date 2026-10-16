@@ -31,6 +31,9 @@ export const workKeySchema = z
   })
   .strict();
 type Key = z.infer<typeof workKeySchema>;
+export const recoverWorkSchema = workKeySchema.extend({
+  previousConnectionId: z.string().uuid(),
+});
 export class BookingWorkService {
   constructor(private db: ConnectionDatabase) {}
   async list(p: ConnectionPrincipal, f: WorkFilter) {
@@ -215,6 +218,27 @@ export class BookingWorkService {
   claimExisting(p: ConnectionPrincipal, k: Key) {
     return this.mutate(p, "claim_existing_booking_work", k, {}, "claim");
   }
+  async recover(p: ConnectionPrincipal, raw: z.infer<typeof recoverWorkSchema>) {
+    requireConnectionScope(p, "crm:update");
+    const { requestKey, ...input } = recoverWorkSchema.parse(raw);
+    return new OperationStore(this.db).perform(p, "recover_booking_work", { requestKey }, input, async (tx) => {
+      const a = await this.current(tx, input);
+      if (a.assignedTo?.kind !== "connection" || a.assignedTo.id !== input.previousConnectionId)
+        throw new ConnectionError("WORK_ASSIGNMENT_CHANGED", 409);
+      // A timestamp is not proof of abandonment. Only a revoked connection
+      // for this same owner and OAuth client can be recovered automatically.
+      const old = (await tx.query(
+        "SELECT id FROM chatgpt_connections WHERE id=$1 AND owner_id=$2 AND client_id=$3 AND revoked_at IS NOT NULL FOR UPDATE",
+        [input.previousConnectionId, p.ownerId, p.clientId],
+      )).rows[0];
+      if (!old) throw new ConnectionError("WORK_OWNER_HANDOFF_REQUIRED", 409,
+        "The prior connection is active or belongs to another account/client. No work changed. Use /settings/booking-work for an owner handoff.");
+      const b = await new BookingWorkRepository(tx).patch(a.id, a.revision, {}, { kind: "connection", id: p.connectionId });
+      return receipt(tx, b.id, `/settings/booking-work?profileId=${b.profileId}`, String(b.revision), {
+        activity: b, previousAssignment: a.assignedTo, reason: "revoked_same_client_connection",
+      });
+    });
+  }
   async ownerCreate(raw: CreateWork) {
     const i = createWorkSchema.parse(raw);
     return transaction(this.db, async (tx) => {
@@ -258,3 +282,4 @@ export class BookingWorkService {
     });
   }
 }
+
