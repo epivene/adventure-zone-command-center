@@ -12,9 +12,9 @@ function fakeClient(readiness: boolean | (() => boolean)) {
   const client = {
     async query(sql: string) {
       queries.push(sql);
-      if (sql.includes("as ready")) {
+      if (sql.includes("from pg_catalog.pg_class")) {
         const ready = typeof readiness === "function" ? readiness() : readiness;
-        return { rows: [{ ready }] };
+        return { rows: (ready || sql.includes("pg_my_temp_schema()")) ? ["filler", "filler_reason", "filler_changed_at"].map((attname,i)=>({attname,attnum:i+1,type_oid:"mock",attnotnull:false,default_tree:null,constraint_tree:"mock",contype:"c",convalidated:true,connoinherit:false,enforced:true})) : [] };
       }
       return { rows: [] };
     },
@@ -33,7 +33,7 @@ describe("ensureProfileFillerSchema", () => {
       );
       const client = {
         async query(sql: string) {
-          if (sql.includes("as ready")) return db.query<Record<string, unknown>>(sql);
+          if (sql.includes("from pg_catalog.pg_class")) return db.query<Record<string, unknown>>(sql);
           await db.exec(sql);
           return { rows: [] };
         },
@@ -147,7 +147,7 @@ describe("ensureProfileFillerSchema", () => {
     await expect(ensureProfileFillerSchema(h.client, { loadSql })).resolves.toBe(false);
 
     expect(loadSql).not.toHaveBeenCalled();
-    expect(h.queries).toHaveLength(1);
+    expect(h.queries).toHaveLength(4);
     expect(h.queries[0]).toContain("filler_changed_at");
     expect(h.queries[0]).toContain("organizations_filler_reason_required");
   });
@@ -196,3 +196,26 @@ describe("ensureProfileFillerSchema", () => {
     expect(h.queries).not.toContain("ROLLBACK");
   });
 });
+
+
+it("validates exact expressions with reordered columns without locking the live table", async () => {
+ const db = new PGlite();
+ try {
+  await db.exec(`CREATE TABLE organizations (spare text, filler_reason text, name text, filler boolean NOT NULL DEFAULT false, filler_changed_at timestamptz,
+   CONSTRAINT organizations_filler_reason_required CHECK (NOT filler OR nullif(btrim(filler_reason), '') IS NOT NULL));
+   ALTER TABLE organizations DROP COLUMN spare;`);
+  await db.exec("BEGIN");
+  const queries:string[]=[];
+  const client={query:async(sql:string)=>{queries.push(sql);return db.query<Record<string,unknown>>(sql)}};
+  expect(await isProfileFillerSchemaReady(client)).toBe(true);
+  expect(queries.some(q=>/to_regclass|pg_get_expr|pg_get_constraintdef|from organizations/i.test(q))).toBe(false);
+  const locks=await db.query(`SELECT l.mode FROM pg_locks l JOIN pg_class c ON c.oid=l.relation JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relname='organizations' AND n.nspname='public' AND l.pid=pg_backend_pid()`);
+  expect(locks.rows).toEqual([]);
+  await db.exec("COMMIT");
+  for(const expression of ["true", "filler OR filler_reason IS NOT NULL", "NOT filler OR filler_reason IS NOT NULL", "NOT filler OR nullif(btrim(name), '') IS NOT NULL"]){
+   await db.exec(`ALTER TABLE organizations DROP CONSTRAINT organizations_filler_reason_required; ALTER TABLE organizations ADD CONSTRAINT organizations_filler_reason_required CHECK (${expression})`);
+   expect(await isProfileFillerSchemaReady(client)).toBe(false);
+  }
+  expect((await db.query("SELECT relname FROM pg_class WHERE relname LIKE 'az_filler_contract_%'")).rows).toEqual([]);
+ } finally { await db.close(); }
+},15000);
