@@ -1,3 +1,5 @@
+import { requireOwnerMiddleware } from "@/lib/auth";
+import { ProfileCalendarPreviewService } from "@/features/google-workspace/calendar/profile-calendar-preview-service";
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -192,6 +194,51 @@ router.post("/google-workspace/operational-calendar/reviews/:reviewId/resolve", 
     res.status(500).json({ error: "GOOGLE_OPERATIONAL_CALENDAR_REVIEW_RESOLUTION_FAILED" });
   }
 });
+
+const proposalSchema = z.object({
+  profileId: z.string().uuid(), bookingId: z.string().uuid(),
+  setupOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  teardownOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+}).strict();
+const applyPreviewSchema = z.object({ previewId: z.string().uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+for (const action of ["preview", "apply"] as const) {
+  router.post("/google-workspace/operational-calendar/profile/" + action, requireOwnerMiddleware, async (req, res): Promise<void> => {
+    const actor = (req as typeof req & { userId?: string }).userId;
+    if (typeof actor !== "string") { res.status(403).json({ error: "Owner authentication required." }); return; }
+    try {
+      const service = new ProfileCalendarPreviewService(db, connectionRepository);
+      if (action === "preview") {
+        const parsed = proposalSchema.safeParse(req.body);
+        if (!parsed.success) { res.status(400).json({ error: "Invalid calendar preview." }); return; }
+        res.json(await service.preview(parsed.data, actor || "single-owner"));
+      } else {
+        const parsed = applyPreviewSchema.safeParse(req.body);
+        if (!parsed.success) { res.status(400).json({ error: "Invalid calendar save." }); return; }
+        res.json(await service.apply(parsed.data, actor || "single-owner"));
+      }
+    } catch (error) {
+      const value = error as { status?: number; code?: string };
+      const status = value.status && value.status >= 400 && value.status < 500 ? value.status : 500;
+      req.log.error({ err: error }, "Profile calendar preview failed");
+      res.status(status).json({ error: status === 500
+        ? "Calendar save could not be verified. Retry this same preview to reconcile it before creating anything else."
+        : ({
+          PREVIEW_EXPIRED: "This preview expired. Refresh it and review again.",
+          PREVIEW_STALE: "Saved booking details or evidence changed. Refresh the preview.",
+          PREVIEW_MISMATCH: "The preview no longer matches. Refresh it before saving.",
+          CALENDAR_CONNECTION_CHANGED: "The calendar connection changed. Refresh the preview.",
+          CALENDAR_EVENT_CHANGED: "An existing calendar event changed. Refresh and review its current details.",
+          CALENDAR_LINK_CHANGED: "The linked calendar events changed. Review the links before saving.",
+          POSSIBLE_DUPLICATE_REQUIRES_REVIEW: "A possible duplicate appeared. Review and link it before saving.",
+          CALENDAR_SAVE_NOT_VERIFIED: "The calendar readback did not match. Retry this preview to check the saved event.",
+          RESOLVE_PREVIEW_CHECKS: "Resolve the checks shown in the preview before saving.",
+          RESOLVE_CALENDAR_REVIEW: "Resolve the pending calendar review before saving.",
+          SOURCE_CHANGED_DURING_SAVE: "Source evidence changed while saving. Review the calendar and refresh the preview.",
+          CALENDAR_DUPLICATE_SEARCH_INCOMPLETE: "The duplicate check could not finish. Nothing new can be created until it completes.",
+        } as Record<string, string>)[value.code ?? ""] ?? "Calendar review could not finish. Refresh the preview and review the saved booking." });
+    }
+  });
+}
 
 export default router;
 

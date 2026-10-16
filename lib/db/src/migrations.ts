@@ -23,6 +23,10 @@ interface MigrationPool {
 
 const migrationFiles = [
   {
+    name: "20261016_profile_calendar_previews.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.profile_calendar_previews') IS NOT NULL AS ready",
+  },
+  {
     name: "20261016_agent_tax_records.sql",
     markerSql: "SELECT to_regclass(current_schema() || '.agent_tax_records') IS NOT NULL AND to_regclass(current_schema() || '.agent_tax_file_deletions') IS NOT NULL AS ready",
   },
