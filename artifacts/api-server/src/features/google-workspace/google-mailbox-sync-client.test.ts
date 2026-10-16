@@ -32,3 +32,8 @@ it('bounds sync requests and rejects oversized responses before parsing',async()
  }});
  await expect(api.mailboxSync!.getMailbox()).rejects.toMatchObject({kind:'invalid',code:'SYNC_RESPONSE_TOO_LARGE'});
 });
+it('reads only header metadata when deciding whether a new thread belongs to a known customer',async()=>{
+ const {api,urls}=client({id:'t',messages:[{id:'m',payload:{headers:[{name:'From',value:'Fair <fair@example.com>'},{name:'Subject',value:'Next year'}]}}]});
+ expect(await api.mailboxSync!.getThreadHeaders('t')).toEqual({id:'t',participants:['Fair <fair@example.com>'],subject:'Next year'});
+ expect(new URL(urls[0]).searchParams.get('format')).toBe('metadata');
+});

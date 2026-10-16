@@ -23,6 +23,7 @@ export class MailboxSyncIngestor {
    }
   }catch(error){
    if(error instanceof SyncFailure&&error.kind==='expired_cursor')next={phase:'boundary'};
+   else if(error instanceof SyncFailure&&error.code==='SYNC_PAGE_TOKEN_INVALID'&&c.pageToken)next={...c,pageToken:null};
    else throw error;
   }
   if(!await this.repo.commitPage(a,{threads,checkpoint:next}))throw new SyncFailure('retryable','SYNC_LEASE_LOST');

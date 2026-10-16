@@ -39,6 +39,7 @@ export class GoogleSentProfileLinkSweepLoop {
     clock: Clock;
     scheduler: GoogleSentProfileLinkSweepLoopScheduler;
     pilot?: { run(): Promise<void> };
+    runExclusive?: (work:()=>Promise<void>)=>Promise<void>;
   }) {}
 
   start(): void {
@@ -77,6 +78,14 @@ export class GoogleSentProfileLinkSweepLoop {
   }
 
   private async runStep(): Promise<void> {
+    try {
+      if(this.dependencies.runExclusive)await this.dependencies.runExclusive(()=>this.performStep());
+      else await this.performStep();
+    } catch { logger.warn('Gmail scheduled owner unavailable; checks deferred'); }
+    finally {if(!this.stopped)this.schedule(GOOGLE_SENT_PROFILE_LINK_SWEEP_INTERVAL_MS);}
+  }
+
+  private async performStep(): Promise<void> {
     const now = this.dependencies.clock.now();
     try { if(this.dependencies.pilot) await this.dependencies.pilot.run(); }
     catch { logger.warn("Three-customer Gmail pilot sync deferred"); }
@@ -123,9 +132,6 @@ export class GoogleSentProfileLinkSweepLoop {
           "Recent sent Gmail profile-link catch-up deferred",
         );
       }
-    }
-    if (!this.stopped) {
-      this.schedule(GOOGLE_SENT_PROFILE_LINK_SWEEP_INTERVAL_MS);
     }
   }
 }

@@ -14,6 +14,7 @@ export function syncFailure(error:unknown, history=false):SyncFailure {
   return new SyncFailure('retryable','SYNC_PROVIDER_UNAVAILABLE',e?.retryAfterSeconds?e.retryAfterSeconds*1000:undefined);
 }
 export interface MailboxChangeClient {
+  getThreadHeaders?(threadId:string):Promise<{id:string;participants:string[];subject:string}>;
   getMailbox():Promise<{email:string;historyId:string}>;
   listHistory(input:{startHistoryId:string;pageToken?:string}):Promise<HistoryPage>;
   listMessagesPage(input:{query:string;pageToken?:string}):Promise<GoogleMessagePage>;
@@ -32,6 +33,17 @@ export function createMailboxChangeClient(read:(url:string)=>Promise<Record<stri
   }
   function refs(values:unknown){return array(values).map(v=>{const m=record(v);return {id:id(m.id),threadId:id(m.threadId)};});}
   return {
+    async getThreadHeaders(threadId){
+      const p=await get('/threads/'+encodeURIComponent(threadId),{format:'metadata',fields:'id,messages(id,payload/headers)'});
+      if(id(p.id)!==threadId)throw new SyncFailure('invalid','SYNC_INVALID_RESPONSE');
+      const participants=new Set<string>();let subject='';
+      for(const m of array(p.messages))for(const value of array(record(record(m).payload).headers)){
+        const h=record(value),name=String(h.name).toLowerCase();
+        if(['from','to','cc'].includes(name)&&typeof h.value==='string')participants.add(h.value);
+        if(name==='subject'&&typeof h.value==='string')subject=h.value;
+      }
+      return {id:threadId,participants:[...participants],subject};
+    },
     async getMailbox(){const p=await get('/profile',{});return {email:id(p.emailAddress),historyId:cursor(p.historyId)};},
     async listHistory(input){
       const p=await get('/history',{startHistoryId:cursor(input.startHistoryId),maxResults:'100',...(input.pageToken?{pageToken:input.pageToken}:{})},true);

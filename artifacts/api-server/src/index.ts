@@ -188,6 +188,7 @@ const paperNoteLoop = new PaperNoteWorkerLoop({
 });
 
 const gmailProfileLinkSweepLoop = new GoogleSentProfileLinkSweepLoop({
+  runExclusive: async work=>{const {runLegacyGmail}=await import('./features/google-workspace/google-mailbox-sync-runtime');await runLegacyGmail(work);},
   pilot: {run: async () => { const {pilotSync}=await import("./features/google-workspace/google-pilot-sync-runtime"); await pilotSync.run(); }},
   recent: new GoogleRecentValidationService(),
   sentSweep: new GoogleSentProfileLinkSweepService(),
@@ -322,6 +323,7 @@ const shutdown = createActServerShutdown({
       assistantJobLoop.close(),
       paperNoteLoop.close(),
       gmailProfileLinkSweepLoop.close(),
+      import('./features/google-workspace/google-mailbox-sync-runtime').then(m=>m.mailboxSyncLoop.close()),
       historicalGmailBackfillLoop.close(),
       googleDocumentLoop.close(),
       googleDriveBackupLoop?.close(),
@@ -602,6 +604,7 @@ async function startBackgroundWorkers() {
   assistantJobLoop.start();
   paperNoteLoop.start();
   gmailProfileLinkSweepLoop.start();
+  void import('./features/google-workspace/google-mailbox-sync-runtime').then(m=>m.mailboxSyncLoop.start());
   if (readModelConfig(process.env).enabled) {
     try {
       const stopAssistant = workspaceStartup.start(startWorkspaceRuntime);

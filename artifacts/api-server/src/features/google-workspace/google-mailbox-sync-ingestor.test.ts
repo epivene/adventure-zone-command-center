@@ -20,5 +20,10 @@ it('bootstraps old mapped threads and drafts then replays changes made during di
  expired=true;const a=(await repo.claimAccount(conn))!;await new MailboxSyncIngestor(repo,client).step(a);
  expect((await db.query<any>('SELECT checkpoint FROM google_sync_accounts')).rows[0].checkpoint.phase).toBe('boundary');
  expect((await db.query('SELECT * FROM google_sync_jobs')).rows).toHaveLength(4);
+ await repo.release(a);
+ await db.query(`UPDATE google_sync_accounts SET checkpoint='{"phase":"history","cursor":"99","pageToken":"expired"}'`);
+ client.listHistory=async()=>{throw new SyncFailure('invalid','SYNC_PAGE_TOKEN_INVALID');};
+ const retry=(await repo.claimAccount(conn))!;await new MailboxSyncIngestor(repo,client).step(retry);
+ expect((await db.query<any>('SELECT checkpoint FROM google_sync_accounts')).rows[0].checkpoint).toMatchObject({phase:'history',cursor:'99',pageToken:null});
  }finally{await db.close();}
 });

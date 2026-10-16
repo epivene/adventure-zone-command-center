@@ -12,5 +12,8 @@ it('paginates cached summaries without exposing draft bodies or other accounts',
  expect((await read.list({...input,cursor:page.nextCursor!})).items).toHaveLength(1);
  expect((await read.list({...input,connectionId:'20943487-43ec-4a11-8c67-36efefbf4efb'})).items).toHaveLength(0);
  expect((await read.detail(input.connectionId,'t1'))?.snapshot.drafts[0].bodyText).toBe('Private draft');
+ await db.query(`INSERT INTO google_sync_snapshots(connection_id,thread_id,state,snapshot,fingerprint) VALUES($1,'new-thread','link_review','{"subject":"New fair conversation"}','review')`,[input.connectionId]);
+ expect((await read.reviews(input.connectionId)).items).toMatchObject([{threadId:'new-thread',subject:'New fair conversation'}]);
+ expect((await read.status(input.connectionId)).linkReview).toBe(1);
  }finally{await db.close();}
 });

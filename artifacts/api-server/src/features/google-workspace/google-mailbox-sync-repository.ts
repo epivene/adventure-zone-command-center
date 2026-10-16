@@ -66,6 +66,11 @@ export class SyncRepository {
    const args=[c.connectionId,c.threadId,result.profileId,result.state,JSON.stringify(result.snapshot),fingerprint];
    await tx.query(`INSERT INTO google_sync_history(connection_id,thread_id,profile_id,state,snapshot,fingerprint) VALUES($1,$2,$3,$4,$5::jsonb,$6) ON CONFLICT DO NOTHING`,args);
    await tx.query(`INSERT INTO google_sync_snapshots(connection_id,thread_id,profile_id,state,snapshot,fingerprint,availability) VALUES($1,$2,$3,$4,$5::jsonb,$6,$7) ON CONFLICT(connection_id,thread_id) DO UPDATE SET profile_id=EXCLUDED.profile_id,state=EXCLUDED.state,snapshot=EXCLUDED.snapshot,fingerprint=EXCLUDED.fingerprint,availability=EXCLUDED.availability,checked_at=now()`,[...args,result.availability??'available']);
+   const mail=(result.snapshot.messages??[]).filter((m:any)=>!m.labelIds?.includes('DRAFT')&&!m.labelIds?.includes('TRASH'));
+   if(result.profileId&&account.mode==='active'&&mail.length&&result.availability!=='missing'){
+    const archiveFingerprint=createHash('sha256').update(JSON.stringify(mail)).digest('hex');
+    await tx.query(`INSERT INTO google_sync_archive_jobs(connection_id,thread_id,profile_id,fingerprint) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,[c.connectionId,c.threadId,result.profileId,archiveFingerprint]);
+   }
    await tx.query(`UPDATE google_sync_jobs SET processed_generation=$4,claim_token=NULL,lease_until=NULL,attempts=0,error_code=NULL WHERE connection_id=$1 AND thread_id=$2 AND claim_token=$3`,[c.connectionId,c.threadId,c.token,c.generation]);return true;
   });
  }

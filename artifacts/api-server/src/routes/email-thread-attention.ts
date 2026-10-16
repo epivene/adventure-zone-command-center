@@ -1,4 +1,5 @@
 import { Router } from "express";
+import {createMailboxSyncRouter} from './google-mailbox-sync';
 import { z } from "zod";
 import { requireOwnerMiddleware } from "../lib/auth";
 import {
@@ -16,6 +17,7 @@ export function createEmailThreadAttentionRouter(
     next();
   });
   const actor = { ownerId: "owner", connectorId: null };
+  r.use('/sync',createMailboxSyncRouter());
   r.get("/pilot", async (_req,res)=>{
     const {readPilotSync}=await import("../features/google-workspace/google-pilot-sync-runtime");
     res.json(await readPilotSync());

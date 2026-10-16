@@ -4,7 +4,7 @@ import {SyncFailure,syncFailure} from './google-mailbox-sync-client';
 import {SyncMatcher} from './google-mailbox-sync-matcher';
 import {SyncRepository,type AccountClaim,type ThreadClaim} from './google-mailbox-sync-repository';
 export class MailboxSyncProcessor {
- constructor(private repo:SyncRepository,private getThread:(id:string)=>Promise<GoogleThreadDetail>){}
+ constructor(private repo:SyncRepository,private getThread:(id:string)=>Promise<GoogleThreadDetail>,private headers?:(id:string)=>Promise<{participants:string[];subject:string}> ){}
  async process(c:ThreadClaim,a:AccountClaim):Promise<void>{
   const previous=(await this.repo.db.query(`SELECT * FROM google_sync_snapshots WHERE connection_id=$1 AND thread_id=$2`,[c.connectionId,c.threadId])).rows[0];
   try{
@@ -12,7 +12,10 @@ export class MailboxSyncProcessor {
    if(match.kind==='review'){
     // Do not pull unrelated mailbox bodies into COM merely because they changed.
     if(previous?.profile_id)throw new SyncFailure('invalid',match.reason);
-    await this.repo.finishThread(c,{profileId:null,state:'needs_review',snapshot:{reason:match.reason}});return;
+    if(match.reason==='SYNC_PROFILE_CONFLICT'){await this.repo.finishThread(c,{profileId:null,state:'link_review',snapshot:{reason:match.reason}});return;}
+    const metadata=this.headers?await this.headers(c.threadId):null;
+    const candidates=metadata?await new SyncMatcher(this.repo.db).candidates(metadata.participants,a.email):[];
+    await this.repo.finishThread(c,{profileId:null,state:candidates.length?'link_review':'unlinked',snapshot:{reason:match.reason,candidateProfileIds:candidates,...(candidates.length?{subject:metadata?.subject}:{})}});return;
    }
    if(a.cohortLimit>0&&!(await this.repo.db.query(`SELECT 1 FROM google_sync_enrollments WHERE connection_id=$1 AND profile_id=$2`,[a.connectionId,match.profileId])).rows.length){
     // Complete this generation without changing any saved observation. Expansion
@@ -30,6 +33,8 @@ export class MailboxSyncProcessor {
    const failure=error instanceof Error&&error.message==='SYNC_PROFILE_CONFLICT'?new SyncFailure('invalid','SYNC_PROFILE_CONFLICT'):syncFailure(error);
    if(failure.kind==='source_missing'&&previous){
     await this.repo.finishThread(c,{profileId:previous.profile_id,state:previous.state,snapshot:previous.snapshot,availability:'missing'});
+   }else if(failure.kind==='source_missing'){
+    await this.repo.finishThread(c,{profileId:null,state:'unlinked',snapshot:{reason:'SYNC_SOURCE_MISSING'},availability:'missing'});
    }else{await this.repo.retryThread(c,failure);if(failure.kind==='auth')throw failure;}
   }
  }

@@ -80,9 +80,10 @@ function toFile(row: Record<string, unknown>): GoogleProfileFile | null {
 }
 
 export class PostgresGoogleProfileFileRepository {
-  constructor(private readonly pool: SqlPool = defaultPool as unknown as SqlPool) {}
+  constructor(private readonly pool: SqlPool = defaultPool as unknown as SqlPool,private readonly pinnedConnectionId?:string) {}
 
   private async currentConnectionId(): Promise<string> {
+    if(this.pinnedConnectionId)return this.pinnedConnectionId;
     const result = await this.pool.query(
       `SELECT id
          FROM google_workspace_connections
@@ -307,9 +308,12 @@ export class GoogleProfileFileService {
       throw new Error("GOOGLE_WORKSPACE_PROFILE_THREAD_NOT_FOUND");
     }
 
+    const existing=await this.repository.listForOrganization(input.organizationId);
     for (const message of detail.messages) {
       for (const attachment of message.attachments) {
         try {
+          const cached=existing.find(file=>file.threadId===input.threadId&&file.messageId===message.id&&file.attachmentId===attachment.attachmentId&&file.availability==='available'&&file.storageObjectKey);
+          if(cached?.storageObjectKey&&await this.storage.exists(cached.storageObjectKey))continue;
           const bytes = await client.getAttachment({
             messageId: message.id,
             attachmentId: attachment.attachmentId,

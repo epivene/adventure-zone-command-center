@@ -411,8 +411,9 @@ export function createGoogleWorkspaceReadClient(input: {
     url: string,
     retryUnauthorized = true,
     bounded = false,
+    overallSignal?:AbortSignal,
   ): Promise<Record<string, unknown>> {
-    const signal=bounded?AbortSignal.timeout(20_000):undefined;
+    const signal=bounded?(overallSignal?AbortSignal.any([overallSignal,AbortSignal.timeout(20_000)]):AbortSignal.timeout(20_000)):undefined;
     const token = await currentAccessToken(!retryUnauthorized,signal);
     const response = await fetcher(url, {
       headers: { authorization: `Bearer ${token}` },
@@ -420,7 +421,7 @@ export function createGoogleWorkspaceReadClient(input: {
     });
     if (response.status === 401 && retryUnauthorized) {
       accessToken = null;
-      return authorizedJson(url, false,bounded);
+      return authorizedJson(url, false,bounded,overallSignal);
     }
     if (response.status === 401) {
       throw clientError("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
@@ -439,6 +440,7 @@ export function createGoogleWorkspaceReadClient(input: {
     if (response.status >= 500) {
       throw retryableClientError("GOOGLE_WORKSPACE_GMAIL_RETRYABLE_FAILURE", response);
     }
+    if(bounded&&response.status===400&&new URL(url).searchParams.has('pageToken'))throw new SyncFailure('invalid','SYNC_PAGE_TOKEN_INVALID');
     if (!response.ok) {
       throw clientError("GOOGLE_WORKSPACE_API_REQUEST_FAILED");
     }
@@ -1331,7 +1333,8 @@ export function createGoogleWorkspaceReadClient(input: {
       };
     },
 
-    async getAttachment({ messageId, attachmentId }): Promise<Uint8Array> {
+    async getSyncAttachment(input): Promise<Uint8Array> {return this.getAttachment!(input,{bounded:true});},
+    async getAttachment({ messageId, attachmentId },options?:{bounded:boolean}): Promise<Uint8Array> {
       const message = messageId.trim();
       const attachment = attachmentId.trim();
       if (!message || !attachment) {
@@ -1340,7 +1343,7 @@ export function createGoogleWorkspaceReadClient(input: {
       const url = new URL(
         `${gmailBaseEndpoint}/messages/${encodeURIComponent(message)}/attachments/${encodeURIComponent(attachment)}`,
       );
-      const payload = await authorizedJson(url.toString());
+      const payload = await authorizedJson(url.toString(),true,options?.bounded??false);
       return decodeBase64UrlBytes(payload.data);
     },
 
@@ -1352,7 +1355,8 @@ export function createGoogleWorkspaceReadClient(input: {
       if (!id) throw clientError("GOOGLE_WORKSPACE_THREAD_ID_INVALID");
       const url = new URL(`${gmailBaseEndpoint}/threads/${encodeURIComponent(id)}`);
       url.searchParams.set("format", "full");
-      const read=(url:string)=>authorizedJson(url,true,options?.bounded??false);
+      const overallSignal=options?.bounded?AbortSignal.timeout(25000):undefined;
+      const read=(url:string)=>authorizedJson(url,true,options?.bounded??false,overallSignal);
       const payload = await read(url.toString());
       if (typeof payload.id !== "string" || !Array.isArray(payload.messages)) {
         throw clientError("GOOGLE_WORKSPACE_THREAD_DETAIL_INVALID");

@@ -1,8 +1,15 @@
 import { useEffect,useState } from "react";
 import { apiFetch } from "@/lib/auth-token";
+import {GoogleMailboxSyncPanel} from './google-mailbox-sync-panel';
 type Item={profileId:string;profileName:string;threadId:string;checkedAt:string|null;errorCode:string|null;ownerDecision:string|null;followups:{id:string;kind:string;dueAt:string|null}[];snapshot:{state:string;drafts:{id:string;bodyText:string}[];latestEmail?:{bodyText:string;subject:string}}|null};
 const names:Record<string,string>={owner_decision:"Owner decision needed",draft_to_review:"Draft to review",draft_missing:"Draft missing — check Gmail",reply_to_review:"Reply to review",waiting_for_reply:"Waiting for reply",contact_blocked:"Contact needs fixing",needs_review:"Review needed"};
 export function GooglePilotSyncPanel(){
+ const [mode,setMode]=useState<string|null>(null);
+ useEffect(()=>{let live=true;void apiFetch('/email-thread-attention/sync/status').then(async r=>r.ok?(await r.json()).mode:'off').then(value=>{if(live)setMode(value??'off');}).catch(()=>{if(live)setMode('off');});return()=>{live=false;};},[]);
+ if(mode===null)return <p className="my-4 text-sm">Loading saved email status…</p>;
+ return mode==='active'?<GoogleMailboxSyncPanel/>:<LegacyPilotSyncPanel/>;
+}
+function LegacyPilotSyncPanel(){
  const [items,setItems]=useState<Item[]>([]),[error,setError]=useState(""),[busy,setBusy]=useState(false);
  async function load(sync=false){
   setBusy(true);setError("");
