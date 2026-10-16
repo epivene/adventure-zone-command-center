@@ -1,0 +1,44 @@
+name: Profile integrity CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "artifacts/api-server/src/features/profile-integrity/**"
+      - ".github/workflows/profile-integrity-ci.yml"
+      - ".github/workflows/export-live-profile-integrity.yml"
+  push:
+    branches:
+      - audit/live-profile-completeness-2026-09-02
+    paths:
+      - "artifacts/api-server/src/features/profile-integrity/**"
+      - ".github/workflows/profile-integrity-ci.yml"
+      - ".github/workflows/export-live-profile-integrity.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Profile integrity behavior tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/profile-integrity/profile-integrity-audit.test.ts
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: API build
+        run: pnpm --filter @workspace/api-server build
