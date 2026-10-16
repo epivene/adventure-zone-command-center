@@ -37,6 +37,18 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await pg.close();});
 describe("deadline dates and rules",()=>{
+  it("labels attention sources without modifying notices or rules", async () => {
+    await pg.query("INSERT INTO profile_deadlines(organization_id,kind,label,due_on) VALUES($1,'event','Old event','2026-01-01'),($1,'vendor','Old vendor task','2026-01-01')",[profile]);
+    await service.evaluate(now);
+    const before = await pg.query("SELECT * FROM deadline_notifications ORDER BY id");
+    const rules = await pg.query("SELECT * FROM deadline_rules ORDER BY id");
+    const summary = await service.summary();
+    expect(summary.notifications.find(n=>n.title==='Old event — overdue')?.deadlineKind).toBe('event');
+    expect(summary.notifications.find(n=>n.title==='Old vendor task — overdue')?.deadlineKind).toBe('vendor');
+    expect(summary.notifications.find(n=>n.title==='Old event — overdue')?.triggerType).toBe('deadline_passed');
+    expect(await pg.query("SELECT * FROM deadline_notifications ORDER BY id")).toEqual(before);
+    expect(await pg.query("SELECT * FROM deadline_rules ORDER BY id")).toEqual(rules);
+  });
   it("returns the same badge count without loading deadline sources or notification history", async () => {
     await pg.query("UPDATE organizations SET created_at='2026-09-01' WHERE id=$1",[profile]);
     await service.evaluate(now);
