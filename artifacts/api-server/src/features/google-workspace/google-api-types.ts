@@ -175,6 +175,7 @@ export type GoogleCalendarEvent = {
 };
 
 export interface GoogleWorkspaceReadClient {
+  mailboxSync?: import('./google-mailbox-sync-client').MailboxChangeClient;
   driveBackup?: GoogleDriveBackupClient;
   authorizationUrl(input: { state: string; scopes?: readonly string[] }): string;
   exchangeCode(code: string): Promise<{

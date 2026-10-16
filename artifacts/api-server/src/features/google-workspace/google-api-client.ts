@@ -1,3 +1,4 @@
+import { createMailboxChangeClient } from './google-mailbox-sync-client';
 import type {
   GoogleCalendarEvent,
   GoogleGmailDraft,
@@ -853,6 +854,7 @@ export function createGoogleWorkspaceReadClient(input: {
       };
     },
 
+    mailboxSync: createMailboxChangeClient(authorizedJson),
     async getGmailDraftRaw(draftId) {
       const payload=await authorizedJson(`${draftsEndpoint}/${encodeURIComponent(draftId)}?format=raw`);
       const message=payload.message as Record<string,unknown>|undefined;
