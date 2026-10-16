@@ -1,15 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { businessDay, daysBetween, deadlineMatch, ruleSchema, type Rule } from "./model";
 import { readDeadlines, type Query } from "./sources";
-export type Database = Query & { connect(): Promise<Query & { release(): void }> };
+export type Database = Query & { connect(): Promise<Query & { release(destroy?: boolean): void }> };
 export type EmailReminder = { idempotencyKey: string; organizationId: string; title: string; dueOn: string | null };
 export interface ReminderEmailProvider { send(reminder: EmailReminder): Promise<void> }
 export class DeadlineRulesService {
   constructor(private readonly db: Database, private readonly emailEnabled = false, private readonly emailProvider?: ReminderEmailProvider) {}
   async evaluate(now = new Date()) {
     const tx = await this.db.connect();
+    let discard = false;
     try {
       await tx.query("BEGIN");
+      // Cancel on the server before pg's 30s client timeout can abandon a query.
+      // LOCAL keeps these limits scoped to reminder work, including pooled clients.
+      await tx.query("SET LOCAL statement_timeout = '20s'");
+      await tx.query("SET LOCAL lock_timeout = '3s'");
+      await tx.query("SET LOCAL idle_in_transaction_session_timeout = '15s'");
       const locked = await tx.query("SELECT pg_try_advisory_xact_lock(81734, 141026) AS locked");
       if (!locked.rows[0]?.locked) { await tx.query("ROLLBACK"); return { skipped:true }; }
       const state = await tx.query("SELECT last_evaluated_at FROM deadline_evaluation_state WHERE id=1 FOR UPDATE");
@@ -30,15 +36,22 @@ export class DeadlineRulesService {
         }
         if (rule.trigger.type === "inactive") {
           const profiles = await tx.query(`
-            SELECT o.id,o.name,greatest(o.created_at,
-              (SELECT max(coalesce(a.occurred_at,a.created_at)) FROM activities a
+            WITH activity_by_profile AS MATERIALIZED (
+              SELECT coalesce(a.organization_id,b.organization_id,c.organization_id) organization_id,
+                max(coalesce(a.occurred_at,a.created_at)) last_activity FROM activities a
                 LEFT JOIN bookings b ON b.id=a.booking_id LEFT JOIN contacts c ON c.id=a.contact_id
-                WHERE coalesce(a.organization_id,b.organization_id,c.organization_id)=o.id
-                  AND a.deleted_at IS NULL AND a.kind::text<>'calendar'
-                  AND coalesce(a.occurred_at,a.created_at)<=$1),
-              (SELECT max(coalesce(c.ended_at,c.started_at)) FROM call_sessions c WHERE c.organization_id=o.id AND c.started_at<=$1)
-            ) last_activity
-            FROM organizations o WHERE o.consolidated_into_id IS NULL
+                WHERE a.deleted_at IS NULL AND a.kind::text<>'calendar'
+                  AND coalesce(a.occurred_at,a.created_at)<=$1
+                GROUP BY coalesce(a.organization_id,b.organization_id,c.organization_id)
+            ), calls_by_profile AS MATERIALIZED (
+              SELECT organization_id,max(coalesce(ended_at,started_at)) last_activity
+              FROM call_sessions WHERE started_at<=$1 GROUP BY organization_id
+            )
+            SELECT o.id,o.name,greatest(o.created_at,a.last_activity,c.last_activity) last_activity
+            FROM organizations o
+            LEFT JOIN activity_by_profile a ON a.organization_id=o.id
+            LEFT JOIN calls_by_profile c ON c.organization_id=o.id
+            WHERE o.consolidated_into_id IS NULL
               AND (NOT EXISTS(SELECT 1 FROM bookings b WHERE b.organization_id=o.id)
                 OR EXISTS(SELECT 1 FROM bookings b WHERE b.organization_id=o.id AND b.status::text IN
                   ('new_lead','researching','contact_due','contacted','interested','possible','unlikely','quote_sent','pending_decision','pending_contract','renewal_due')))
@@ -66,8 +79,17 @@ export class DeadlineRulesService {
       await tx.query("UPDATE deadline_evaluation_state SET last_evaluated_at=$1 WHERE id=1",[now]);
       await tx.query("COMMIT");
       return { skipped:false };
-    } catch(error) { await tx.query("ROLLBACK"); throw error; }
-    finally { tx.release(); }
+    } catch(error) {
+      // A client read timeout does not cancel the server query. A queued rollback
+      // can time out too; closing the connection rolls back the transaction.
+      discard = error instanceof Error && error.message === "Query read timeout";
+      if (!discard) {
+        try { await tx.query("ROLLBACK"); }
+        catch { discard = true; }
+      }
+      throw error;
+    }
+    finally { tx.release(discard); }
   }
   private async record(tx: Query, rule: Rule, key: string, profile: string, title: string, due: string|null, today: string) {
     const result = await tx.query(`INSERT INTO deadline_notifications(rule_id,occurrence_key,organization_id,title,due_on,email_state)

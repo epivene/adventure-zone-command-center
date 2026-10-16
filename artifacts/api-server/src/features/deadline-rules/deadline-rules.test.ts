@@ -37,6 +37,43 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await pg.close();});
 describe("deadline dates and rules",()=>{
+  it("scans activity history once for an inactivity evaluation instead of once per profile", async () => {
+    await pg.exec(`INSERT INTO organizations(id,name,created_at)
+      SELECT gen_random_uuid(),'Prospect '||n,'2026-09-01' FROM generate_series(1,20) n;
+      INSERT INTO activities(id,organization_id,kind,occurred_at,created_at)
+      SELECT gen_random_uuid(),id,'note','2026-09-02','2026-09-02' FROM organizations`);
+    const scans: any[] = [];
+    const query = async (sql: string, values?: any[]) => {
+      if (sql.includes("last_activity")) {
+        const result = await pg.query("EXPLAIN (ANALYZE, FORMAT JSON) " + sql, values);
+        const visit = (plan: any) => {
+          if (plan["Relation Name"] === "activities") scans.push(plan);
+          for (const child of plan.Plans ?? []) visit(child);
+        };
+        visit((result.rows[0] as any)["QUERY PLAN"][0].Plan);
+      }
+      return pg.query(sql, values);
+    };
+    await new DeadlineRulesService({ query, connect: async () => ({ query, release() {} }) } as any).evaluate(now);
+    expect(scans.length).toBeGreaterThan(0);
+    expect(scans.every(scan => scan["Actual Loops"] === 1)).toBe(true);
+    // The original October profile is recent; only the 20 September prospects qualify.
+    expect((await pg.query("SELECT * FROM deadline_notifications WHERE active")).rows).toHaveLength(20);
+  });
+  it("bounds reminder queries and idle transactions before acquiring application locks", async () => {
+    let limits: any;
+    const query = async (sql: string, values?: any[]) => {
+      if (sql.includes("pg_try_advisory_xact_lock")) {
+        limits = (await pg.query(`SELECT current_setting('statement_timeout') AS statement,
+          current_setting('idle_in_transaction_session_timeout') AS idle,
+          current_setting('lock_timeout') AS lock`)).rows[0];
+      }
+      return pg.query(sql, values);
+    };
+    await new DeadlineRulesService({ query, connect: async () => ({ query, release() {} }) } as any).evaluate(now);
+    expect(limits).toEqual({ statement: "20s", idle: "15s", lock: "3s" });
+    expect((await pg.query("SHOW statement_timeout")).rows[0]).toEqual({ statement_timeout: "0" });
+  });
   it("uses Mountain dates across UTC midnight and DST, rejecting impossible dates",()=>{
     expect(businessDay(new Date("2026-10-15T01:00:00Z"))).toBe("2026-10-14");
     expect(businessDay(new Date("2026-11-01T07:30:00Z"))).toBe("2026-11-01");
