@@ -14,3 +14,9 @@ Check the current remote branch before updating it and preserve any newer commit
 **Why:** Remote main can advance independently during local merge resolution, and stale local refs can conceal divergence.
 
 **How to apply:** Distinguish local merge completion from remote synchronization. For GitHub REST, read an individual ref through git/ref/heads/main, but update it through git/refs/heads/main.
+
+When uploading existing local commits through the connector, preserve their exact identities rather than creating replacement commits with the same files.
+
+**Why:** Matching trees and commit SHAs keeps local and GitHub history aligned instead of creating unnecessary divergence for the next pull.
+
+**How to apply:** Preserve commit metadata and message, verify uploaded tree and commit SHAs before a non-force branch update, then advance the local remote-tracking ref only after verifying GitHub.
