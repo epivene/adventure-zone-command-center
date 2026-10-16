@@ -20,6 +20,7 @@ export function createDeadlineRulesRouter(database: Database = pool) {
   };
   const invalidate=()=>database.query("UPDATE deadline_evaluation_state SET last_evaluated_at=NULL WHERE id=1");
   router.post("/deadline-rules/evaluate",wrap(async(_req,res)=>{res.json(await service.evaluate());}));
+  router.get("/deadline-rules/badge",wrap(async(_req,res)=>{res.json(await service.badge());}));
   router.get("/deadline-rules/summary",wrap(async(_req,res)=>{res.json(await service.summary());}));
   router.get("/deadline-rules",wrap(async(_req,res)=>{
     const rules=await database.query("SELECT * FROM deadline_rules ORDER BY created_at,id");

@@ -92,6 +92,7 @@ type ValidationRepository = {
   }): Promise<void>;
   getStatus(): Promise<GoogleValidationStatus>;
   listReviewItems(): Promise<GoogleValidationReviewItem[]>;
+  countPendingReviewItems?(): Promise<number>;
   upsertReviewItems(items: GoogleValidationReviewInput[]): Promise<void>;
   markProcessedMessageIds(messageIds: string[]): Promise<void>;
   ignoreReviewItem(input: {
@@ -344,6 +345,18 @@ export function createGoogleWorkspaceValidationRouter(options?: {
       }
     },
   );
+
+  router.get("/google-workspace/validation/review-count", async (_req, res): Promise<void> => {
+    try {
+      const count = validationRepository.countPendingReviewItems
+        ? await validationRepository.countPendingReviewItems()
+        : (await validationRepository.listReviewItems()).filter(item => item.state === "pending").length;
+      res.json({ count });
+    } catch (error) {
+      const code = safeError(error);
+      res.status(errorStatus(code)).json({ error: code });
+    }
+  });
 
   router.get(
     "/google-workspace/validation/review",

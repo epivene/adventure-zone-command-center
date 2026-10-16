@@ -18,6 +18,7 @@ function appWith(options: {
     now: Date;
   }) => Promise<void>;
   listReviewItems?: () => Promise<any[]>;
+  countPendingReviewItems?: () => Promise<number>;
   upsertReviewItems?: (items: any[]) => Promise<void>;
   markProcessedMessageIds?: (messageIds: string[]) => Promise<void>;
   getReviewThread?: (threadId: string) => Promise<any>;
@@ -61,6 +62,7 @@ function appWith(options: {
       validationRepository: {
         setDecision: options.setDecision ?? (async () => undefined),
         getStatus: async () => "ready_for_review",
+        countPendingReviewItems: options.countPendingReviewItems,
         listReviewItems: options.listReviewItems ?? (async () => []),
         ignoreReviewItem: options.ignoreReviewItem ?? (async () => undefined),
         upsertReviewItems: options.upsertReviewItems ?? (async () => undefined),
@@ -567,4 +569,13 @@ describe("Google Workspace recent validation route", () => {
       expect.objectContaining({ status: "rejected" }),
     );
   });
+});
+
+it("serves a lightweight pending count without fetching message details", async () => {
+  const listReviewItems=vi.fn(async()=>[]);
+  const app=appWith({countPendingReviewItems:async()=>267,listReviewItems});
+  const response=await request(app).get("/google-workspace/validation/review-count");
+  expect(response.status).toBe(200);
+  expect(response.body).toEqual({count:267});
+  expect(listReviewItems).not.toHaveBeenCalled();
 });

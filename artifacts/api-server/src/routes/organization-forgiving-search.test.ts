@@ -6,11 +6,12 @@ const fixtures = vi.hoisted(() => ({
   unrelated: "10000000-0000-4000-8000-000000000002",
   enrichedIds: [] as string[],
   corpusIds: [] as string[],
+  broad: false,
 }));
 vi.mock("@workspace/db", () => ({ db: { execute: async () => ({ rows: [] }) } }));
 vi.mock("@/features/organizations/organization-repository", () => ({
   DrizzleOrganizationRepository: class {
-    async listOrganizationIds() { return [fixtures.match, fixtures.unrelated]; }
+    organizationIdsQuery() { return [fixtures.match, fixtures.unrelated]; }
     async listOrganizations(_query: unknown, ids?: string[]) {
       fixtures.enrichedIds = ids ?? [fixtures.match, fixtures.unrelated];
       const records = fixtures.enrichedIds.map(id => ({ id, name: id === fixtures.match ? "Preston" : "Other", latestRecordedEventDate: { date: "2025-07-25", source: "festival_edition" } }));
@@ -19,7 +20,7 @@ vi.mock("@/features/organizations/organization-repository", () => ({
   },
 }));
 vi.mock("@/features/organizations/organization-search-corpus", () => ({
-  loadOrganizationSearchCorpus: async (_db: unknown, ids: string[]) => { fixtures.corpusIds = ids; return [
+  loadOrganizationSearchCorpus: async (_db: unknown, ids: string[]) => { fixtures.corpusIds = ids; return fixtures.broad ? Array.from({length:80},(_,i)=>({id:String(i).padStart(3,"0"),searchText:"Fair"})) : [
     { id: fixtures.match, searchText: "Preston Rodeo" },
     { id: fixtures.unrelated, searchText: "Unrelated Fair" },
   ]; },
@@ -40,4 +41,15 @@ it("matches lightweight search candidates before loading bookings, contacts and 
   expect(fixtures.enrichedIds).toEqual([fixtures.match]);
   expect(fixtures.corpusIds).toEqual([fixtures.match, fixtures.unrelated]);
   expect(result.body.organizations.records[0].latestRecordedEventDate).toEqual({ date: "2025-07-25", source: "festival_edition" });
+});
+
+it("loads only the requested page of a broad search while preserving totals", async () => {
+  fixtures.broad=true;
+  try {
+    const result=await request(express().use(router)).get("/organizations?q=fair&page=2&pageSize=25");
+    expect(result.status).toBe(200);
+    expect(fixtures.enrichedIds).toHaveLength(25);
+    expect(result.body.organizations).toMatchObject({total:80,page:2,pageSize:25,pageCount:4});
+    expect(result.body.organizations.records.map((r:any)=>r.id)).toEqual(Array.from({length:25},(_,i)=>String(i+25).padStart(3,"0")));
+  } finally { fixtures.broad=false; }
 });

@@ -925,12 +925,16 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     };
   }
 
-  async listOrganizationIds(query: OrganizationListQuery): Promise<string[]> {
-    const rows = await this.database.select({ id: organizations.id })
+  organizationIdsQuery(query: OrganizationListQuery) {
+    return this.database.select({ id: organizations.id })
       .from(organizations)
       .where(buildOrganizationListCondition(query))
       .orderBy(...buildOrganizationListOrderBy(query))
       .limit(query.pageSize);
+  }
+
+  async listOrganizationIds(query: OrganizationListQuery): Promise<string[]> {
+    const rows = await this.organizationIdsQuery(query);
     return rows.map(row => row.id);
   }
 

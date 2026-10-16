@@ -37,6 +37,16 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await pg.close();});
 describe("deadline dates and rules",()=>{
+  it("returns the same badge count without loading deadline sources or notification history", async () => {
+    await pg.query("UPDATE organizations SET created_at='2026-09-01' WHERE id=$1",[profile]);
+    await service.evaluate(now);
+    const summary = await service.summary();
+    // Badge reads must not need any of the expensive deadline source tables.
+    await pg.exec("DROP TABLE invoices");
+    expect(await service.badge()).toEqual({ count: summary.count, lastEvaluatedAt: summary.lastEvaluatedAt });
+    await pg.exec("UPDATE deadline_notifications SET dismissed_at=now()");
+    expect((await service.badge()).count).toBe(0);
+  });
   it("scans activity history once for an inactivity evaluation instead of once per profile", async () => {
     await pg.exec(`INSERT INTO organizations(id,name,created_at)
       SELECT gen_random_uuid(),'Prospect '||n,'2026-09-01' FROM generate_series(1,20) n;

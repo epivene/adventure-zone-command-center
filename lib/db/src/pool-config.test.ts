@@ -6,6 +6,7 @@ describe("databasePoolTimeouts", () => {
   it("releases stalled queries before they can exhaust the shared pool", () => {
     expect(databasePoolTimeouts()).toEqual({
       connectionTimeoutMillis: 5_000,
+      idleTimeoutMillis: 5 * 60_000,
       query_timeout: 30_000,
       statement_timeout: 15 * 60_000,
     });
