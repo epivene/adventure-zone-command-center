@@ -10,7 +10,7 @@ export class SyncReadModel {
     ).rows[0] ?? { mode: "off" };
     const counts = (
       await this.db.query(
-        `SELECT count(*) FILTER(WHERE generation>processed_generation)::int AS pending,count(*) FILTER(WHERE generation>processed_generation AND error_code IS NOT NULL)::int AS blocked FROM google_sync_jobs WHERE connection_id=$1`,
+        `SELECT count(*) FILTER(WHERE generation>processed_generation)::int AS pending,count(*) FILTER(WHERE generation>processed_generation AND error_code IS NOT NULL AND error_code<>'SYNC_OUTSIDE_COHORT')::int AS blocked FROM google_sync_jobs WHERE connection_id=$1`,
         [connectionId],
       )
     ).rows[0];

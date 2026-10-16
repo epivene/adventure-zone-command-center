@@ -48,6 +48,9 @@ it("paginates cached summaries without exposing draft bodies or other accounts",
       { threadId: "new-thread", subject: "New fair conversation" },
     ]);
     expect((await read.status(input.connectionId)).linkReview).toBe(1);
+    await db.query(`INSERT INTO google_sync_jobs(connection_id,thread_id,error_code) VALUES($1,'deferred','SYNC_OUTSIDE_COHORT'),($1,'failed','SYNC_PROVIDER_UNAVAILABLE'),($1,'queued',NULL)`,[input.connectionId]);
+    expect(await read.status(input.connectionId)).toMatchObject({pending:3,blocked:1});
+    expect((await db.query("SELECT error_code FROM google_sync_jobs WHERE thread_id='deferred'")).rows[0]).toMatchObject({error_code:"SYNC_OUTSIDE_COHORT"});
   } finally {
     await db.close();
   }
