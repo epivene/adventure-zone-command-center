@@ -33,8 +33,8 @@ export class MailboxSyncIngestor {
       } else if (c.phase === "mapped") {
         threads = (
           await this.repo.db.query<{ thread_id: string }>(
-            `SELECT DISTINCT thread_id FROM google_workspace_validation_mappings WHERE connection_id=$1 AND thread_id>$2 ORDER BY thread_id LIMIT 100`,
-            [a.connectionId, c.mappedAfter ?? ""],
+            `SELECT DISTINCT m.thread_id FROM google_workspace_validation_mappings m WHERE m.connection_id=$1 AND m.thread_id>$2 AND ($3=0 OR EXISTS(SELECT 1 FROM google_sync_enrollments e WHERE e.connection_id=m.connection_id AND e.profile_id=m.organization_id)) ORDER BY m.thread_id LIMIT 100`,
+            [a.connectionId, c.mappedAfter ?? "", a.cohortLimit],
           )
         ).rows.map((r) => r.thread_id);
         next = {
