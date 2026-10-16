@@ -122,6 +122,7 @@ export type GoogleThreadAttachment = {
 
 export type GoogleThreadMessage = {
   id: string;
+  labelIds?: string[];
   internalDateMs: number | null;
   from: string;
   to: string;

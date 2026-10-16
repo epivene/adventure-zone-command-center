@@ -49,6 +49,13 @@ function emptyRecentResult(): GoogleRecentValidationResult {
 }
 
 describe("GoogleSentProfileLinkSweepLoop", () => {
+  it("runs the bounded pilot on the existing schedule", async () => {
+    const scheduler=new FakeScheduler();
+    let observations=0;
+    const loop=new GoogleSentProfileLinkSweepLoop({scheduler,clock:{now:()=>new Date()},recent:{run:async()=>emptyRecentResult()},sentSweep:{run:async()=>({counts:{}} as any)},pilot:{run:async()=>{observations++;}}});
+    loop.start();scheduler.run(0);await settle();await loop.close();
+    expect(observations).toBe(1);
+  });
   it("keeps late-August sent mail inside the September catch-up window", () => {
     const septemberTenth = Date.parse("2026-09-10T13:00:00.000Z");
     const augustTwentyFifth = Date.parse("2026-08-25T00:00:00.000Z");

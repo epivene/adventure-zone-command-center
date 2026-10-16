@@ -16,6 +16,16 @@ export function createEmailThreadAttentionRouter(
     next();
   });
   const actor = { ownerId: "owner", connectorId: null };
+  r.get("/pilot", async (_req,res)=>{
+    const {readPilotSync}=await import("../features/google-workspace/google-pilot-sync-runtime");
+    res.json(await readPilotSync());
+  });
+  r.post("/pilot/sync", async (req,res)=>{
+    z.object({}).strict().parse(req.body);
+    const {pilotSync,readPilotSync}=await import("../features/google-workspace/google-pilot-sync-runtime");
+    await pilotSync.run();
+    res.json(await readPilotSync());
+  });
   r.get("/list", async (req, res) => {
     const input = z.object({gmailConnectionId:z.string().uuid(),state:z.enum(["needs_your_reply","waiting_for_their_reply"]),cursor:z.string().max(2000).optional(),limit:z.coerce.number().int().min(1).max(100).optional()}).strict().parse(req.query);
     res.json(await service.list(actor,input));
