@@ -3,7 +3,7 @@ import express from "express";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import { createChatGPTMcpRouter } from "../../routes/chatgpt-mcp";
-import { connectionScopes } from "./contracts";
+import { connectionScopes, ConnectionError } from "./contracts";
 const resource = "https://app.example/api/chatgpt/mcp";
 function setup(scopes = connectionScopes, enabled = true) {
   const search = vi.fn(async () => ({
@@ -27,7 +27,7 @@ function setup(scopes = connectionScopes, enabled = true) {
       allowedOrigins: ["https://app.example"],
       db: { query: async () => ({ rows: [{ calls: 1 }] }) },
       verify: async (token) => {
-        if (token !== "good") throw Error("bad");
+        if (token !== "good") throw new ConnectionError("CONNECTION_ACCESS_DENIED",401);
         return {
           ownerId: "owner",
           connectionId: randomUUID(),
@@ -84,6 +84,10 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
       "request_email_organize_access",
       "read_profile_note",
       "edit_profile_note",
+      "create_profile_contact", "list_app_records", "list_website_inquiries",
+      "preview_website_inquiry_processing", "process_website_inquiry", "read_app_record",
+      "read_profile_details", "read_website_inquiry", "save_profile_update",
+      "read_invoice_payment_context", "record_invoice_payment", "upload_payment_image",
     ].sort(),
   );
   const call = await rpc(app, "tools/call", {
@@ -158,7 +162,7 @@ it("advertises and blocks ungranted writes and rejects auth, host, origin, disab
     (await rpc(setup(connectionScopes, false).app, "tools/list")).status,
   ).toBe(503);
   expect(
-    (await rpc(app, "tools/call", { padding: "x".repeat(300000) })).status,
+    (await rpc(app, "tools/call", { padding: "x".repeat(7*1024*1024) })).status,
   ).toBe(413);
 });
 

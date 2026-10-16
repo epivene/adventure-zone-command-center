@@ -1,4 +1,5 @@
 import { createProfileContactInput, type ContactCreateService } from "./contact-create-service";
+import { invoicePaymentTools, type ConnectionInvoicePayments } from "./invoice-payment-tools";
 import { conventionTools, type ConnectionConventionService } from "./convention-tools";
 import { inquiryProcessInput, inquiryProcessApplyInput } from "./website-inquiry-processing";
 import { mappingRepairInput, mappingRepairApplyInput } from "./email-mapping-repair-service";
@@ -26,6 +27,7 @@ import { appRecordsInput, appRecordInput } from "./profile-record-reads";
 import { closeFollowupSchema, type DraftFollowupService } from "./draft-followup-service";
 import type { OperationStore } from "./operation-store";
 export type ConnectionServices = {
+  invoicePayments?: ConnectionInvoicePayments;
   contacts?: ContactCreateService;
   conventions?: ConnectionConventionService;
   inquiries?: WebsiteInquiryReads;
@@ -373,6 +375,7 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
     description:"Add an owner-authorized, source-verified contact to an existing profile. Read full email/source and current profile contacts first; use the exact profile revision from search_profiles. Supply verified name, email and role only, null for unknown email/title. Creates an active non-primary relationship, source note, audit and receipt; preserves all existing contacts. Duplicate email anywhere or same name on the profile blocks creation for review. Does not promote primary, retire predecessors, send mail, or infer a phone number. Reuse requestKey on identical retries and read back profile contacts.",
     schema:createProfileContactInput.extend({requestKey}).strict(),
     call:({requestKey,...a})=>{if(!s.contacts)throw new Error("CONTACT_CREATION_UNAVAILABLE");return s.contacts.create(p,{requestKey},a);}});
+  tools.push(...invoicePaymentTools(s.invoicePayments,p));
   return tools;
 }
 
