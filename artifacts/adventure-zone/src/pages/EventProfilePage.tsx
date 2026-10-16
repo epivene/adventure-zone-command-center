@@ -1,3 +1,4 @@
+import { ProfileCalendarAction } from "@/components/profiles/profile-calendar-action";
 import { ProfileDeadlines } from "@/features/deadline-rules/reminders";
 import { ProfileLegOperations } from '@/components/bookings/profile-leg-operations';
 import { ownerOperationsClient } from '@/features/bookings/booking-leg-operations-client';
@@ -218,6 +219,7 @@ export default function EventProfilePage() {
         {profileId ? <ProfileDeadlines key={profileId} profileId={profileId} /> : null}
         <FestivalProfileWorkspace key={profileId} profile={data} ratingSummary={data.wrapUpRatingSummary} profileEmails={profileEmails}
           onFollowUp={() => setFollowUpOpen(true)} onBack={goBack} originLabel={profileOrigin} onNoteSaved={loadProfile}
+          calendarAction={profileId ? <ProfileCalendarAction key={profileId} profileId={profileId} bookings={data.bookings ?? []} /> : null}
           toolsOpen={profileEditing || Boolean(profileSection) || action === "call" || researchOpen}
           legacyTools={
           <SimpleFullProfile

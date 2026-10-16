@@ -1,3 +1,5 @@
+import { sameEvent } from "./calendar-preview-model";
+import type { OperationalCalendarEventInput } from "./operational-calendar-client";
 import { allocationEnabled } from "@/features/outreach-planner/outreach-allocation";
 import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { createHash } from "node:crypto";
@@ -180,6 +182,22 @@ export class OperationalCalendarImportService {
         calendarId: connection.calendarId,
         googleEventId: event.id,
       });
+      // Reviewed profile buffers are calendar-only planning choices. Import must not
+      // promote them into contract/booking facts or discard their source/audit link.
+      if (existingLink?.lastAppSnapshot.profilePreviewId) {
+        const unchanged = sameEvent(event, existingLink.lastAppSnapshot as OperationalCalendarEventInput);
+        if (!unchanged) {
+          await this.links.createReview({ connectionId: connection.connectionId, calendarId: connection.calendarId,
+            googleEventId: event.id, bookingId: existingLink.bookingId, linkId: existingLink.id,
+            reason: "A reviewed profile calendar entry changed. Review it from the event profile.",
+            proposedChanges: { google: event, app: existingLink.lastAppSnapshot } });
+          review += 1;
+        } else { matched += 1; }
+        results.push({ googleEventId: event.id, title, outcome: unchanged ? "already_linked" : "review",
+          bookingId: existingLink.bookingId, bookingName: await this.bookingName(existingLink.bookingId),
+          reason: unchanged ? null : "Review the changed profile calendar entry." });
+        continue;
+      }
       const parsed = parseDavidOperationalCalendarEvent({ summary: event.summary, description: event.description });
       const managerLegId = await this.findLegId(parsed.managerToken);
       const preflightReviewReason = operationalCalendarReviewReason({
