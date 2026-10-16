@@ -4,11 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ensureProfileFillerSchemaBeforeListen } from "./profile-filler-required-startup";
 
+const readyRows = ["filler","filler_reason","filler_changed_at"].map((attname,i)=>({attname,attnum:i+1,type_oid:"mock",attnotnull:false,default_tree:null,constraint_tree:"mock",contype:"c",convalidated:true,connoinherit:false,enforced:true}));
 function fakeClient(locked = true, ready = false) {
   return {
     query: vi.fn(async (sql: string) => ({
       rows: sql.includes("pg_try_advisory_xact_lock") ? [{ locked }]
-        : sql.includes("as ready") ? [{ ready }] : [],
+        : sql.includes("from pg_catalog.pg_class") ? (ready ? readyRows : []) : [],
     })),
     release: vi.fn(),
   };
@@ -71,7 +72,7 @@ describe("ensureProfileFillerSchemaBeforeListen", () => {
       client.query.mockImplementation(async (sql) => ({
         rows: sql.includes("pg_try_advisory_xact_lock")
           ? [{ locked: ++attempts > 1 }]
-          : sql.includes("as ready") ? [{ ready: false }] : [],
+          : sql.includes("from pg_catalog.pg_class") ? [] : [],
       }));
       const ensureSchema = vi.fn(async () => true);
       const result = expect(ensureProfileFillerSchemaBeforeListen({
@@ -90,7 +91,7 @@ describe("ensureProfileFillerSchemaBeforeListen", () => {
   it("destroys a read-timed-out connection without queuing rollback or unlock", async () => {
     const client = fakeClient(true);
     client.query.mockImplementation(async (sql: string) => {
-      if (sql.includes("as ready")) throw new Error("Query read timeout");
+      if (sql.includes("from pg_catalog.pg_class")) throw new Error("Query read timeout");
       return { rows: [] };
     });
     await expect(

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,48 +7,33 @@ type MigrationClient = {
   query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }>;
 };
 
-const profileFillerReadinessSql = `
-  with target as materialized (
-    select to_regclass(current_schema() || '.organizations') as oid
-  ), filler_columns as materialized (
-    select a.attrelid, a.attnum, a.attname, a.atttypid, a.attnotnull
-    from pg_attribute a
-    join target t on t.oid = a.attrelid
-    where a.attnum > 0 and not a.attisdropped
-      and a.attname in ('filler', 'filler_reason', 'filler_changed_at')
-  ), filler_constraint as materialized (
-    select c.oid, c.contype, c.convalidated
-    from pg_constraint c
-    join target t on t.oid = c.conrelid
-    where c.conname = 'organizations_filler_reason_required'
-  )
-  select (
-    target.oid is not null
-    and (
-      select count(*) = 3
-      from filler_columns
-      where (attname = 'filler' and atttypid = 'boolean'::regtype and attnotnull)
-        or (attname = 'filler_reason' and atttypid = 'text'::regtype and not attnotnull)
-        or (attname = 'filler_changed_at' and atttypid = 'timestamptz'::regtype and not attnotnull)
-    )
-    and exists (
-      select 1
-      from filler_columns a
-      join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
-      where a.attname = 'filler'
-        and lower(pg_get_expr(d.adbin, d.adrelid)) = 'false'
-    )
-    and exists (
-      select 1
-      from filler_constraint
-      where contype = 'c'
-        and convalidated
-        and regexp_replace(lower(pg_get_constraintdef(oid)), '\\s+', '', 'g')
-          = 'check(((notfiller)or(nullif(btrim(filler_reason),''''::text)isnotnull)))'
-    )
-  ) as ready
-  from target
+// Do not resolve/deparse the live relation: to_regclass and expression
+// deparsers can acquire relation locks behind an overlapping deployment.
+const catalogSql = (namespace: string, table: string) => `
+ select a.attname, a.attnum, a.atttypid::text as type_oid, a.attnotnull,
+        d.adbin::text as default_tree, c.conbin::text as constraint_tree,
+        c.contype, c.convalidated, c.connoinherit,
+        coalesce((to_jsonb(c)->>'conenforced')::boolean, true) as enforced
+ from pg_catalog.pg_class r
+ join pg_catalog.pg_namespace n on n.oid = r.relnamespace
+ join pg_catalog.pg_attribute a on a.attrelid = r.oid
+ left join pg_catalog.pg_attrdef d on d.adrelid = r.oid and d.adnum = a.attnum
+ left join pg_catalog.pg_constraint c on c.conrelid = r.oid
+   and c.conname = 'organizations_filler_reason_required'
+ where ${namespace} and r.relname = '${table}' and r.relkind in ('r','p')
+   and a.attnum > 0 and not a.attisdropped
+   and a.attname in ('filler','filler_reason','filler_changed_at')
 `;
+
+function normalizeTree(value: unknown, columns: Array<Record<string, unknown>>) {
+  if (typeof value !== "string") return null;
+  const names = new Map(columns.map(c => [String(c.attnum), String(c.attname)]));
+  // Only source positions and attribute numbers differ between the live table
+  // and the reference. Preserve all operators, types, functions and constants.
+  return value.replace(/:location -?\d+/g, ":location -1")
+    .replace(/:(varattno|varattnosyn) (-?\d+)/g,
+      (_all, field, number) => `:${field} ${names.get(number) ?? number}`);
+}
 
 async function loadProfileFillerMigrationSql() {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -76,8 +62,38 @@ async function loadProfileFillerMigrationSql() {
 }
 
 export async function isProfileFillerSchemaReady(client: MigrationClient): Promise<boolean> {
-  const result = await client.query(profileFillerReadinessSql);
-  return result.rows[0]?.["ready"] === true;
+  const actual = (await client.query(catalogSql("n.nspname = current_schema()", "organizations"))).rows;
+  if (actual.length !== 3) return false;
+  // Let this PostgreSQL server parse the expected contract. This avoids
+  // hardcoding version-specific pg_node_tree representations or weakening the
+  // check to a constraint name/column list. Only a disposable temp table is used.
+  const reference = `az_filler_contract_${randomUUID().replaceAll("-", "")}`;
+  await client.query(`CREATE TEMP TABLE ${reference} (
+    filler boolean NOT NULL DEFAULT false,
+    filler_reason text,
+    filler_changed_at timestamptz,
+    CONSTRAINT organizations_filler_reason_required
+      CHECK (NOT filler OR nullif(pg_catalog.btrim(filler_reason), '') IS NOT NULL)
+  )`);
+  let failed = false;
+  try {
+    const expected = (await client.query(catalogSql("n.oid = pg_my_temp_schema()", reference))).rows;
+    return expected.length === 3 && expected.every(e => {
+      const a = actual.find(a => a.attname === e.attname);
+      return a && a.type_oid === e.type_oid && a.attnotnull === e.attnotnull
+        && a.contype === "c" && a.convalidated === true && a.connoinherit === false
+        && a.enforced === true
+        && normalizeTree(a.default_tree, actual) === normalizeTree(e.default_tree, expected)
+        && normalizeTree(a.constraint_tree, actual) === normalizeTree(e.constraint_tree, expected);
+    });
+  } catch (error) {
+    failed = true;
+    throw error;
+  } finally {
+    // On failure the caller rolls back/destroys the connection. In particular,
+    // never queue cleanup behind a client-side read timeout.
+    if (!failed) await client.query(`DROP TABLE pg_temp.${reference}`);
+  }
 }
 
 export async function ensureProfileFillerSchema(
