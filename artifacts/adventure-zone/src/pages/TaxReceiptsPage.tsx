@@ -4,11 +4,14 @@ import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@workspace/avz-crm/components/ui/empty";
 import { Input } from "@workspace/avz-crm/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/avz-crm/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/avz-crm/components/ui/tabs";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
 import { describeError, exportCsv, listRecords, type RecordsResponse, type TaxRecord } from "@/features/agent-tax/client";
 import { RecordFormDialog } from "@/components/agent-tax/RecordFormDialog";
 import { DeleteRecordDialog } from "@/components/agent-tax/ConfirmDialogs";
 import { RecordList } from "@/components/agent-tax/RecordList";
+import { PayTab } from "@/components/agent-tax/PayTab";
+import { EstimateTab } from "@/components/agent-tax/EstimateTab";
 import { SummaryCards } from "@/components/agent-tax/SummaryCards";
 
 const LIMIT = 25;
@@ -28,6 +31,8 @@ export default function TaxReceiptsPage() {
   const [exporting, setExporting] = useState(false);
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
+  const [ledgerKey, setLedgerKey] = useState(0);
+  const ledgerChanged = useCallback(() => { setTick((t) => t + 1); setLedgerKey((k) => k + 1); }, []);
 
   useEffect(() => {
     const t = window.setTimeout(() => { setQ(qInput.trim()); setPage(1); }, 300);
@@ -60,10 +65,17 @@ export default function TaxReceiptsPage() {
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">Admin, owner only</p>
         <h1 className="mt-1 text-3xl font-bold text-foreground">Tax & Receipts</h1>
         <p className="mt-2 text-muted-foreground">
-          A private record for self-employed / 1099 booking-agent work: documents, income and expenses kept for tax preparation. Only you can see this in Admin. Do not store Social Security or account numbers here. Totals are recorded income minus expenses, not taxes owed or a determination of deductibility. Save tax payment receipts as documents.
+          A private personal booking-agent finance workspace for self-employed / 1099 booking-agent work: documents, income and expenses kept for tax preparation. Only you can see this in Admin. Do not store Social Security or account numbers here. Totals are recorded income minus expenses, not taxes owed or a determination of deductibility. Save tax payment receipts as documents.
         </p>
       </header>
 
+      <Tabs defaultValue="records" className="grid gap-4">
+        <TabsList className="h-auto w-full flex-wrap justify-start sm:w-fit">
+          <TabsTrigger value="records">Records</TabsTrigger>
+          <TabsTrigger value="pay">Pay owed to me</TabsTrigger>
+          <TabsTrigger value="estimate">Tax estimate</TabsTrigger>
+        </TabsList>
+        <TabsContent value="records" className="grid gap-5">
       {data && !data.storageAvailable ? (
         <Alert><AlertTitle>File storage unavailable</AlertTitle><AlertDescription>You can keep entries, but attachments cannot be uploaded or opened right now.</AlertDescription></Alert>
       ) : null}
@@ -109,8 +121,13 @@ export default function TaxReceiptsPage() {
         </div>
       ) : null}
 
-      <RecordFormDialog open={formOpen} record={editing} defaultYear={year ?? new Date().getFullYear()} onClose={() => setFormOpen(false)} onSaved={reload} />
-      <DeleteRecordDialog record={deleting} onCancel={() => setDeleting(null)} onDeleted={() => { setDeleting(null); reload(); }} />
+        </TabsContent>
+        <TabsContent value="pay"><PayTab onLedgerChanged={ledgerChanged} /></TabsContent>
+        <TabsContent value="estimate" forceMount className="data-[state=inactive]:hidden"><EstimateTab refreshKey={ledgerKey} /></TabsContent>
+      </Tabs>
+
+      <RecordFormDialog open={formOpen} record={editing} defaultYear={year ?? new Date().getFullYear()} onClose={() => setFormOpen(false)} onSaved={ledgerChanged} />
+      <DeleteRecordDialog record={deleting} onCancel={() => setDeleting(null)} onDeleted={() => { setDeleting(null); ledgerChanged(); }} />
     </div>
   );
 }

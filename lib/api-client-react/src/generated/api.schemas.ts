@@ -314,6 +314,409 @@ export interface HealthStatus {
   status: string;
 }
 
+export type AgentTaxInputEntryType = typeof AgentTaxInputEntryType[keyof typeof AgentTaxInputEntryType];
+
+
+export const AgentTaxInputEntryType = {
+  income: 'income',
+  expense: 'expense',
+  document: 'document',
+} as const;
+
+export type AgentTaxInputCategory = typeof AgentTaxInputCategory[keyof typeof AgentTaxInputCategory];
+
+
+export const AgentTaxInputCategory = {
+  commission: 'commission',
+  travel: 'travel',
+  supplies: 'supplies',
+  fees: 'fees',
+  tax_form: 'tax_form',
+  other: 'other',
+} as const;
+
+export type AgentTaxInputPaymentMethod = typeof AgentTaxInputPaymentMethod[keyof typeof AgentTaxInputPaymentMethod];
+
+
+export const AgentTaxInputPaymentMethod = {
+  venmo: 'venmo',
+  cash: 'cash',
+  bank: 'bank',
+  check: 'check',
+  card: 'card',
+  other: 'other',
+} as const;
+
+export interface AgentTaxInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  title: string;
+  entryType: AgentTaxInputEntryType;
+  /**
+     * @minimum 0
+     * @maximum 1000000000
+     * @nullable
+     */
+  amountCents: number | null;
+  /** @nullable */
+  recordDate: string | null;
+  /**
+     * @minimum 1900
+     * @maximum 2200
+     */
+  taxYear: number;
+  category: AgentTaxInputCategory;
+  paymentMethod: AgentTaxInputPaymentMethod;
+  /**
+     * @maxLength 250
+     * @nullable
+     */
+  counterparty: string | null;
+  /**
+     * @maxLength 5000
+     * @nullable
+     */
+  notes: string | null;
+  /** @nullable */
+  bookingId: string | null;
+}
+
+export type AgentTaxUpdate = AgentTaxInput & {
+  /** @minimum 1 */
+  expectedRevision: number;
+};
+
+export type AgentTaxRecord = AgentTaxInput & ({
+  id: string;
+  /** @nullable */
+  bookingLabel: string | null;
+  /** @nullable */
+  payItemId: string | null;
+  /** @nullable */
+  fileName: string | null;
+  /** @nullable */
+  fileMime: string | null;
+  /** @nullable */
+  fileSize: number | null;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+});
+
+export interface AgentTaxMutation {
+  record: AgentTaxRecord;
+}
+
+export type AgentTaxDeleteConfirmation = typeof AgentTaxDeleteConfirmation[keyof typeof AgentTaxDeleteConfirmation];
+
+
+export const AgentTaxDeleteConfirmation = {
+  DELETE: 'DELETE',
+} as const;
+
+export interface AgentTaxDelete {
+  confirmation: AgentTaxDeleteConfirmation;
+  /** @minimum 1 */
+  expectedRevision: number;
+}
+
+/**
+ * @minimum 0
+ * @maximum 1000000000
+ */
+export type AgentMoney = number;
+
+export type AgentPayInputKind = typeof AgentPayInputKind[keyof typeof AgentPayInputKind];
+
+
+export const AgentPayInputKind = {
+  weekly: 'weekly',
+  manual: 'manual',
+} as const;
+
+export interface AgentPayInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  title: string;
+  kind: AgentPayInputKind;
+  earnedDate: string;
+  /** @nullable */
+  dueDate: string | null;
+  /**
+     * @minimum 1
+     * @maximum 1000000000
+     */
+  amountCents: number;
+  /**
+     * @maxLength 5000
+     * @nullable
+     */
+  notes: string | null;
+}
+
+export type AgentPayUpdate = AgentPayInput & {
+  /** @minimum 1 */
+  expectedRevision: number;
+};
+
+export type AgentPayPaymentPaymentMethod = typeof AgentPayPaymentPaymentMethod[keyof typeof AgentPayPaymentPaymentMethod];
+
+
+export const AgentPayPaymentPaymentMethod = {
+  venmo: 'venmo',
+  cash: 'cash',
+  bank: 'bank',
+  check: 'check',
+  card: 'card',
+  other: 'other',
+} as const;
+
+export interface AgentPayPayment {
+  id: string;
+  title: string;
+  amountCents: number;
+  recordDate: string;
+  paymentMethod: AgentPayPaymentPaymentMethod;
+}
+
+export type AgentPayItem = AgentPayInput & {
+  id: string;
+  paidCents: number;
+  remainingCents: number;
+  revision: number;
+  createdAt: string;
+  payments: AgentPayPayment[];
+};
+
+export interface AgentPayMutation {
+  item: AgentPayItem;
+}
+
+export type AgentPayPaymentInputPaymentMethod = typeof AgentPayPaymentInputPaymentMethod[keyof typeof AgentPayPaymentInputPaymentMethod];
+
+
+export const AgentPayPaymentInputPaymentMethod = {
+  venmo: 'venmo',
+  cash: 'cash',
+  bank: 'bank',
+  check: 'check',
+  card: 'card',
+  other: 'other',
+} as const;
+
+export interface AgentPayPaymentInput {
+  /**
+     * @minimum 1
+     * @maximum 1000000000
+     */
+  amountCents: number;
+  recordDate: string;
+  paymentMethod: AgentPayPaymentInputPaymentMethod;
+  /**
+     * @maxLength 250
+     * @nullable
+     */
+  counterparty: string | null;
+  /**
+     * @maxLength 5000
+     * @nullable
+     */
+  notes: string | null;
+  /** @minimum 1 */
+  expectedRevision: number;
+  paymentRequestId: string;
+}
+
+export type AgentEstimateSettingsFilingStatus = typeof AgentEstimateSettingsFilingStatus[keyof typeof AgentEstimateSettingsFilingStatus];
+
+
+export const AgentEstimateSettingsFilingStatus = {
+  single: 'single',
+  married_joint: 'married_joint',
+  married_separate: 'married_separate',
+  head_household: 'head_household',
+} as const;
+
+export interface AgentEstimateSettings {
+  filingStatus: AgentEstimateSettingsFilingStatus;
+  fullYearNdResident: true;
+  additionalIncomeCents: AgentMoney;
+  additionalExpensesCents: AgentMoney;
+  nonDeductibleExpensesCents: AgentMoney;
+  wagesCents: AgentMoney;
+  ownSocialSecurityWagesCents: AgentMoney;
+  medicareWagesCents: AgentMoney;
+  otherIncomeCents: AgentMoney;
+  otherAdjustmentsCents: AgentMoney;
+  /**
+     * @minimum 0
+     * @maximum 1000000000
+     * @nullable
+     */
+  deductionOverrideCents: number | null;
+  qbiDeductionCents: AgentMoney;
+  /**
+     * @minimum -1000000000
+     * @maximum 1000000000
+     */
+  ndAdjustmentCents: number;
+  federalCreditsCents: AgentMoney;
+  ndCreditsCents: AgentMoney;
+  federalWithholdingCents: AgentMoney;
+  ndWithholdingCents: AgentMoney;
+  federalPaymentsCents: AgentMoney;
+  ndPaymentsCents: AgentMoney;
+}
+
+export interface AgentEstimateUpdate {
+  settings: AgentEstimateSettings;
+  /** @minimum 0 */
+  expectedRevision: number;
+}
+
+export interface AgentEstimate {
+  projectedProfitCents: number;
+  netSelfEmploymentEarningsCents: number;
+  selfEmploymentTaxCents: number;
+  halfSelfEmploymentDeductionCents: number;
+  additionalMedicareTaxCents: number;
+  adjustedGrossIncomeCents: number;
+  deductionCents: number;
+  qbiDeductionCents: number;
+  federalTaxableIncomeCents: number;
+  federalIncomeTaxCents: number;
+  ndTaxableIncomeCents: number;
+  ndIncomeTaxCents: number;
+  federalLiabilityCents: number;
+  totalLiabilityCents: number;
+  federalBalanceCents: number;
+  ndBalanceCents: number;
+  remainingToSetAsideCents: number;
+}
+
+export interface AgentEstimateSource {
+  title: string;
+  url: string;
+}
+
+export type AgentEstimateResponseRecorded = {
+  incomeCents: number;
+  expenseCents: number;
+  profitCents: number;
+};
+
+export interface AgentEstimateResponse {
+  settings: AgentEstimateSettings | null;
+  revision: number;
+  recorded: AgentEstimateResponseRecorded;
+  estimate: AgentEstimate | null;
+  supportedYears: number[];
+  sources: AgentEstimateSource[];
+  warnings: string[];
+}
+
+export type ListAgentPayParams = {
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+};
+
+export type ListAgentPay200Summary = {
+  earnedCents: number;
+  paidCents: number;
+  remainingCents: number;
+  overdueCents: number;
+};
+
+export type ListAgentPay200 = {
+  items: AgentPayItem[];
+  total: number;
+  summary: ListAgentPay200Summary;
+};
+
+export type DeleteAgentPay200 = {
+  ok: boolean;
+};
+
+export type ReceiveAgentPay201 = {
+  item: AgentPayItem;
+  recordId: string;
+};
+
+export type ListAgentTaxRecordsParams = {
+/**
+ * @minimum 1900
+ * @maximum 2200
+ */
+year?: number;
+/**
+ * @maxLength 200
+ */
+q?: string;
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+};
+
+export type ListAgentTaxRecords200Summary = {
+  incomeCents: number;
+  expenseCents: number;
+  netCents: number;
+  recordCount: number;
+};
+
+export type ListAgentTaxRecords200 = {
+  records: AgentTaxRecord[];
+  total: number;
+  years: number[];
+  storageAvailable: boolean;
+  summary: ListAgentTaxRecords200Summary;
+};
+
+export type DeleteAgentTaxRecord200 = {
+  ok: boolean;
+};
+
+export type ExportAgentTaxRecordsParams = {
+/**
+ * @minimum 1900
+ * @maximum 2200
+ */
+year: number;
+};
+
+export type SearchAgentTaxBookingsParams = {
+/**
+ * @maxLength 200
+ */
+q?: string;
+};
+
+export type SearchAgentTaxBookings200BookingsItem = {
+  id: string;
+  label: string;
+};
+
+export type SearchAgentTaxBookings200 = {
+  bookings: SearchAgentTaxBookings200BookingsItem[];
+};
+
 export type SearchFestivalVenue200 = {
   candidates: FestivalVenuePin[];
 };

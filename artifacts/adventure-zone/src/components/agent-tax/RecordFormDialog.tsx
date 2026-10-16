@@ -48,6 +48,7 @@ export function RecordFormDialog({ open, record, defaultYear, onClose, onSaved }
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }));
   const money = f.entryType !== "document";
   const hasFile = !!current?.fileName;
+  const payLinked = !!current?.payItemId;
 
   function pickFile(next: File | null) {
     setFileMsg(null); setConfirmReplace(false);
@@ -124,7 +125,7 @@ export function RecordFormDialog({ open, record, defaultYear, onClose, onSaved }
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{record ? "Edit entry" : "New entry"}</DialogTitle>
-          <DialogDescription>Private to the owner. Do not enter Social Security or account numbers. Nothing is saved until you press Save.</DialogDescription>
+          <DialogDescription>{payLinked ? "This income entry came from a pay payment. Amount, date, year, type and payment method are locked; to correct them, delete this entry with confirmation and record the payment again. " : ""}Private to the owner. Do not enter Social Security or account numbers. Nothing is saved until you press Save.</DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={submit} noValidate>
           {formError ? (
@@ -142,24 +143,24 @@ export function RecordFormDialog({ open, record, defaultYear, onClose, onSaved }
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label>Type</Label>
-                <Select value={f.entryType} onValueChange={(v) => set("entryType", v as EntryType)}>
+                <Select disabled={payLinked} value={f.entryType} onValueChange={(v) => set("entryType", v as EntryType)}>
                   <SelectTrigger aria-label="Type"><SelectValue /></SelectTrigger>
                   <SelectContent>{ENTRY_TYPES.map((t) => <SelectItem key={t} value={t}>{labelOf(t)}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="tax-amount">Amount (USD){money ? "" : " optional"}</Label>
-                <Input id="tax-amount" inputMode="decimal" placeholder="0.00" value={f.amount} onChange={(e) => set("amount", e.target.value)} aria-invalid={!!errors.amount} />
+                <Input id="tax-amount" disabled={payLinked} inputMode="decimal" placeholder="0.00" value={f.amount} onChange={(e) => set("amount", e.target.value)} aria-invalid={!!errors.amount} />
                 {errors.amount ? <p className="text-sm text-destructive">{errors.amount}</p> : null}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="tax-date">Date{money ? "" : " optional"}</Label>
-                <Input id="tax-date" type="date" value={f.date} onChange={(e) => { const d = e.target.value; setF((p) => ({ ...p, date: d, year: d ? d.slice(0, 4) : p.year })); }} aria-invalid={!!errors.date} />
+                <Input id="tax-date" disabled={payLinked} type="date" value={f.date} onChange={(e) => { const d = e.target.value; setF((p) => ({ ...p, date: d, year: d ? d.slice(0, 4) : p.year })); }} aria-invalid={!!errors.date} />
                 {errors.date ? <p className="text-sm text-destructive">{errors.date}</p> : null}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="tax-year">Tax year</Label>
-                <Input id="tax-year" inputMode="numeric" value={f.year} onChange={(e) => set("year", e.target.value)} readOnly={money && !!f.date} aria-invalid={!!errors.year} />
+                <Input id="tax-year" inputMode="numeric" value={f.year} onChange={(e) => set("year", e.target.value)} readOnly={payLinked || (money && !!f.date)} aria-invalid={!!errors.year} />
                 {errors.year ? <p className="text-sm text-destructive">{errors.year}</p> : null}
               </div>
               <div className="grid gap-2">
@@ -171,7 +172,7 @@ export function RecordFormDialog({ open, record, defaultYear, onClose, onSaved }
               </div>
               <div className="grid gap-2">
                 <Label>Payment method</Label>
-                <Select value={f.method} onValueChange={(v) => set("method", v as PaymentMethod)}>
+                <Select disabled={payLinked} value={f.method} onValueChange={(v) => set("method", v as PaymentMethod)}>
                   <SelectTrigger aria-label="Payment method"><SelectValue /></SelectTrigger>
                   <SelectContent>{METHODS.map((t) => <SelectItem key={t} value={t}>{labelOf(t)}</SelectItem>)}</SelectContent>
                 </Select>

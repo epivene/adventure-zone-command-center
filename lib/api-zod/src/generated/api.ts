@@ -8,6 +8,943 @@
 import * as zod from 'zod';
 
 
+/**
+ * Owner bearer only; all-date totals, never shared.
+ */
+export const listAgentPayQueryPageDefault = 1;
+
+export const listAgentPayQueryLimitDefault = 25;
+export const listAgentPayQueryLimitMax = 100;
+
+
+
+export const ListAgentPayQueryParams = zod.object({
+  "page": zod.coerce.number().int().min(1).default(listAgentPayQueryPageDefault),
+  "limit": zod.coerce.number().int().min(1).max(listAgentPayQueryLimitMax).default(listAgentPayQueryLimitDefault)
+})
+
+export const listAgentPayResponseItemsItemOneTitleMax = 200;
+
+export const listAgentPayResponseItemsItemOneAmountCentsMax = 1000000000;
+
+export const listAgentPayResponseItemsItemOneNotesMax = 5000;
+
+
+
+export const ListAgentPayResponse = zod.object({
+  "items": zod.array(zod.object({
+  "title": zod.string().min(1).max(listAgentPayResponseItemsItemOneTitleMax),
+  "kind": zod.enum(['weekly', 'manual']),
+  "earnedDate": zod.string().date(),
+  "dueDate": zod.string().date().nullable(),
+  "amountCents": zod.number().int().min(1).max(listAgentPayResponseItemsItemOneAmountCentsMax),
+  "notes": zod.string().max(listAgentPayResponseItemsItemOneNotesMax).nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "paidCents": zod.number(),
+  "remainingCents": zod.number(),
+  "revision": zod.number().int(),
+  "createdAt": zod.string().datetime({"offset":true}),
+  "payments": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "title": zod.string(),
+  "amountCents": zod.number().int(),
+  "recordDate": zod.string().date(),
+  "paymentMethod": zod.enum(['venmo', 'cash', 'bank', 'check', 'card', 'other'])
+}))
+}))),
+  "total": zod.number().int(),
+  "summary": zod.object({
+  "earnedCents": zod.number(),
+  "paidCents": zod.number(),
+  "remainingCents": zod.number(),
+  "overdueCents": zod.number()
+})
+})
+
+
+export const createAgentPayBodyTitleMax = 200;
+
+export const createAgentPayBodyAmountCentsMax = 1000000000;
+
+export const createAgentPayBodyNotesMax = 5000;
+
+
+
+export const CreateAgentPayBody = zod.object({
+  "title": zod.string().min(1).max(createAgentPayBodyTitleMax),
+  "kind": zod.enum(['weekly', 'manual']),
+  "earnedDate": zod.string().date(),
+  "dueDate": zod.string().date().nullable(),
+  "amountCents": zod.number().int().min(1).max(createAgentPayBodyAmountCentsMax),
+  "notes": zod.string().max(createAgentPayBodyNotesMax).nullable()
+})
+
+export const createAgentPayResponseItemOneTitleMax = 200;
+
+export const createAgentPayResponseItemOneAmountCentsMax = 1000000000;
+
+export const createAgentPayResponseItemOneNotesMax = 5000;
+
+
+
+export const CreateAgentPayResponse = zod.object({
+  "item": zod.object({
+  "title": zod.string().min(1).max(createAgentPayResponseItemOneTitleMax),
+  "kind": zod.enum(['weekly', 'manual']),
+  "earnedDate": zod.string().date(),
+  "dueDate": zod.string().date().nullable(),
+  "amountCents": zod.number().int().min(1).max(createAgentPayResponseItemOneAmountCentsMax),
+  "notes": zod.string().max(createAgentPayResponseItemOneNotesMax).nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "paidCents": zod.number(),
+  "remainingCents": zod.number(),
+  "revision": zod.number().int(),
+  "createdAt": zod.string().datetime({"offset":true}),
+  "payments": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "title": zod.string(),
+  "amountCents": zod.number().int(),
+  "recordDate": zod.string().date(),
+  "paymentMethod": zod.enum(['venmo', 'cash', 'bank', 'check', 'card', 'other'])
+}))
+}))
+})
+
+
+export const UpdateAgentPayParams = zod.object({
+  "id": zod.string().uuid()
+})
+
+export const updateAgentPayBodyOneTitleMax = 200;
+
+export const updateAgentPayBodyOneAmountCentsMax = 1000000000;
+
+export const updateAgentPayBodyOneNotesMax = 5000;
+
+
+
+
+export const UpdateAgentPayBody = zod.object({
+  "title": zod.string().min(1).max(updateAgentPayBodyOneTitleMax),
+  "kind": zod.enum(['weekly', 'manual']),
+  "earnedDate": zod.string().date(),
+  "dueDate": zod.string().date().nullable(),
+  "amountCents": zod.number().int().min(1).max(updateAgentPayBodyOneAmountCentsMax),
+  "notes": zod.string().max(updateAgentPayBodyOneNotesMax).nullable()
+}).and(zod.object({
+  "expectedRevision": zod.number().int().min(1)
+}))
+
+export const updateAgentPayResponseItemOneTitleMax = 200;
+
+export const updateAgentPayResponseItemOneAmountCentsMax = 1000000000;
+
+export const updateAgentPayResponseItemOneNotesMax = 5000;
+
+
+
+export const UpdateAgentPayResponse = zod.object({
+  "item": zod.object({
+  "title": zod.string().min(1).max(updateAgentPayResponseItemOneTitleMax),
+  "kind": zod.enum(['weekly', 'manual']),
+  "earnedDate": zod.string().date(),
+  "dueDate": zod.string().date().nullable(),
+  "amountCents": zod.number().int().min(1).max(updateAgentPayResponseItemOneAmountCentsMax),
+  "notes": zod.string().max(updateAgentPayResponseItemOneNotesMax).nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "paidCents": zod.number(),
+  "remainingCents": zod.number(),
+  "revision": zod.number().int(),
+  "createdAt": zod.string().datetime({"offset":true}),
+  "payments": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "title": zod.string(),
+  "amountCents": zod.number().int(),
+  "recordDate": zod.string().date(),
+  "paymentMethod": zod.enum(['venmo', 'cash', 'bank', 'check', 'card', 'other'])
+}))
+}))
+})
+
+
+export const DeleteAgentPayParams = zod.object({
+  "id": zod.string().uuid()
+})
+
+
+
+
+export const DeleteAgentPayBody = zod.object({
+  "confirmation": zod.enum(['DELETE']),
+  "expectedRevision": zod.number().int().min(1)
+})
+
+export const DeleteAgentPayResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * Owner only. Atomically records payment and one income entry. Stable retry UUID prevents duplicate income.
+ */
+export const ReceiveAgentPayParams = zod.object({
+  "id": zod.string().uuid()
+})
+
+export const receiveAgentPayBodyAmountCentsMax = 1000000000;
+
+export const receiveAgentPayBodyCounterpartyMax = 250;
+
+export const receiveAgentPayBodyNotesMax = 5000;
+
+
+
+
+export const ReceiveAgentPayBody = zod.object({
+  "amountCents": zod.number().int().min(1).max(receiveAgentPayBodyAmountCentsMax),
+  "recordDate": zod.string().date(),
+  "paymentMethod": zod.enum(['venmo', 'cash', 'bank', 'check', 'card', 'other']),
+  "counterparty": zod.string().max(receiveAgentPayBodyCounterpartyMax).nullable(),
+  "notes": zod.string().max(receiveAgentPayBodyNotesMax).nullable(),
+  "expectedRevision": zod.number().int().min(1),
+  "paymentRequestId": zod.string().uuid()
+})
+
+export const receiveAgentPayResponseItemOneTitleMax = 200;
+
+export const receiveAgentPayResponseItemOneAmountCentsMax = 1000000000;
+
+export const receiveAgentPayResponseItemOneNotesMax = 5000;
+
+
+
+export const ReceiveAgentPayResponse = zod.object({
+  "item": zod.object({
+  "title": zod.string().min(1).max(receiveAgentPayResponseItemOneTitleMax),
+  "kind": zod.enum(['weekly', 'manual']),
+  "earnedDate": zod.string().date(),
+  "dueDate": zod.string().date().nullable(),
+  "amountCents": zod.number().int().min(1).max(receiveAgentPayResponseItemOneAmountCentsMax),
+  "notes": zod.string().max(receiveAgentPayResponseItemOneNotesMax).nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "paidCents": zod.number(),
+  "remainingCents": zod.number(),
+  "revision": zod.number().int(),
+  "createdAt": zod.string().datetime({"offset":true}),
+  "payments": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "title": zod.string(),
+  "amountCents": zod.number().int(),
+  "recordDate": zod.string().date(),
+  "paymentMethod": zod.enum(['venmo', 'cash', 'bank', 'check', 'card', 'other'])
+}))
+})),
+  "recordId": zod.string().uuid()
+})
+
+
+/**
+ * Owner-only complete all-dates earned/received/owed CSV
+ */
+export const ExportAgentPayResponse = zod.unknown()
+
+
+/**
+ * Owner only. No estimate until explicit assumptions saved.
+ */
+export const GetAgentTaxEstimateParams = zod.object({
+  "year": zod.union([zod.literal(2025),zod.literal(2026)])
+})
+
+export const getAgentTaxEstimateResponseSettingsOneAdditionalIncomeCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneAdditionalIncomeCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneAdditionalExpensesCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneAdditionalExpensesCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneNonDeductibleExpensesCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneNonDeductibleExpensesCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneWagesCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneWagesCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneOwnSocialSecurityWagesCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneOwnSocialSecurityWagesCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneMedicareWagesCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneMedicareWagesCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneOtherIncomeCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneOtherIncomeCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneOtherAdjustmentsCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneOtherAdjustmentsCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneDeductionOverrideCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneDeductionOverrideCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneQbiDeductionCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneQbiDeductionCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneNdAdjustmentCentsMin = -1000000000;
+export const getAgentTaxEstimateResponseSettingsOneNdAdjustmentCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneFederalCreditsCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneFederalCreditsCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneNdCreditsCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneNdCreditsCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneFederalWithholdingCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneFederalWithholdingCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneNdWithholdingCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneNdWithholdingCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneFederalPaymentsCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneFederalPaymentsCentsMax = 1000000000;
+
+export const getAgentTaxEstimateResponseSettingsOneNdPaymentsCentsMin = 0;
+export const getAgentTaxEstimateResponseSettingsOneNdPaymentsCentsMax = 1000000000;
+
+
+
+export const GetAgentTaxEstimateResponse = zod.object({
+  "settings": zod.union([zod.object({
+  "filingStatus": zod.enum(['single', 'married_joint', 'married_separate', 'head_household']),
+  "fullYearNdResident": zod.literal(true),
+  "additionalIncomeCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneAdditionalIncomeCentsMin).max(getAgentTaxEstimateResponseSettingsOneAdditionalIncomeCentsMax),
+  "additionalExpensesCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneAdditionalExpensesCentsMin).max(getAgentTaxEstimateResponseSettingsOneAdditionalExpensesCentsMax),
+  "nonDeductibleExpensesCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneNonDeductibleExpensesCentsMin).max(getAgentTaxEstimateResponseSettingsOneNonDeductibleExpensesCentsMax),
+  "wagesCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneWagesCentsMin).max(getAgentTaxEstimateResponseSettingsOneWagesCentsMax),
+  "ownSocialSecurityWagesCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneOwnSocialSecurityWagesCentsMin).max(getAgentTaxEstimateResponseSettingsOneOwnSocialSecurityWagesCentsMax),
+  "medicareWagesCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneMedicareWagesCentsMin).max(getAgentTaxEstimateResponseSettingsOneMedicareWagesCentsMax),
+  "otherIncomeCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneOtherIncomeCentsMin).max(getAgentTaxEstimateResponseSettingsOneOtherIncomeCentsMax),
+  "otherAdjustmentsCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneOtherAdjustmentsCentsMin).max(getAgentTaxEstimateResponseSettingsOneOtherAdjustmentsCentsMax),
+  "deductionOverrideCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneDeductionOverrideCentsMin).max(getAgentTaxEstimateResponseSettingsOneDeductionOverrideCentsMax).nullable(),
+  "qbiDeductionCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneQbiDeductionCentsMin).max(getAgentTaxEstimateResponseSettingsOneQbiDeductionCentsMax),
+  "ndAdjustmentCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneNdAdjustmentCentsMin).max(getAgentTaxEstimateResponseSettingsOneNdAdjustmentCentsMax),
+  "federalCreditsCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneFederalCreditsCentsMin).max(getAgentTaxEstimateResponseSettingsOneFederalCreditsCentsMax),
+  "ndCreditsCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneNdCreditsCentsMin).max(getAgentTaxEstimateResponseSettingsOneNdCreditsCentsMax),
+  "federalWithholdingCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneFederalWithholdingCentsMin).max(getAgentTaxEstimateResponseSettingsOneFederalWithholdingCentsMax),
+  "ndWithholdingCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneNdWithholdingCentsMin).max(getAgentTaxEstimateResponseSettingsOneNdWithholdingCentsMax),
+  "federalPaymentsCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneFederalPaymentsCentsMin).max(getAgentTaxEstimateResponseSettingsOneFederalPaymentsCentsMax),
+  "ndPaymentsCents": zod.number().int().min(getAgentTaxEstimateResponseSettingsOneNdPaymentsCentsMin).max(getAgentTaxEstimateResponseSettingsOneNdPaymentsCentsMax)
+}),zod.null()]),
+  "revision": zod.number().int(),
+  "recorded": zod.object({
+  "incomeCents": zod.number(),
+  "expenseCents": zod.number(),
+  "profitCents": zod.number()
+}),
+  "estimate": zod.union([zod.object({
+  "projectedProfitCents": zod.number(),
+  "netSelfEmploymentEarningsCents": zod.number(),
+  "selfEmploymentTaxCents": zod.number(),
+  "halfSelfEmploymentDeductionCents": zod.number(),
+  "additionalMedicareTaxCents": zod.number(),
+  "adjustedGrossIncomeCents": zod.number(),
+  "deductionCents": zod.number(),
+  "qbiDeductionCents": zod.number(),
+  "federalTaxableIncomeCents": zod.number(),
+  "federalIncomeTaxCents": zod.number(),
+  "ndTaxableIncomeCents": zod.number(),
+  "ndIncomeTaxCents": zod.number(),
+  "federalLiabilityCents": zod.number(),
+  "totalLiabilityCents": zod.number(),
+  "federalBalanceCents": zod.number(),
+  "ndBalanceCents": zod.number(),
+  "remainingToSetAsideCents": zod.number()
+}),zod.null()]),
+  "supportedYears": zod.array(zod.number().int()),
+  "sources": zod.array(zod.object({
+  "title": zod.string(),
+  "url": zod.string().url()
+})),
+  "warnings": zod.array(zod.string())
+})
+
+
+export const SaveAgentTaxEstimateParams = zod.object({
+  "year": zod.union([zod.literal(2025),zod.literal(2026)])
+})
+
+export const saveAgentTaxEstimateBodySettingsAdditionalIncomeCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsAdditionalIncomeCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsAdditionalExpensesCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsAdditionalExpensesCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsNonDeductibleExpensesCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsNonDeductibleExpensesCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsWagesCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsWagesCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsOwnSocialSecurityWagesCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsOwnSocialSecurityWagesCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsMedicareWagesCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsMedicareWagesCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsOtherIncomeCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsOtherIncomeCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsOtherAdjustmentsCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsOtherAdjustmentsCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsDeductionOverrideCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsDeductionOverrideCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsQbiDeductionCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsQbiDeductionCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsNdAdjustmentCentsMin = -1000000000;
+export const saveAgentTaxEstimateBodySettingsNdAdjustmentCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsFederalCreditsCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsFederalCreditsCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsNdCreditsCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsNdCreditsCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsFederalWithholdingCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsFederalWithholdingCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsNdWithholdingCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsNdWithholdingCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsFederalPaymentsCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsFederalPaymentsCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodySettingsNdPaymentsCentsMin = 0;
+export const saveAgentTaxEstimateBodySettingsNdPaymentsCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateBodyExpectedRevisionMin = 0;
+
+
+
+export const SaveAgentTaxEstimateBody = zod.object({
+  "settings": zod.object({
+  "filingStatus": zod.enum(['single', 'married_joint', 'married_separate', 'head_household']),
+  "fullYearNdResident": zod.literal(true),
+  "additionalIncomeCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsAdditionalIncomeCentsMin).max(saveAgentTaxEstimateBodySettingsAdditionalIncomeCentsMax),
+  "additionalExpensesCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsAdditionalExpensesCentsMin).max(saveAgentTaxEstimateBodySettingsAdditionalExpensesCentsMax),
+  "nonDeductibleExpensesCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsNonDeductibleExpensesCentsMin).max(saveAgentTaxEstimateBodySettingsNonDeductibleExpensesCentsMax),
+  "wagesCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsWagesCentsMin).max(saveAgentTaxEstimateBodySettingsWagesCentsMax),
+  "ownSocialSecurityWagesCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsOwnSocialSecurityWagesCentsMin).max(saveAgentTaxEstimateBodySettingsOwnSocialSecurityWagesCentsMax),
+  "medicareWagesCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsMedicareWagesCentsMin).max(saveAgentTaxEstimateBodySettingsMedicareWagesCentsMax),
+  "otherIncomeCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsOtherIncomeCentsMin).max(saveAgentTaxEstimateBodySettingsOtherIncomeCentsMax),
+  "otherAdjustmentsCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsOtherAdjustmentsCentsMin).max(saveAgentTaxEstimateBodySettingsOtherAdjustmentsCentsMax),
+  "deductionOverrideCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsDeductionOverrideCentsMin).max(saveAgentTaxEstimateBodySettingsDeductionOverrideCentsMax).nullable(),
+  "qbiDeductionCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsQbiDeductionCentsMin).max(saveAgentTaxEstimateBodySettingsQbiDeductionCentsMax),
+  "ndAdjustmentCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsNdAdjustmentCentsMin).max(saveAgentTaxEstimateBodySettingsNdAdjustmentCentsMax),
+  "federalCreditsCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsFederalCreditsCentsMin).max(saveAgentTaxEstimateBodySettingsFederalCreditsCentsMax),
+  "ndCreditsCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsNdCreditsCentsMin).max(saveAgentTaxEstimateBodySettingsNdCreditsCentsMax),
+  "federalWithholdingCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsFederalWithholdingCentsMin).max(saveAgentTaxEstimateBodySettingsFederalWithholdingCentsMax),
+  "ndWithholdingCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsNdWithholdingCentsMin).max(saveAgentTaxEstimateBodySettingsNdWithholdingCentsMax),
+  "federalPaymentsCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsFederalPaymentsCentsMin).max(saveAgentTaxEstimateBodySettingsFederalPaymentsCentsMax),
+  "ndPaymentsCents": zod.number().int().min(saveAgentTaxEstimateBodySettingsNdPaymentsCentsMin).max(saveAgentTaxEstimateBodySettingsNdPaymentsCentsMax)
+}),
+  "expectedRevision": zod.number().int().min(saveAgentTaxEstimateBodyExpectedRevisionMin)
+})
+
+export const saveAgentTaxEstimateResponseSettingsOneAdditionalIncomeCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneAdditionalIncomeCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneAdditionalExpensesCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneAdditionalExpensesCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneNonDeductibleExpensesCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneNonDeductibleExpensesCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneWagesCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneWagesCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneOwnSocialSecurityWagesCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneOwnSocialSecurityWagesCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneMedicareWagesCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneMedicareWagesCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneOtherIncomeCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneOtherIncomeCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneOtherAdjustmentsCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneOtherAdjustmentsCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneDeductionOverrideCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneDeductionOverrideCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneQbiDeductionCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneQbiDeductionCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneNdAdjustmentCentsMin = -1000000000;
+export const saveAgentTaxEstimateResponseSettingsOneNdAdjustmentCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneFederalCreditsCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneFederalCreditsCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneNdCreditsCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneNdCreditsCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneFederalWithholdingCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneFederalWithholdingCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneNdWithholdingCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneNdWithholdingCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneFederalPaymentsCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneFederalPaymentsCentsMax = 1000000000;
+
+export const saveAgentTaxEstimateResponseSettingsOneNdPaymentsCentsMin = 0;
+export const saveAgentTaxEstimateResponseSettingsOneNdPaymentsCentsMax = 1000000000;
+
+
+
+export const SaveAgentTaxEstimateResponse = zod.object({
+  "settings": zod.union([zod.object({
+  "filingStatus": zod.enum(['single', 'married_joint', 'married_separate', 'head_household']),
+  "fullYearNdResident": zod.literal(true),
+  "additionalIncomeCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneAdditionalIncomeCentsMin).max(saveAgentTaxEstimateResponseSettingsOneAdditionalIncomeCentsMax),
+  "additionalExpensesCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneAdditionalExpensesCentsMin).max(saveAgentTaxEstimateResponseSettingsOneAdditionalExpensesCentsMax),
+  "nonDeductibleExpensesCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneNonDeductibleExpensesCentsMin).max(saveAgentTaxEstimateResponseSettingsOneNonDeductibleExpensesCentsMax),
+  "wagesCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneWagesCentsMin).max(saveAgentTaxEstimateResponseSettingsOneWagesCentsMax),
+  "ownSocialSecurityWagesCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneOwnSocialSecurityWagesCentsMin).max(saveAgentTaxEstimateResponseSettingsOneOwnSocialSecurityWagesCentsMax),
+  "medicareWagesCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneMedicareWagesCentsMin).max(saveAgentTaxEstimateResponseSettingsOneMedicareWagesCentsMax),
+  "otherIncomeCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneOtherIncomeCentsMin).max(saveAgentTaxEstimateResponseSettingsOneOtherIncomeCentsMax),
+  "otherAdjustmentsCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneOtherAdjustmentsCentsMin).max(saveAgentTaxEstimateResponseSettingsOneOtherAdjustmentsCentsMax),
+  "deductionOverrideCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneDeductionOverrideCentsMin).max(saveAgentTaxEstimateResponseSettingsOneDeductionOverrideCentsMax).nullable(),
+  "qbiDeductionCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneQbiDeductionCentsMin).max(saveAgentTaxEstimateResponseSettingsOneQbiDeductionCentsMax),
+  "ndAdjustmentCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneNdAdjustmentCentsMin).max(saveAgentTaxEstimateResponseSettingsOneNdAdjustmentCentsMax),
+  "federalCreditsCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneFederalCreditsCentsMin).max(saveAgentTaxEstimateResponseSettingsOneFederalCreditsCentsMax),
+  "ndCreditsCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneNdCreditsCentsMin).max(saveAgentTaxEstimateResponseSettingsOneNdCreditsCentsMax),
+  "federalWithholdingCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneFederalWithholdingCentsMin).max(saveAgentTaxEstimateResponseSettingsOneFederalWithholdingCentsMax),
+  "ndWithholdingCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneNdWithholdingCentsMin).max(saveAgentTaxEstimateResponseSettingsOneNdWithholdingCentsMax),
+  "federalPaymentsCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneFederalPaymentsCentsMin).max(saveAgentTaxEstimateResponseSettingsOneFederalPaymentsCentsMax),
+  "ndPaymentsCents": zod.number().int().min(saveAgentTaxEstimateResponseSettingsOneNdPaymentsCentsMin).max(saveAgentTaxEstimateResponseSettingsOneNdPaymentsCentsMax)
+}),zod.null()]),
+  "revision": zod.number().int(),
+  "recorded": zod.object({
+  "incomeCents": zod.number(),
+  "expenseCents": zod.number(),
+  "profitCents": zod.number()
+}),
+  "estimate": zod.union([zod.object({
+  "projectedProfitCents": zod.number(),
+  "netSelfEmploymentEarningsCents": zod.number(),
+  "selfEmploymentTaxCents": zod.number(),
+  "halfSelfEmploymentDeductionCents": zod.number(),
+  "additionalMedicareTaxCents": zod.number(),
+  "adjustedGrossIncomeCents": zod.number(),
+  "deductionCents": zod.number(),
+  "qbiDeductionCents": zod.number(),
+  "federalTaxableIncomeCents": zod.number(),
+  "federalIncomeTaxCents": zod.number(),
+  "ndTaxableIncomeCents": zod.number(),
+  "ndIncomeTaxCents": zod.number(),
+  "federalLiabilityCents": zod.number(),
+  "totalLiabilityCents": zod.number(),
+  "federalBalanceCents": zod.number(),
+  "ndBalanceCents": zod.number(),
+  "remainingToSetAsideCents": zod.number()
+}),zod.null()]),
+  "supportedYears": zod.array(zod.number().int()),
+  "sources": zod.array(zod.object({
+  "title": zod.string(),
+  "url": zod.string().url()
+})),
+  "warnings": zod.array(zod.string())
+})
+
+
+/**
+ * Owner bearer authentication required. Never shared with other workspaces.
+ */
+export const listAgentTaxRecordsQueryYearMin = 1900;
+export const listAgentTaxRecordsQueryYearMax = 2200;
+
+export const listAgentTaxRecordsQueryQMax = 200;
+
+export const listAgentTaxRecordsQueryPageDefault = 1;
+
+export const listAgentTaxRecordsQueryLimitDefault = 25;
+export const listAgentTaxRecordsQueryLimitMax = 100;
+
+
+
+export const ListAgentTaxRecordsQueryParams = zod.object({
+  "year": zod.coerce.number().int().min(listAgentTaxRecordsQueryYearMin).max(listAgentTaxRecordsQueryYearMax).optional(),
+  "q": zod.coerce.string().max(listAgentTaxRecordsQueryQMax).optional(),
+  "page": zod.coerce.number().int().min(1).default(listAgentTaxRecordsQueryPageDefault),
+  "limit": zod.coerce.number().int().min(1).max(listAgentTaxRecordsQueryLimitMax).default(listAgentTaxRecordsQueryLimitDefault)
+})
+
+export const listAgentTaxRecordsResponseRecordsItemOneTitleMax = 200;
+
+export const listAgentTaxRecordsResponseRecordsItemOneAmountCentsMin = 0;
+export const listAgentTaxRecordsResponseRecordsItemOneAmountCentsMax = 1000000000;
+
+export const listAgentTaxRecordsResponseRecordsItemOneTaxYearMin = 1900;
+export const listAgentTaxRecordsResponseRecordsItemOneTaxYearMax = 2200;
+
+export const listAgentTaxRecordsResponseRecordsItemOneCounterpartyMax = 250;
+
+export const listAgentTaxRecordsResponseRecordsItemOneNotesMax = 5000;
+
+
+
+export const ListAgentTaxRecordsResponse = zod.object({
+  "records": zod.array(zod.object({
+  "title": zod.string().min(1).max(listAgentTaxRecordsResponseRecordsItemOneTitleMax),
+  "entryType": zod.enum(['income', 'expense', 'document']),
+  "amountCents": zod.number().int().min(listAgentTaxRecordsResponseRecordsItemOneAmountCentsMin).max(listAgentTaxRecordsResponseRecordsItemOneAmountCentsMax).nullable(),
+  "recordDate": zod.string().date().nullable(),
+  "taxYear": zod.number().int().min(listAgentTaxRecordsResponseRecordsItemOneTaxYearMin).max(listAgentTaxRecordsResponseRecordsItemOneTaxYearMax),
+  "category": zod.enum(['commission', 'travel', 'supplies', 'fees', 'tax_form', 'other']),
+  "paymentMethod": zod.enum(['venmo', 'cash', 'bank', 'check', 'card', 'other']),
+  "counterparty": zod.string().max(listAgentTaxRecordsResponseRecordsItemOneCounterpartyMax).nullable(),
+  "notes": zod.string().max(listAgentTaxRecordsResponseRecordsItemOneNotesMax).nullable(),
+  "bookingId": zod.string().uuid().nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "bookingLabel": zod.string().nullable(),
+  "payItemId": zod.string().uuid().nullable(),
+  "fileName": zod.string().nullable(),
+  "fileMime": zod.string().nullable(),
+  "fileSize": zod.number().int().nullable(),
+  "revision": zod.number().int(),
+  "createdAt": zod.string().datetime({"offset":true}),
+  "updatedAt": zod.string().datetime({"offset":true})
+}))),
+  "total": zod.number().int(),
+  "years": zod.array(zod.number().int()),
+  "storageAvailable": zod.boolean(),
+  "summary": zod.object({
+  "incomeCents": zod.number(),
+  "expenseCents": zod.number(),
+  "netCents": zod.number(),
+  "recordCount": zod.number().int()
+})
+})
+
+
+/**
+ * Owner-only explicit save, never submitted to classification or shared document ingestion.
+ */
+export const createAgentTaxRecordBodyTitleMax = 200;
+
+export const createAgentTaxRecordBodyAmountCentsMin = 0;
+export const createAgentTaxRecordBodyAmountCentsMax = 1000000000;
+
+export const createAgentTaxRecordBodyTaxYearMin = 1900;
+export const createAgentTaxRecordBodyTaxYearMax = 2200;
+
+export const createAgentTaxRecordBodyCounterpartyMax = 250;
+
+export const createAgentTaxRecordBodyNotesMax = 5000;
+
+
+
+export const CreateAgentTaxRecordBody = zod.object({
+  "title": zod.string().min(1).max(createAgentTaxRecordBodyTitleMax),
+  "entryType": zod.enum(['income', 'expense', 'document']),
+  "amountCents": zod.number().int().min(createAgentTaxRecordBodyAmountCentsMin).max(createAgentTaxRecordBodyAmountCentsMax).nullable(),
+  "recordDate": zod.string().date().nullable(),
+  "taxYear": zod.number().int().min(createAgentTaxRecordBodyTaxYearMin).max(createAgentTaxRecordBodyTaxYearMax),
+  "category": zod.enum(['commission', 'travel', 'supplies', 'fees', 'tax_form', 'other']),
+  "paymentMethod": zod.enum(['venmo', 'cash', 'bank', 'check', 'card', 'other']),
+  "counterparty": zod.string().max(createAgentTaxRecordBodyCounterpartyMax).nullable(),
+  "notes": zod.string().max(createAgentTaxRecordBodyNotesMax).nullable(),
+  "bookingId": zod.string().uuid().nullable()
+})
+
+export const createAgentTaxRecordResponseRecordOneTitleMax = 200;
+
+export const createAgentTaxRecordResponseRecordOneAmountCentsMin = 0;
+export const createAgentTaxRecordResponseRecordOneAmountCentsMax = 1000000000;
+
+export const createAgentTaxRecordResponseRecordOneTaxYearMin = 1900;
+export const createAgentTaxRecordResponseRecordOneTaxYearMax = 2200;
+
+export const createAgentTaxRecordResponseRecordOneCounterpartyMax = 250;
+
+export const createAgentTaxRecordResponseRecordOneNotesMax = 5000;
+
+
+
+export const CreateAgentTaxRecordResponse = zod.object({
+  "record": zod.object({
+  "title": zod.string().min(1).max(createAgentTaxRecordResponseRecordOneTitleMax),
+  "entryType": zod.enum(['income', 'expense', 'document']),
+  "amountCents": zod.number().int().min(createAgentTaxRecordResponseRecordOneAmountCentsMin).max(createAgentTaxRecordResponseRecordOneAmountCentsMax).nullable(),
+  "recordDate": zod.string().date().nullable(),
+  "taxYear": zod.number().int().min(createAgentTaxRecordResponseRecordOneTaxYearMin).max(createAgentTaxRecordResponseRecordOneTaxYearMax),
+  "category": zod.enum(['commission', 'travel', 'supplies', 'fees', 'tax_form', 'other']),
+  "paymentMethod": zod.enum(['venmo', 'cash', 'bank', 'check', 'card', 'other']),
+  "counterparty": zod.string().max(createAgentTaxRecordResponseRecordOneCounterpartyMax).nullable(),
+  "notes": zod.string().max(createAgentTaxRecordResponseRecordOneNotesMax).nullable(),
+  "bookingId": zod.string().uuid().nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "bookingLabel": zod.string().nullable(),
+  "payItemId": zod.string().uuid().nullable(),
+  "fileName": zod.string().nullable(),
+  "fileMime": zod.string().nullable(),
+  "fileSize": zod.number().int().nullable(),
+  "revision": zod.number().int(),
+  "createdAt": zod.string().datetime({"offset":true}),
+  "updatedAt": zod.string().datetime({"offset":true})
+}))
+})
+
+
+export const UpdateAgentTaxRecordParams = zod.object({
+  "id": zod.string().uuid()
+})
+
+export const updateAgentTaxRecordBodyOneTitleMax = 200;
+
+export const updateAgentTaxRecordBodyOneAmountCentsMin = 0;
+export const updateAgentTaxRecordBodyOneAmountCentsMax = 1000000000;
+
+export const updateAgentTaxRecordBodyOneTaxYearMin = 1900;
+export const updateAgentTaxRecordBodyOneTaxYearMax = 2200;
+
+export const updateAgentTaxRecordBodyOneCounterpartyMax = 250;
+
+export const updateAgentTaxRecordBodyOneNotesMax = 5000;
+
+
+
+
+export const UpdateAgentTaxRecordBody = zod.object({
+  "title": zod.string().min(1).max(updateAgentTaxRecordBodyOneTitleMax),
+  "entryType": zod.enum(['income', 'expense', 'document']),
+  "amountCents": zod.number().int().min(updateAgentTaxRecordBodyOneAmountCentsMin).max(updateAgentTaxRecordBodyOneAmountCentsMax).nullable(),
+  "recordDate": zod.string().date().nullable(),
+  "taxYear": zod.number().int().min(updateAgentTaxRecordBodyOneTaxYearMin).max(updateAgentTaxRecordBodyOneTaxYearMax),
+  "category": zod.enum(['commission', 'travel', 'supplies', 'fees', 'tax_form', 'other']),
+  "paymentMethod": zod.enum(['venmo', 'cash', 'bank', 'check', 'card', 'other']),
+  "counterparty": zod.string().max(updateAgentTaxRecordBodyOneCounterpartyMax).nullable(),
+  "notes": zod.string().max(updateAgentTaxRecordBodyOneNotesMax).nullable(),
+  "bookingId": zod.string().uuid().nullable()
+}).and(zod.object({
+  "expectedRevision": zod.number().int().min(1)
+}))
+
+export const updateAgentTaxRecordResponseRecordOneTitleMax = 200;
+
+export const updateAgentTaxRecordResponseRecordOneAmountCentsMin = 0;
+export const updateAgentTaxRecordResponseRecordOneAmountCentsMax = 1000000000;
+
+export const updateAgentTaxRecordResponseRecordOneTaxYearMin = 1900;
+export const updateAgentTaxRecordResponseRecordOneTaxYearMax = 2200;
+
+export const updateAgentTaxRecordResponseRecordOneCounterpartyMax = 250;
+
+export const updateAgentTaxRecordResponseRecordOneNotesMax = 5000;
+
+
+
+export const UpdateAgentTaxRecordResponse = zod.object({
+  "record": zod.object({
+  "title": zod.string().min(1).max(updateAgentTaxRecordResponseRecordOneTitleMax),
+  "entryType": zod.enum(['income', 'expense', 'document']),
+  "amountCents": zod.number().int().min(updateAgentTaxRecordResponseRecordOneAmountCentsMin).max(updateAgentTaxRecordResponseRecordOneAmountCentsMax).nullable(),
+  "recordDate": zod.string().date().nullable(),
+  "taxYear": zod.number().int().min(updateAgentTaxRecordResponseRecordOneTaxYearMin).max(updateAgentTaxRecordResponseRecordOneTaxYearMax),
+  "category": zod.enum(['commission', 'travel', 'supplies', 'fees', 'tax_form', 'other']),
+  "paymentMethod": zod.enum(['venmo', 'cash', 'bank', 'check', 'card', 'other']),
+  "counterparty": zod.string().max(updateAgentTaxRecordResponseRecordOneCounterpartyMax).nullable(),
+  "notes": zod.string().max(updateAgentTaxRecordResponseRecordOneNotesMax).nullable(),
+  "bookingId": zod.string().uuid().nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "bookingLabel": zod.string().nullable(),
+  "payItemId": zod.string().uuid().nullable(),
+  "fileName": zod.string().nullable(),
+  "fileMime": zod.string().nullable(),
+  "fileSize": zod.number().int().nullable(),
+  "revision": zod.number().int(),
+  "createdAt": zod.string().datetime({"offset":true}),
+  "updatedAt": zod.string().datetime({"offset":true})
+}))
+})
+
+
+export const DeleteAgentTaxRecordParams = zod.object({
+  "id": zod.string().uuid()
+})
+
+
+
+
+export const DeleteAgentTaxRecordBody = zod.object({
+  "confirmation": zod.enum(['DELETE']),
+  "expectedRevision": zod.number().int().min(1)
+})
+
+export const DeleteAgentTaxRecordResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * Owner-authenticated file download; no signed or public URL.
+ */
+export const DownloadAgentTaxFileParams = zod.object({
+  "id": zod.string().uuid()
+})
+
+export const DownloadAgentTaxFileResponse = zod.unknown()
+
+
+/**
+ * Owner only, maximum 15 MiB; checks actual file signatures.
+ */
+export const UploadAgentTaxFileParams = zod.object({
+  "id": zod.string().uuid()
+})
+
+
+
+
+export const UploadAgentTaxFileHeader = zod.object({
+  "x-file-name": zod.string(),
+  "x-record-revision": zod.number().int().min(1)
+})
+
+export const uploadAgentTaxFileResponseRecordOneTitleMax = 200;
+
+export const uploadAgentTaxFileResponseRecordOneAmountCentsMin = 0;
+export const uploadAgentTaxFileResponseRecordOneAmountCentsMax = 1000000000;
+
+export const uploadAgentTaxFileResponseRecordOneTaxYearMin = 1900;
+export const uploadAgentTaxFileResponseRecordOneTaxYearMax = 2200;
+
+export const uploadAgentTaxFileResponseRecordOneCounterpartyMax = 250;
+
+export const uploadAgentTaxFileResponseRecordOneNotesMax = 5000;
+
+
+
+export const UploadAgentTaxFileResponse = zod.object({
+  "record": zod.object({
+  "title": zod.string().min(1).max(uploadAgentTaxFileResponseRecordOneTitleMax),
+  "entryType": zod.enum(['income', 'expense', 'document']),
+  "amountCents": zod.number().int().min(uploadAgentTaxFileResponseRecordOneAmountCentsMin).max(uploadAgentTaxFileResponseRecordOneAmountCentsMax).nullable(),
+  "recordDate": zod.string().date().nullable(),
+  "taxYear": zod.number().int().min(uploadAgentTaxFileResponseRecordOneTaxYearMin).max(uploadAgentTaxFileResponseRecordOneTaxYearMax),
+  "category": zod.enum(['commission', 'travel', 'supplies', 'fees', 'tax_form', 'other']),
+  "paymentMethod": zod.enum(['venmo', 'cash', 'bank', 'check', 'card', 'other']),
+  "counterparty": zod.string().max(uploadAgentTaxFileResponseRecordOneCounterpartyMax).nullable(),
+  "notes": zod.string().max(uploadAgentTaxFileResponseRecordOneNotesMax).nullable(),
+  "bookingId": zod.string().uuid().nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "bookingLabel": zod.string().nullable(),
+  "payItemId": zod.string().uuid().nullable(),
+  "fileName": zod.string().nullable(),
+  "fileMime": zod.string().nullable(),
+  "fileSize": zod.number().int().nullable(),
+  "revision": zod.number().int(),
+  "createdAt": zod.string().datetime({"offset":true}),
+  "updatedAt": zod.string().datetime({"offset":true})
+}))
+})
+
+
+export const DeleteAgentTaxFileParams = zod.object({
+  "id": zod.string().uuid()
+})
+
+
+
+
+export const DeleteAgentTaxFileBody = zod.object({
+  "confirmation": zod.enum(['DELETE']),
+  "expectedRevision": zod.number().int().min(1)
+})
+
+export const deleteAgentTaxFileResponseRecordOneTitleMax = 200;
+
+export const deleteAgentTaxFileResponseRecordOneAmountCentsMin = 0;
+export const deleteAgentTaxFileResponseRecordOneAmountCentsMax = 1000000000;
+
+export const deleteAgentTaxFileResponseRecordOneTaxYearMin = 1900;
+export const deleteAgentTaxFileResponseRecordOneTaxYearMax = 2200;
+
+export const deleteAgentTaxFileResponseRecordOneCounterpartyMax = 250;
+
+export const deleteAgentTaxFileResponseRecordOneNotesMax = 5000;
+
+
+
+export const DeleteAgentTaxFileResponse = zod.object({
+  "record": zod.object({
+  "title": zod.string().min(1).max(deleteAgentTaxFileResponseRecordOneTitleMax),
+  "entryType": zod.enum(['income', 'expense', 'document']),
+  "amountCents": zod.number().int().min(deleteAgentTaxFileResponseRecordOneAmountCentsMin).max(deleteAgentTaxFileResponseRecordOneAmountCentsMax).nullable(),
+  "recordDate": zod.string().date().nullable(),
+  "taxYear": zod.number().int().min(deleteAgentTaxFileResponseRecordOneTaxYearMin).max(deleteAgentTaxFileResponseRecordOneTaxYearMax),
+  "category": zod.enum(['commission', 'travel', 'supplies', 'fees', 'tax_form', 'other']),
+  "paymentMethod": zod.enum(['venmo', 'cash', 'bank', 'check', 'card', 'other']),
+  "counterparty": zod.string().max(deleteAgentTaxFileResponseRecordOneCounterpartyMax).nullable(),
+  "notes": zod.string().max(deleteAgentTaxFileResponseRecordOneNotesMax).nullable(),
+  "bookingId": zod.string().uuid().nullable()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "bookingLabel": zod.string().nullable(),
+  "payItemId": zod.string().uuid().nullable(),
+  "fileName": zod.string().nullable(),
+  "fileMime": zod.string().nullable(),
+  "fileSize": zod.number().int().nullable(),
+  "revision": zod.number().int(),
+  "createdAt": zod.string().datetime({"offset":true}),
+  "updatedAt": zod.string().datetime({"offset":true})
+}))
+})
+
+
+/**
+ * Owner-only full-year CSV, with spreadsheet formula neutralization.
+ */
+export const exportAgentTaxRecordsQueryYearMin = 1900;
+export const exportAgentTaxRecordsQueryYearMax = 2200;
+
+
+
+export const ExportAgentTaxRecordsQueryParams = zod.object({
+  "year": zod.coerce.number().int().min(exportAgentTaxRecordsQueryYearMin).max(exportAgentTaxRecordsQueryYearMax)
+})
+
+export const ExportAgentTaxRecordsResponse = zod.unknown()
+
+
+/**
+ * Owner-only booking search for optional record links
+ */
+export const searchAgentTaxBookingsQueryQMax = 200;
+
+
+
+export const SearchAgentTaxBookingsQueryParams = zod.object({
+  "q": zod.coerce.string().max(searchAgentTaxBookingsQueryQMax).optional()
+})
+
+export const SearchAgentTaxBookingsResponse = zod.object({
+  "bookings": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "label": zod.string()
+}))
+})
+
+
 export const GetManagerFestivalCrewLocationParams = zod.object({
   "id": zod.string().uuid()
 })

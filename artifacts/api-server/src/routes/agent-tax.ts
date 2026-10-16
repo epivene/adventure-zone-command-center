@@ -1,12 +1,15 @@
 import express, { Router, type RequestHandler } from "express";
+import type {} from "pino-http";
 import { z } from "zod";
 import { pool } from "@workspace/db";
 import { requireOwnerMiddleware } from "@/lib/auth";
-import { createTaxStorage } from "@/features/agent-tax/storage";
 import { AgentTaxService } from "@/features/agent-tax/service";
+import { getAgentTaxService } from "@/features/agent-tax/runtime";
+import { AgentTaxPlanningService } from "@/features/agent-tax/planning-service";
+import { registerTaxPlanningRoutes } from "@/features/agent-tax/planning-routes";
 import { createTaxEntry, deleteTaxEntry, TaxError, taxFileType, updateTaxEntry } from "@/features/agent-tax/model";
 
-export function createAgentTaxRouter(service?: AgentTaxService, ownerGate: RequestHandler = requireOwnerMiddleware) {
+export function createAgentTaxRouter(service?: AgentTaxService, ownerGate: RequestHandler = requireOwnerMiddleware, planning=new AgentTaxPlanningService(pool)) {
   const router = Router();
   // This explicit boundary rejects Office, Boss, Manager and assistant credentials.
   router.use("/admin/agent-tax", ownerGate, (_req,res,next) => {
@@ -15,10 +18,7 @@ export function createAgentTaxRouter(service?: AgentTaxService, ownerGate: Reque
     next();
   });
   const getService = () => {
-    if (!service) {
-      const config = createTaxStorage();
-      service = new AgentTaxService(pool,config.storage,config.available);
-    }
+    if (!service) service=getAgentTaxService();
     return service;
   };
   const run = (action: (req: express.Request,res: express.Response) => Promise<void>): RequestHandler => async (req,res) => {
@@ -35,6 +35,7 @@ export function createAgentTaxRouter(service?: AgentTaxService, ownerGate: Reque
   const yearSchema = z.coerce.number().int().min(1900).max(2200);
   const params = z.object({year:yearSchema.default(new Date().getFullYear()),q:z.string().trim().max(200).default(""),
     page:z.coerce.number().int().min(1).max(100000).default(1),limit:z.coerce.number().int().min(1).max(100).default(25)});
+  registerTaxPlanningRoutes(router,planning,run);
 
   router.get("/admin/agent-tax/records",run(async(req,res) => {
     const input=params.safeParse(req.query);

@@ -54,13 +54,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              allOf:
-                - { $ref: "#/components/schemas/AgentTaxInput" }
-                - type: object
-                  required: [expectedRevision]
-                  properties:
-                    expectedRevision: { type: integer, minimum: 1 }
+            schema: { $ref: "#/components/schemas/AgentTaxUpdate" }
       responses:
         "200":
           description: Updated record; stale revisions return 409 without overwriting
@@ -169,25 +163,33 @@ components:
       properties:
         title: { type: string, minLength: 1, maxLength: 200 }
         entryType: { type: string, enum: [income, expense, document] }
-        amountCents: { type: integer, nullable: true, minimum: 0, maximum: 1000000000 }
-        recordDate: { type: string, format: date, nullable: true }
+        amountCents: { type: [integer, "null"], minimum: 0, maximum: 1000000000 }
+        recordDate: { type: [string, "null"], format: date }
         taxYear: { type: integer, minimum: 1900, maximum: 2200 }
         category: { type: string, enum: [commission, travel, supplies, fees, tax_form, other] }
         paymentMethod: { type: string, enum: [venmo, cash, bank, check, card, other] }
-        counterparty: { type: string, nullable: true, maxLength: 250 }
-        notes: { type: string, nullable: true, maxLength: 5000 }
-        bookingId: { type: string, format: uuid, nullable: true }
+        counterparty: { type: [string, "null"], maxLength: 250 }
+        notes: { type: [string, "null"], maxLength: 5000 }
+        bookingId: { type: [string, "null"], format: uuid }
+    AgentTaxUpdate:
+      allOf:
+        - { $ref: "#/components/schemas/AgentTaxInput" }
+        - type: object
+          required: [expectedRevision]
+          properties:
+            expectedRevision: { type: integer, minimum: 1 }
     AgentTaxRecord:
       allOf:
         - { $ref: "#/components/schemas/AgentTaxInput" }
         - type: object
-          required: [id, bookingLabel, fileName, fileMime, fileSize, revision, createdAt, updatedAt]
+          required: [id, bookingLabel, payItemId, fileName, fileMime, fileSize, revision, createdAt, updatedAt]
           properties:
             id: { type: string, format: uuid }
-            bookingLabel: { type: string, nullable: true }
-            fileName: { type: string, nullable: true }
-            fileMime: { type: string, nullable: true }
-            fileSize: { type: integer, nullable: true }
+            bookingLabel: { type: [string, "null"] }
+            payItemId: { type: [string, "null"], format: uuid }
+            fileName: { type: [string, "null"] }
+            fileMime: { type: [string, "null"] }
+            fileSize: { type: [integer, "null"] }
             revision: { type: integer }
             createdAt: { type: string, format: date-time }
             updatedAt: { type: string, format: date-time }

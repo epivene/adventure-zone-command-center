@@ -20,6 +20,19 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AgentEstimateResponse,
+  AgentEstimateUpdate,
+  AgentPayInput,
+  AgentPayMutation,
+  AgentPayPaymentInput,
+  AgentPayUpdate,
+  AgentTaxDelete,
+  AgentTaxInput,
+  AgentTaxMutation,
+  AgentTaxUpdate,
+  DeleteAgentPay200,
+  DeleteAgentTaxRecord200,
+  ExportAgentTaxRecordsParams,
   FestivalCrewLocation,
   FestivalCrewStop,
   FestivalCrewStopInput,
@@ -38,9 +51,16 @@ import type {
   FestivalVenueSearchInput,
   HealthStatus,
   LeadLegInput,
+  ListAgentPay200,
+  ListAgentPayParams,
+  ListAgentTaxRecords200,
+  ListAgentTaxRecordsParams,
   ListFestivalEditions200,
   ManagerFestivalCrewLocation,
   PreviewFestivalNetPdfParams,
+  ReceiveAgentPay201,
+  SearchAgentTaxBookings200,
+  SearchAgentTaxBookingsParams,
   SearchFestivalNearbyStops200,
   SearchFestivalVenue200
 } from './api.schemas';
@@ -71,6 +91,1309 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getListAgentPayUrl = (params?: ListAgentPayParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/agent-tax/pay?${stringifiedParams}` : `/api/admin/agent-tax/pay`
+}
+
+/**
+ * Owner bearer only; all-date totals, never shared.
+ */
+export const listAgentPay = async (params?: ListAgentPayParams, options?: Parameters<typeof customFetch>[1]): Promise<ListAgentPay200> => {
+
+  return customFetch<ListAgentPay200>(getListAgentPayUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentPayQueryKey = (params?: ListAgentPayParams,) => {
+    return [
+    `/api/admin/agent-tax/pay`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAgentPayQueryOptions = <TData = Awaited<ReturnType<typeof listAgentPay>>, TError = ErrorType<unknown>>(params?: ListAgentPayParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentPay>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentPayQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentPay>>> = ({ signal }) => listAgentPay(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentPay>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAgentPayQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentPay>>>
+export type ListAgentPayQueryError = ErrorType<unknown>
+
+
+
+export function useListAgentPay<TData = Awaited<ReturnType<typeof listAgentPay>>, TError = ErrorType<unknown>>(
+ params?: ListAgentPayParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentPay>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAgentPayQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAgentPayUrl = () => {
+
+
+
+
+  return `/api/admin/agent-tax/pay`
+}
+
+export const createAgentPay = async (agentPayInput: AgentPayInput, options?: Parameters<typeof customFetch>[1]): Promise<AgentPayMutation> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AgentPayMutation>(getCreateAgentPayUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(agentPayInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAgentPayMutationKey = () => ['createAgentPay'] as const;
+
+export const getCreateAgentPayMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAgentPay>>, TError,CreateAgentPayMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAgentPay>>, TError,CreateAgentPayMutationVariables, TContext> => {
+
+const mutationKey = getCreateAgentPayMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAgentPay>>, CreateAgentPayMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAgentPay(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAgentPayMutationResult = NonNullable<Awaited<ReturnType<typeof createAgentPay>>>
+    export type CreateAgentPayMutationBody = BodyType<AgentPayInput>
+    export type CreateAgentPayMutationError = ErrorType<unknown>
+    export type CreateAgentPayMutationVariables = {data: BodyType<AgentPayInput>}
+
+    export const useCreateAgentPay = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAgentPay>>, TError,CreateAgentPayMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAgentPay>>,
+        TError,
+        CreateAgentPayMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateAgentPayMutationOptions(options));
+    }
+
+export const getUpdateAgentPayUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/agent-tax/pay/${id}`
+}
+
+export const updateAgentPay = async (id: string,
+    agentPayUpdate: AgentPayUpdate, options?: Parameters<typeof customFetch>[1]): Promise<AgentPayMutation> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AgentPayMutation>(getUpdateAgentPayUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(agentPayUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateAgentPayMutationKey = () => ['updateAgentPay'] as const;
+
+export const getUpdateAgentPayMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAgentPay>>, TError,UpdateAgentPayMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAgentPay>>, TError,UpdateAgentPayMutationVariables, TContext> => {
+
+const mutationKey = getUpdateAgentPayMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAgentPay>>, UpdateAgentPayMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAgentPay(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAgentPayMutationResult = NonNullable<Awaited<ReturnType<typeof updateAgentPay>>>
+    export type UpdateAgentPayMutationBody = BodyType<AgentPayUpdate>
+    export type UpdateAgentPayMutationError = ErrorType<unknown>
+    export type UpdateAgentPayMutationVariables = {id: string;data: BodyType<AgentPayUpdate>}
+
+    export const useUpdateAgentPay = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAgentPay>>, TError,UpdateAgentPayMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAgentPay>>,
+        TError,
+        UpdateAgentPayMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateAgentPayMutationOptions(options));
+    }
+
+export const getDeleteAgentPayUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/agent-tax/pay/${id}`
+}
+
+export const deleteAgentPay = async (id: string,
+    agentTaxDelete: AgentTaxDelete, options?: Parameters<typeof customFetch>[1]): Promise<DeleteAgentPay200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<DeleteAgentPay200>(getDeleteAgentPayUrl(id),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(agentTaxDelete)
+  }
+);}
+
+
+
+
+
+export const getDeleteAgentPayMutationKey = () => ['deleteAgentPay'] as const;
+
+export const getDeleteAgentPayMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAgentPay>>, TError,DeleteAgentPayMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAgentPay>>, TError,DeleteAgentPayMutationVariables, TContext> => {
+
+const mutationKey = getDeleteAgentPayMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAgentPay>>, DeleteAgentPayMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  deleteAgentPay(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAgentPayMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAgentPay>>>
+    export type DeleteAgentPayMutationBody = BodyType<AgentTaxDelete>
+    export type DeleteAgentPayMutationError = ErrorType<unknown>
+    export type DeleteAgentPayMutationVariables = {id: string;data: BodyType<AgentTaxDelete>}
+
+    export const useDeleteAgentPay = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAgentPay>>, TError,DeleteAgentPayMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAgentPay>>,
+        TError,
+        DeleteAgentPayMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteAgentPayMutationOptions(options));
+    }
+
+export const getReceiveAgentPayUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/agent-tax/pay/${id}/payments`
+}
+
+/**
+ * Owner only. Atomically records payment and one income entry. Stable retry UUID prevents duplicate income.
+ */
+export const receiveAgentPay = async (id: string,
+    agentPayPaymentInput: AgentPayPaymentInput, options?: Parameters<typeof customFetch>[1]): Promise<ReceiveAgentPay201> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<ReceiveAgentPay201>(getReceiveAgentPayUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(agentPayPaymentInput)
+  }
+);}
+
+
+
+
+
+export const getReceiveAgentPayMutationKey = () => ['receiveAgentPay'] as const;
+
+export const getReceiveAgentPayMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof receiveAgentPay>>, TError,ReceiveAgentPayMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof receiveAgentPay>>, TError,ReceiveAgentPayMutationVariables, TContext> => {
+
+const mutationKey = getReceiveAgentPayMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof receiveAgentPay>>, ReceiveAgentPayMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  receiveAgentPay(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReceiveAgentPayMutationResult = NonNullable<Awaited<ReturnType<typeof receiveAgentPay>>>
+    export type ReceiveAgentPayMutationBody = BodyType<AgentPayPaymentInput>
+    export type ReceiveAgentPayMutationError = ErrorType<unknown>
+    export type ReceiveAgentPayMutationVariables = {id: string;data: BodyType<AgentPayPaymentInput>}
+
+    export const useReceiveAgentPay = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof receiveAgentPay>>, TError,ReceiveAgentPayMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof receiveAgentPay>>,
+        TError,
+        ReceiveAgentPayMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReceiveAgentPayMutationOptions(options));
+    }
+
+export const getExportAgentPayUrl = () => {
+
+
+
+
+  return `/api/admin/agent-tax/pay/export`
+}
+
+/**
+ * Owner-only complete all-dates earned/received/owed CSV
+ */
+export const exportAgentPay = async ( options?: Parameters<typeof customFetch>[1]): Promise<string> => {
+
+  return customFetch<string>(getExportAgentPayUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportAgentPayQueryKey = () => {
+    return [
+    `/api/admin/agent-tax/pay/export`
+    ] as const;
+    }
+
+
+export const getExportAgentPayQueryOptions = <TData = Awaited<ReturnType<typeof exportAgentPay>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAgentPay>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportAgentPayQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAgentPay>>> = ({ signal }) => exportAgentPay({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportAgentPay>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportAgentPayQueryResult = NonNullable<Awaited<ReturnType<typeof exportAgentPay>>>
+export type ExportAgentPayQueryError = ErrorType<unknown>
+
+
+
+export function useExportAgentPay<TData = Awaited<ReturnType<typeof exportAgentPay>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAgentPay>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportAgentPayQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAgentTaxEstimateUrl = (year: 2025 | 2026,) => {
+
+
+
+
+  return `/api/admin/agent-tax/estimate/${year}`
+}
+
+/**
+ * Owner only. No estimate until explicit assumptions saved.
+ */
+export const getAgentTaxEstimate = async (year: 2025 | 2026, options?: Parameters<typeof customFetch>[1]): Promise<AgentEstimateResponse> => {
+
+  return customFetch<AgentEstimateResponse>(getGetAgentTaxEstimateUrl(year),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAgentTaxEstimateQueryKey = (year: 2025 | 2026,) => {
+    return [
+    `/api/admin/agent-tax/estimate/${year}`
+    ] as const;
+    }
+
+
+export const getGetAgentTaxEstimateQueryOptions = <TData = Awaited<ReturnType<typeof getAgentTaxEstimate>>, TError = ErrorType<unknown>>(year: 2025 | 2026, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentTaxEstimate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAgentTaxEstimateQueryKey(year);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentTaxEstimate>>> = ({ signal }) => getAgentTaxEstimate(year, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: year !== null && year !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentTaxEstimate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAgentTaxEstimateQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentTaxEstimate>>>
+export type GetAgentTaxEstimateQueryError = ErrorType<unknown>
+
+
+
+export function useGetAgentTaxEstimate<TData = Awaited<ReturnType<typeof getAgentTaxEstimate>>, TError = ErrorType<unknown>>(
+ year: 2025 | 2026, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentTaxEstimate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAgentTaxEstimateQueryOptions(year,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveAgentTaxEstimateUrl = (year: 2025 | 2026,) => {
+
+
+
+
+  return `/api/admin/agent-tax/estimate/${year}`
+}
+
+export const saveAgentTaxEstimate = async (year: 2025 | 2026,
+    agentEstimateUpdate: AgentEstimateUpdate, options?: Parameters<typeof customFetch>[1]): Promise<AgentEstimateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AgentEstimateResponse>(getSaveAgentTaxEstimateUrl(year),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(agentEstimateUpdate)
+  }
+);}
+
+
+
+
+
+export const getSaveAgentTaxEstimateMutationKey = () => ['saveAgentTaxEstimate'] as const;
+
+export const getSaveAgentTaxEstimateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveAgentTaxEstimate>>, TError,SaveAgentTaxEstimateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveAgentTaxEstimate>>, TError,SaveAgentTaxEstimateMutationVariables, TContext> => {
+
+const mutationKey = getSaveAgentTaxEstimateMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveAgentTaxEstimate>>, SaveAgentTaxEstimateMutationVariables> = (props) => {
+          const {year,data} = props ?? {};
+
+          return  saveAgentTaxEstimate(year,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveAgentTaxEstimateMutationResult = NonNullable<Awaited<ReturnType<typeof saveAgentTaxEstimate>>>
+    export type SaveAgentTaxEstimateMutationBody = BodyType<AgentEstimateUpdate>
+    export type SaveAgentTaxEstimateMutationError = ErrorType<unknown>
+    export type SaveAgentTaxEstimateMutationVariables = {year: 2025 | 2026;data: BodyType<AgentEstimateUpdate>}
+
+    export const useSaveAgentTaxEstimate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveAgentTaxEstimate>>, TError,SaveAgentTaxEstimateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveAgentTaxEstimate>>,
+        TError,
+        SaveAgentTaxEstimateMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSaveAgentTaxEstimateMutationOptions(options));
+    }
+
+export const getListAgentTaxRecordsUrl = (params?: ListAgentTaxRecordsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/agent-tax/records?${stringifiedParams}` : `/api/admin/agent-tax/records`
+}
+
+/**
+ * Owner bearer authentication required. Never shared with other workspaces.
+ */
+export const listAgentTaxRecords = async (params?: ListAgentTaxRecordsParams, options?: Parameters<typeof customFetch>[1]): Promise<ListAgentTaxRecords200> => {
+
+  return customFetch<ListAgentTaxRecords200>(getListAgentTaxRecordsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentTaxRecordsQueryKey = (params?: ListAgentTaxRecordsParams,) => {
+    return [
+    `/api/admin/agent-tax/records`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAgentTaxRecordsQueryOptions = <TData = Awaited<ReturnType<typeof listAgentTaxRecords>>, TError = ErrorType<unknown>>(params?: ListAgentTaxRecordsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentTaxRecords>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentTaxRecordsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentTaxRecords>>> = ({ signal }) => listAgentTaxRecords(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentTaxRecords>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAgentTaxRecordsQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentTaxRecords>>>
+export type ListAgentTaxRecordsQueryError = ErrorType<unknown>
+
+
+
+export function useListAgentTaxRecords<TData = Awaited<ReturnType<typeof listAgentTaxRecords>>, TError = ErrorType<unknown>>(
+ params?: ListAgentTaxRecordsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentTaxRecords>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAgentTaxRecordsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAgentTaxRecordUrl = () => {
+
+
+
+
+  return `/api/admin/agent-tax/records`
+}
+
+/**
+ * Owner-only explicit save, never submitted to classification or shared document ingestion.
+ */
+export const createAgentTaxRecord = async (agentTaxInput: AgentTaxInput, options?: Parameters<typeof customFetch>[1]): Promise<AgentTaxMutation> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AgentTaxMutation>(getCreateAgentTaxRecordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(agentTaxInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAgentTaxRecordMutationKey = () => ['createAgentTaxRecord'] as const;
+
+export const getCreateAgentTaxRecordMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAgentTaxRecord>>, TError,CreateAgentTaxRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAgentTaxRecord>>, TError,CreateAgentTaxRecordMutationVariables, TContext> => {
+
+const mutationKey = getCreateAgentTaxRecordMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAgentTaxRecord>>, CreateAgentTaxRecordMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAgentTaxRecord(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAgentTaxRecordMutationResult = NonNullable<Awaited<ReturnType<typeof createAgentTaxRecord>>>
+    export type CreateAgentTaxRecordMutationBody = BodyType<AgentTaxInput>
+    export type CreateAgentTaxRecordMutationError = ErrorType<unknown>
+    export type CreateAgentTaxRecordMutationVariables = {data: BodyType<AgentTaxInput>}
+
+    export const useCreateAgentTaxRecord = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAgentTaxRecord>>, TError,CreateAgentTaxRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAgentTaxRecord>>,
+        TError,
+        CreateAgentTaxRecordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateAgentTaxRecordMutationOptions(options));
+    }
+
+export const getUpdateAgentTaxRecordUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/agent-tax/records/${id}`
+}
+
+export const updateAgentTaxRecord = async (id: string,
+    agentTaxUpdate: AgentTaxUpdate, options?: Parameters<typeof customFetch>[1]): Promise<AgentTaxMutation> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AgentTaxMutation>(getUpdateAgentTaxRecordUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(agentTaxUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateAgentTaxRecordMutationKey = () => ['updateAgentTaxRecord'] as const;
+
+export const getUpdateAgentTaxRecordMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAgentTaxRecord>>, TError,UpdateAgentTaxRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAgentTaxRecord>>, TError,UpdateAgentTaxRecordMutationVariables, TContext> => {
+
+const mutationKey = getUpdateAgentTaxRecordMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAgentTaxRecord>>, UpdateAgentTaxRecordMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAgentTaxRecord(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAgentTaxRecordMutationResult = NonNullable<Awaited<ReturnType<typeof updateAgentTaxRecord>>>
+    export type UpdateAgentTaxRecordMutationBody = BodyType<AgentTaxUpdate>
+    export type UpdateAgentTaxRecordMutationError = ErrorType<unknown>
+    export type UpdateAgentTaxRecordMutationVariables = {id: string;data: BodyType<AgentTaxUpdate>}
+
+    export const useUpdateAgentTaxRecord = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAgentTaxRecord>>, TError,UpdateAgentTaxRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAgentTaxRecord>>,
+        TError,
+        UpdateAgentTaxRecordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateAgentTaxRecordMutationOptions(options));
+    }
+
+export const getDeleteAgentTaxRecordUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/agent-tax/records/${id}`
+}
+
+export const deleteAgentTaxRecord = async (id: string,
+    agentTaxDelete: AgentTaxDelete, options?: Parameters<typeof customFetch>[1]): Promise<DeleteAgentTaxRecord200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<DeleteAgentTaxRecord200>(getDeleteAgentTaxRecordUrl(id),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(agentTaxDelete)
+  }
+);}
+
+
+
+
+
+export const getDeleteAgentTaxRecordMutationKey = () => ['deleteAgentTaxRecord'] as const;
+
+export const getDeleteAgentTaxRecordMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAgentTaxRecord>>, TError,DeleteAgentTaxRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAgentTaxRecord>>, TError,DeleteAgentTaxRecordMutationVariables, TContext> => {
+
+const mutationKey = getDeleteAgentTaxRecordMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAgentTaxRecord>>, DeleteAgentTaxRecordMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  deleteAgentTaxRecord(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAgentTaxRecordMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAgentTaxRecord>>>
+    export type DeleteAgentTaxRecordMutationBody = BodyType<AgentTaxDelete>
+    export type DeleteAgentTaxRecordMutationError = ErrorType<unknown>
+    export type DeleteAgentTaxRecordMutationVariables = {id: string;data: BodyType<AgentTaxDelete>}
+
+    export const useDeleteAgentTaxRecord = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAgentTaxRecord>>, TError,DeleteAgentTaxRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAgentTaxRecord>>,
+        TError,
+        DeleteAgentTaxRecordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteAgentTaxRecordMutationOptions(options));
+    }
+
+export const getDownloadAgentTaxFileUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/agent-tax/records/${id}/file`
+}
+
+/**
+ * Owner-authenticated file download; no signed or public URL.
+ */
+export const downloadAgentTaxFile = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getDownloadAgentTaxFileUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadAgentTaxFileQueryKey = (id: string,) => {
+    return [
+    `/api/admin/agent-tax/records/${id}/file`
+    ] as const;
+    }
+
+
+export const getDownloadAgentTaxFileQueryOptions = <TData = Awaited<ReturnType<typeof downloadAgentTaxFile>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadAgentTaxFile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadAgentTaxFileQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadAgentTaxFile>>> = ({ signal }) => downloadAgentTaxFile(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadAgentTaxFile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadAgentTaxFileQueryResult = NonNullable<Awaited<ReturnType<typeof downloadAgentTaxFile>>>
+export type DownloadAgentTaxFileQueryError = ErrorType<unknown>
+
+
+
+export function useDownloadAgentTaxFile<TData = Awaited<ReturnType<typeof downloadAgentTaxFile>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadAgentTaxFile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadAgentTaxFileQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUploadAgentTaxFileUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/agent-tax/records/${id}/file`
+}
+
+/**
+ * Owner only, maximum 15 MiB; checks actual file signatures.
+ */
+export const uploadAgentTaxFile = async (id: string,
+    uploadAgentTaxFileBody: Blob, options?: Parameters<typeof customFetch>[1]): Promise<AgentTaxMutation> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AgentTaxMutation>(getUploadAgentTaxFileUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/pdf', ...getHeaders(options?.headers) },
+    body: uploadAgentTaxFileBody
+  }
+);}
+
+
+
+
+
+export const getUploadAgentTaxFileMutationKey = () => ['uploadAgentTaxFile'] as const;
+
+export const getUploadAgentTaxFileMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadAgentTaxFile>>, TError,UploadAgentTaxFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadAgentTaxFile>>, TError,UploadAgentTaxFileMutationVariables, TContext> => {
+
+const mutationKey = getUploadAgentTaxFileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadAgentTaxFile>>, UploadAgentTaxFileMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  uploadAgentTaxFile(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadAgentTaxFileMutationResult = NonNullable<Awaited<ReturnType<typeof uploadAgentTaxFile>>>
+    export type UploadAgentTaxFileMutationBody = BodyType<Blob>
+    export type UploadAgentTaxFileMutationError = ErrorType<unknown>
+    export type UploadAgentTaxFileMutationVariables = {id: string;data: BodyType<Blob>}
+
+    export const useUploadAgentTaxFile = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadAgentTaxFile>>, TError,UploadAgentTaxFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadAgentTaxFile>>,
+        TError,
+        UploadAgentTaxFileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUploadAgentTaxFileMutationOptions(options));
+    }
+
+export const getDeleteAgentTaxFileUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/agent-tax/records/${id}/file`
+}
+
+export const deleteAgentTaxFile = async (id: string,
+    agentTaxDelete: AgentTaxDelete, options?: Parameters<typeof customFetch>[1]): Promise<AgentTaxMutation> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AgentTaxMutation>(getDeleteAgentTaxFileUrl(id),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(agentTaxDelete)
+  }
+);}
+
+
+
+
+
+export const getDeleteAgentTaxFileMutationKey = () => ['deleteAgentTaxFile'] as const;
+
+export const getDeleteAgentTaxFileMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAgentTaxFile>>, TError,DeleteAgentTaxFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAgentTaxFile>>, TError,DeleteAgentTaxFileMutationVariables, TContext> => {
+
+const mutationKey = getDeleteAgentTaxFileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAgentTaxFile>>, DeleteAgentTaxFileMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  deleteAgentTaxFile(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAgentTaxFileMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAgentTaxFile>>>
+    export type DeleteAgentTaxFileMutationBody = BodyType<AgentTaxDelete>
+    export type DeleteAgentTaxFileMutationError = ErrorType<unknown>
+    export type DeleteAgentTaxFileMutationVariables = {id: string;data: BodyType<AgentTaxDelete>}
+
+    export const useDeleteAgentTaxFile = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAgentTaxFile>>, TError,DeleteAgentTaxFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAgentTaxFile>>,
+        TError,
+        DeleteAgentTaxFileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteAgentTaxFileMutationOptions(options));
+    }
+
+export const getExportAgentTaxRecordsUrl = (params: ExportAgentTaxRecordsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/agent-tax/export?${stringifiedParams}` : `/api/admin/agent-tax/export`
+}
+
+/**
+ * Owner-only full-year CSV, with spreadsheet formula neutralization.
+ */
+export const exportAgentTaxRecords = async (params: ExportAgentTaxRecordsParams, options?: Parameters<typeof customFetch>[1]): Promise<string> => {
+
+  return customFetch<string>(getExportAgentTaxRecordsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportAgentTaxRecordsQueryKey = (params?: ExportAgentTaxRecordsParams,) => {
+    return [
+    `/api/admin/agent-tax/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportAgentTaxRecordsQueryOptions = <TData = Awaited<ReturnType<typeof exportAgentTaxRecords>>, TError = ErrorType<unknown>>(params: ExportAgentTaxRecordsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAgentTaxRecords>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportAgentTaxRecordsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAgentTaxRecords>>> = ({ signal }) => exportAgentTaxRecords(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportAgentTaxRecords>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportAgentTaxRecordsQueryResult = NonNullable<Awaited<ReturnType<typeof exportAgentTaxRecords>>>
+export type ExportAgentTaxRecordsQueryError = ErrorType<unknown>
+
+
+
+export function useExportAgentTaxRecords<TData = Awaited<ReturnType<typeof exportAgentTaxRecords>>, TError = ErrorType<unknown>>(
+ params: ExportAgentTaxRecordsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAgentTaxRecords>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportAgentTaxRecordsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSearchAgentTaxBookingsUrl = (params?: SearchAgentTaxBookingsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/agent-tax/bookings?${stringifiedParams}` : `/api/admin/agent-tax/bookings`
+}
+
+/**
+ * Owner-only booking search for optional record links
+ */
+export const searchAgentTaxBookings = async (params?: SearchAgentTaxBookingsParams, options?: Parameters<typeof customFetch>[1]): Promise<SearchAgentTaxBookings200> => {
+
+  return customFetch<SearchAgentTaxBookings200>(getSearchAgentTaxBookingsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSearchAgentTaxBookingsQueryKey = (params?: SearchAgentTaxBookingsParams,) => {
+    return [
+    `/api/admin/agent-tax/bookings`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getSearchAgentTaxBookingsQueryOptions = <TData = Awaited<ReturnType<typeof searchAgentTaxBookings>>, TError = ErrorType<unknown>>(params?: SearchAgentTaxBookingsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchAgentTaxBookings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSearchAgentTaxBookingsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof searchAgentTaxBookings>>> = ({ signal }) => searchAgentTaxBookings(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof searchAgentTaxBookings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type SearchAgentTaxBookingsQueryResult = NonNullable<Awaited<ReturnType<typeof searchAgentTaxBookings>>>
+export type SearchAgentTaxBookingsQueryError = ErrorType<unknown>
+
+
+
+export function useSearchAgentTaxBookings<TData = Awaited<ReturnType<typeof searchAgentTaxBookings>>, TError = ErrorType<unknown>>(
+ params?: SearchAgentTaxBookingsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchAgentTaxBookings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getSearchAgentTaxBookingsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetManagerFestivalCrewLocationUrl = (id: string,) => {
 

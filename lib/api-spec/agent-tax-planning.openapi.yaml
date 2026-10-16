@@ -1,0 +1,258 @@
+openapi: 3.1.0
+info: {title: Agent tax planning, version: 1.0.0}
+paths:
+  /admin/agent-tax/pay:
+    get:
+      operationId: listAgentPay
+      description: Owner bearer only; all-date totals, never shared.
+      parameters:
+        - {name: page, in: query, schema: {type: integer, default: 1, minimum: 1}}
+        - {name: limit, in: query, schema: {type: integer, default: 25, minimum: 1, maximum: 100}}
+      responses:
+        "200":
+          description: Pay items and all-date totals
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, summary]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/AgentPayItem"}}
+                  total: {type: integer}
+                  summary:
+                    type: object
+                    required: [earnedCents, paidCents, remainingCents, overdueCents]
+                    properties:
+                      earnedCents: {type: number}
+                      paidCents: {type: number}
+                      remainingCents: {type: number}
+                      overdueCents: {type: number}
+    post:
+      operationId: createAgentPay
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: "#/components/schemas/AgentPayInput"}}
+      responses:
+        "201":
+          description: Explicitly recorded earned pay, never auto-accrued
+          content:
+            application/json: {schema: {$ref: "#/components/schemas/AgentPayMutation"}}
+  /admin/agent-tax/pay/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    patch:
+      operationId: updateAgentPay
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: "#/components/schemas/AgentPayUpdate"}}
+      responses:
+        "200":
+          description: Updated, provided revision matches and amount covers received payments
+          content:
+            application/json: {schema: {$ref: "#/components/schemas/AgentPayMutation"}}
+    delete:
+      operationId: deleteAgentPay
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: "./agent-tax.openapi.yaml#/components/schemas/AgentTaxDelete"}}
+      responses:
+        "200":
+          description: Deleted if no payments exist
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties: {ok: {type: boolean}}
+  /admin/agent-tax/pay/{id}/payments:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: receiveAgentPay
+      description: Owner only. Atomically records payment and one income entry. Stable retry UUID prevents duplicate income.
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: "#/components/schemas/AgentPayPaymentInput"}}
+      responses:
+        "201":
+          description: Received payment (or exact idempotent retry)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [item, recordId]
+                properties:
+                  item: {$ref: "#/components/schemas/AgentPayItem"}
+                  recordId: {type: string, format: uuid}
+  /admin/agent-tax/pay/export:
+    get:
+      operationId: exportAgentPay
+      description: Owner-only complete all-dates earned/received/owed CSV
+      responses:
+        "200":
+          description: Formula-neutralized CSV
+          content:
+            text/csv: {schema: {type: string}}
+  /admin/agent-tax/estimate/{year}:
+    parameters:
+      - {name: year, in: path, required: true, schema: {type: integer, enum: [2025, 2026]}}
+    get:
+      operationId: getAgentTaxEstimate
+      description: Owner only. No estimate until explicit assumptions saved.
+      responses:
+        "200":
+          description: Saved assumptions, recorded totals, estimate, limitations and official sources
+          content:
+            application/json: {schema: {$ref: "#/components/schemas/AgentEstimateResponse"}}
+    put:
+      operationId: saveAgentTaxEstimate
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: "#/components/schemas/AgentEstimateUpdate"}}
+      responses:
+        "200":
+          description: Saved assumptions and recomputed estimate
+          content:
+            application/json: {schema: {$ref: "#/components/schemas/AgentEstimateResponse"}}
+components:
+  schemas:
+    AgentMoney:
+      type: integer
+      minimum: 0
+      maximum: 1000000000
+    AgentPayInput:
+      type: object
+      required: [title, kind, earnedDate, dueDate, amountCents, notes]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        kind: {type: string, enum: [weekly, manual]}
+        earnedDate: {type: string, format: date}
+        dueDate: {type: [string, "null"], format: date}
+        amountCents: {type: integer, minimum: 1, maximum: 1000000000}
+        notes: {type: [string, "null"], maxLength: 5000}
+    AgentPayUpdate:
+      allOf:
+        - {$ref: "#/components/schemas/AgentPayInput"}
+        - type: object
+          required: [expectedRevision]
+          properties: {expectedRevision: {type: integer, minimum: 1}}
+    AgentPayPayment:
+      type: object
+      required: [id, title, amountCents, recordDate, paymentMethod]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        amountCents: {type: integer}
+        recordDate: {type: string, format: date}
+        paymentMethod: {type: string, enum: [venmo, cash, bank, check, card, other]}
+    AgentPayItem:
+      allOf:
+        - {$ref: "#/components/schemas/AgentPayInput"}
+        - type: object
+          required: [id, paidCents, remainingCents, revision, createdAt, payments]
+          properties:
+            id: {type: string, format: uuid}
+            paidCents: {type: number}
+            remainingCents: {type: number}
+            revision: {type: integer}
+            createdAt: {type: string, format: date-time}
+            payments: {type: array, items: {$ref: "#/components/schemas/AgentPayPayment"}}
+    AgentPayMutation:
+      type: object
+      required: [item]
+      properties: {item: {$ref: "#/components/schemas/AgentPayItem"}}
+    AgentPayPaymentInput:
+      type: object
+      required: [amountCents, recordDate, paymentMethod, counterparty, notes, expectedRevision, paymentRequestId]
+      properties:
+        amountCents: {type: integer, minimum: 1, maximum: 1000000000}
+        recordDate: {type: string, format: date}
+        paymentMethod: {type: string, enum: [venmo, cash, bank, check, card, other]}
+        counterparty: {type: [string, "null"], maxLength: 250}
+        notes: {type: [string, "null"], maxLength: 5000}
+        expectedRevision: {type: integer, minimum: 1}
+        paymentRequestId: {type: string, format: uuid}
+    AgentEstimateSettings:
+      type: object
+      required: [filingStatus, fullYearNdResident, additionalIncomeCents, additionalExpensesCents, nonDeductibleExpensesCents, wagesCents, ownSocialSecurityWagesCents, medicareWagesCents, otherIncomeCents, otherAdjustmentsCents, deductionOverrideCents, qbiDeductionCents, ndAdjustmentCents, federalCreditsCents, ndCreditsCents, federalWithholdingCents, ndWithholdingCents, federalPaymentsCents, ndPaymentsCents]
+      properties:
+        filingStatus: {type: string, enum: [single, married_joint, married_separate, head_household]}
+        fullYearNdResident: {type: boolean, enum: [true]}
+        additionalIncomeCents: {$ref: "#/components/schemas/AgentMoney"}
+        additionalExpensesCents: {$ref: "#/components/schemas/AgentMoney"}
+        nonDeductibleExpensesCents: {$ref: "#/components/schemas/AgentMoney"}
+        wagesCents: {$ref: "#/components/schemas/AgentMoney"}
+        ownSocialSecurityWagesCents: {$ref: "#/components/schemas/AgentMoney"}
+        medicareWagesCents: {$ref: "#/components/schemas/AgentMoney"}
+        otherIncomeCents: {$ref: "#/components/schemas/AgentMoney"}
+        otherAdjustmentsCents: {$ref: "#/components/schemas/AgentMoney"}
+        deductionOverrideCents: {type: [integer, "null"], minimum: 0, maximum: 1000000000}
+        qbiDeductionCents: {$ref: "#/components/schemas/AgentMoney"}
+        ndAdjustmentCents: {type: integer, minimum: -1000000000, maximum: 1000000000}
+        federalCreditsCents: {$ref: "#/components/schemas/AgentMoney"}
+        ndCreditsCents: {$ref: "#/components/schemas/AgentMoney"}
+        federalWithholdingCents: {$ref: "#/components/schemas/AgentMoney"}
+        ndWithholdingCents: {$ref: "#/components/schemas/AgentMoney"}
+        federalPaymentsCents: {$ref: "#/components/schemas/AgentMoney"}
+        ndPaymentsCents: {$ref: "#/components/schemas/AgentMoney"}
+    AgentEstimateUpdate:
+      type: object
+      required: [settings, expectedRevision]
+      properties:
+        settings: {$ref: "#/components/schemas/AgentEstimateSettings"}
+        expectedRevision: {type: integer, minimum: 0}
+    AgentEstimate:
+      type: object
+      required: [projectedProfitCents, netSelfEmploymentEarningsCents, selfEmploymentTaxCents, halfSelfEmploymentDeductionCents, additionalMedicareTaxCents, adjustedGrossIncomeCents, deductionCents, qbiDeductionCents, federalTaxableIncomeCents, federalIncomeTaxCents, ndTaxableIncomeCents, ndIncomeTaxCents, federalLiabilityCents, totalLiabilityCents, federalBalanceCents, ndBalanceCents, remainingToSetAsideCents]
+      properties:
+        projectedProfitCents: {type: number}
+        netSelfEmploymentEarningsCents: {type: number}
+        selfEmploymentTaxCents: {type: number}
+        halfSelfEmploymentDeductionCents: {type: number}
+        additionalMedicareTaxCents: {type: number}
+        adjustedGrossIncomeCents: {type: number}
+        deductionCents: {type: number}
+        qbiDeductionCents: {type: number}
+        federalTaxableIncomeCents: {type: number}
+        federalIncomeTaxCents: {type: number}
+        ndTaxableIncomeCents: {type: number}
+        ndIncomeTaxCents: {type: number}
+        federalLiabilityCents: {type: number}
+        totalLiabilityCents: {type: number}
+        federalBalanceCents: {type: number}
+        ndBalanceCents: {type: number}
+        remainingToSetAsideCents: {type: number}
+    AgentEstimateSource:
+      type: object
+      required: [title, url]
+      properties:
+        title: {type: string}
+        url: {type: string, format: uri}
+    AgentEstimateResponse:
+      type: object
+      required: [settings, revision, recorded, estimate, supportedYears, sources, warnings]
+      properties:
+        settings:
+          oneOf:
+            - {$ref: "#/components/schemas/AgentEstimateSettings"}
+            - {type: "null"}
+        revision: {type: integer}
+        recorded:
+          type: object
+          required: [incomeCents, expenseCents, profitCents]
+          properties:
+            incomeCents: {type: number}
+            expenseCents: {type: number}
+            profitCents: {type: number}
+        estimate:
+          oneOf:
+            - {$ref: "#/components/schemas/AgentEstimate"}
+            - {type: "null"}
+        supportedYears: {type: array, items: {type: integer}}
+        sources: {type: array, items: {$ref: "#/components/schemas/AgentEstimateSource"}}
+        warnings: {type: array, items: {type: string}}

@@ -1,25 +1,17 @@
 import { apiFetch } from "@/lib/auth-token";
+import type {
+  AgentTaxRecord, AgentTaxInput, ListAgentTaxRecords200,
+  AgentPayItem, AgentPayPayment, AgentPayInput, AgentPayPaymentInput, ListAgentPay200,
+  AgentEstimateSettings, AgentEstimate, AgentEstimateResponse,
+} from "@workspace/api-client-react";
 
 export type EntryType = "income" | "expense" | "document";
 export type Category = "commission" | "travel" | "supplies" | "fees" | "tax_form" | "other";
 export type PaymentMethod = "venmo" | "cash" | "bank" | "check" | "card" | "other";
 
-export interface TaxRecord {
-  id: string; title: string; entryType: EntryType; amountCents: number | null;
-  recordDate: string | null; taxYear: number; category: Category; paymentMethod: PaymentMethod;
-  counterparty: string | null; notes: string | null; bookingId: string | null; bookingLabel: string | null;
-  fileName: string | null; fileMime: string | null; fileSize: number | null;
-  revision: number; createdAt: string; updatedAt: string;
-}
-export interface TaxRecordInput {
-  title: string; entryType: EntryType; amountCents: number | null; recordDate: string | null; taxYear: number;
-  category: Category; paymentMethod: PaymentMethod; counterparty: string | null; notes: string | null; bookingId: string | null;
-}
-export interface RecordsResponse {
-  records: TaxRecord[]; total: number; years: number[];
-  summary: { incomeCents: number; expenseCents: number; netCents: number; recordCount: number };
-  storageAvailable: boolean;
-}
+export type TaxRecord = AgentTaxRecord;
+export type TaxRecordInput = AgentTaxInput;
+export type RecordsResponse = ListAgentTaxRecords200;
 
 export const CATEGORIES: Category[] = ["commission", "travel", "supplies", "fees", "tax_form", "other"];
 export const METHODS: PaymentMethod[] = ["venmo", "cash", "bank", "check", "card", "other"];
@@ -47,13 +39,17 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-/** Parse a USD string to integer cents. Returns null when invalid. */
-export function parseMoneyToCents(value: string): number | null {
-  const v = value.trim().replace(/^\$/, "");
+export const MAX_CENTS = 1_000_000_000;
+/** Parse a USD string to integer cents. Returns null when invalid. Signed only where the contract allows it. */
+export function parseMoneyToCents(value: string, signed = false): number | null {
+  let v = value.trim().replace(/^(-?)\$/, "$1");
+  let neg = false;
+  if (signed && v.startsWith("-")) { neg = true; v = v.slice(1); }
   if (!/^\d+(\.\d{1,2})?$/.test(v)) return null;
   const [d, c = ""] = v.split(".");
   const cents = Number(d) * 100 + Number(c.padEnd(2, "0"));
-  return Number.isSafeInteger(cents) ? cents : null;
+  if (!Number.isSafeInteger(cents) || cents > MAX_CENTS) return null;
+  return neg ? -cents : cents;
 }
 export function formatCents(cents: number | null): string {
   if (cents === null) return "";
@@ -103,11 +99,14 @@ export async function downloadFile(rec: TaxRecord) {
   saveBlob(await res.blob(), rec.fileName ?? "receipt");
 }
 export async function viewFile(rec: TaxRecord) {
-  const res = await ensureOk(await apiFetch(`/admin/agent-tax/records/${rec.id}/file`));
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  window.open(url, "_blank", "noopener");
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  // Open the tab synchronously so popup blockers allow it; blob URL is never persisted.
+  const tab = window.open("", "_blank");
+  try {
+    const res = await ensureOk(await apiFetch(`/admin/agent-tax/records/${rec.id}/file`));
+    const url = URL.createObjectURL(await res.blob());
+    if (tab) { tab.location.href = url; } else { window.location.assign(url); }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (e) { tab?.close(); throw e; }
 }
 export async function exportCsv(year: number) {
   const res = await ensureOk(await apiFetch(`/admin/agent-tax/export?year=${year}`));
@@ -117,8 +116,45 @@ export async function exportCsv(year: number) {
 export function describeError(e: unknown): string {
   if (e instanceof ApiError) {
     if (e.status === 409) return "This entry was changed elsewhere. Reload the latest version before saving; nothing was overwritten, and your edits are still on screen.";
-    if (e.status === 503) return "File storage is unavailable right now. Try again later.";
     return e.message;
   }
   return e instanceof Error ? e.message : "Something went wrong.";
 }
+
+// ---- Pay owed to me ----
+export type PayPayment = AgentPayPayment;
+export type PayItem = AgentPayItem;
+export type PayResponse = ListAgentPay200;
+export type PayInput = AgentPayInput;
+export const WEEKLY_TITLE = "Weekly booking-agent pay";
+export const WEEKLY_CENTS = 60000;
+
+export const listPay = (page: number, limit: number) => json<PayResponse>(`/pay?page=${page}&limit=${limit}`);
+export async function createPay(input: PayInput) {
+  return (await json<{ item: PayItem }>("/pay", { method: "POST", body: JSON.stringify(input) })).item;
+}
+export async function updatePay(id: string, input: PayInput, expectedRevision: number) {
+  return (await json<{ item: PayItem }>(`/pay/${id}`, { method: "PATCH", body: JSON.stringify({ ...input, expectedRevision }) })).item;
+}
+export const deletePay = (id: string, expectedRevision: number) =>
+  json<{ ok: true }>(`/pay/${id}`, { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE", expectedRevision }) });
+export type PaymentInput = Omit<AgentPayPaymentInput,"expectedRevision"|"paymentRequestId">;
+export async function recordPayment(id: string, input: PaymentInput, expectedRevision: number, paymentRequestId: string) {
+  return json<{ item: PayItem; recordId: string }>(`/pay/${id}/payments`, {
+    method: "POST", body: JSON.stringify({ ...input, expectedRevision, paymentRequestId }),
+  });
+}
+export async function exportPayCsv() {
+  const res = await ensureOk(await apiFetch("/admin/agent-tax/pay/export"));
+  saveBlob(await res.blob(), "pay-owed.csv");
+}
+
+// ---- Tax planning estimate ----
+export type FilingStatus = AgentEstimateSettings["filingStatus"];
+export const FILING_STATUSES: FilingStatus[] = ["single", "married_joint", "married_separate", "head_household"];
+export type EstimateSettings = AgentEstimateSettings;
+export type Estimate = AgentEstimate;
+export type EstimateResponse = AgentEstimateResponse;
+export const getEstimate = (year: number) => json<EstimateResponse>(`/estimate/${year}`);
+export const saveEstimate = (year: number, expectedRevision: number, settings: EstimateSettings) =>
+  json<EstimateResponse>(`/estimate/${year}`, { method: "PUT", body: JSON.stringify({ expectedRevision, settings }) });

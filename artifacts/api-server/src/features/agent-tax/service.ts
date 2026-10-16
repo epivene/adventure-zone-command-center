@@ -12,7 +12,7 @@ export function presentTaxRecord(row: Row) {
     amountCents: row.amount_cents === null ? null : Number(row.amount_cents),
     recordDate: row.date_text ?? null, taxYear: Number(row.tax_year), category: row.category,
     paymentMethod: row.payment_method, counterparty: row.counterparty, notes: row.notes,
-    bookingId: row.booking_id, bookingLabel: row.booking_label ?? null,
+    bookingId: row.booking_id, bookingLabel: row.booking_label ?? null, payItemId: row.pay_item_id ?? null,
     fileName: row.file_name, fileMime: row.file_mime, fileSize: row.file_size === null ? null : Number(row.file_size),
     revision: Number(row.revision), createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
@@ -60,6 +60,11 @@ export class AgentTaxService {
   }
 
   async update(id: string, input: TaxEntryInput, revision: number) {
+    const current=await this.get(id);
+    if(current.payItemId && (input.entryType!==current.entryType || input.amountCents!==current.amountCents ||
+      input.recordDate!==current.recordDate || input.taxYear!==current.taxYear || input.paymentMethod!==current.paymentMethod)) {
+      throw new TaxError(409,"This is linked to received pay. To correct its amount/date, delete this income entry and record the payment again under Pay owed to me.");
+    }
     const result = await this.pool.query(`UPDATE agent_tax_records SET title=$1,entry_type=$2,amount_cents=$3,
       record_date=$4,tax_year=$5,category=$6,payment_method=$7,counterparty=$8,notes=$9,booking_id=$10,
       revision=revision+1,updated_at=now() WHERE id=$11 AND revision=$12 RETURNING id`,
@@ -90,14 +95,18 @@ export class AgentTaxService {
   async upload(id: string, revision: number, name: string, mime: string, bytes: Uint8Array) {
     if (!this.storageAvailable) throw new TaxError(503, "Private receipt storage is not configured. Your entry can still be saved without an attachment.");
     const key = `agent-tax/${id}/${randomUUID()}`;
-    await this.storage.put(key, bytes, mime);
+    // Reserve disposal before writing bytes. A process/DB failure after upload
+    // cannot orphan an untracked object. Delay gives in-flight uploads time.
+    await this.pool.query("INSERT INTO agent_tax_file_deletions(storage_key,queued_at) VALUES($1,now()+interval '1 hour')",[key]);
     try {
+      await this.storage.put(key, bytes, mime);
       await this.fileMutation(id,revision,async(client) => {
         await client.query(`UPDATE agent_tax_records SET storage_key=$1,file_name=$2,file_mime=$3,file_size=$4,
           revision=revision+1,updated_at=now() WHERE id=$5`, [key,name,mime,bytes.length,id]);
+        await client.query("DELETE FROM agent_tax_file_deletions WHERE storage_key=$1",[key]);
       });
     } catch (error) {
-      await this.pool.query("INSERT INTO agent_tax_file_deletions(storage_key) VALUES($1) ON CONFLICT DO NOTHING", [key]).catch(()=>undefined);
+      await this.pool.query("UPDATE agent_tax_file_deletions SET queued_at=now() WHERE storage_key=$1",[key]).catch(()=>undefined);
       await this.cleanup();
       throw error;
     }
@@ -113,8 +122,9 @@ export class AgentTaxService {
   }
 
   async remove(id: string, revision: number) {
-    await this.fileMutation(id,revision,async client => {
+    await this.fileMutation(id,revision,async (client,row) => {
       await client.query("DELETE FROM agent_tax_records WHERE id=$1", [id]);
+      if(row.pay_item_id) await client.query("UPDATE agent_pay_items SET revision=revision+1,updated_at=now() WHERE id=$1",[row.pay_item_id]);
     });
     return { ok: true };
   }
@@ -131,7 +141,7 @@ export class AgentTaxService {
     if (!this.storageAvailable) return;
     // Errors leave durable queue entries for the next attempt; never undo a saved record.
     try {
-      const pending = await this.pool.query("SELECT storage_key FROM agent_tax_file_deletions ORDER BY queued_at LIMIT 20");
+      const pending = await this.pool.query("SELECT storage_key FROM agent_tax_file_deletions WHERE queued_at<=now() ORDER BY queued_at LIMIT 20");
       for (const row of pending.rows) {
         try {
           await this.storage.delete(row.storage_key);

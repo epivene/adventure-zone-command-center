@@ -11,6 +11,16 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /admin/agent-tax/pay:
+    $ref: "./agent-tax-planning.openapi.yaml#/paths/~1admin~1agent-tax~1pay"
+  /admin/agent-tax/pay/{id}:
+    $ref: "./agent-tax-planning.openapi.yaml#/paths/~1admin~1agent-tax~1pay~1{id}"
+  /admin/agent-tax/pay/{id}/payments:
+    $ref: "./agent-tax-planning.openapi.yaml#/paths/~1admin~1agent-tax~1pay~1{id}~1payments"
+  /admin/agent-tax/pay/export:
+    $ref: "./agent-tax-planning.openapi.yaml#/paths/~1admin~1agent-tax~1pay~1export"
+  /admin/agent-tax/estimate/{year}:
+    $ref: "./agent-tax-planning.openapi.yaml#/paths/~1admin~1agent-tax~1estimate~1{year}"
   /admin/agent-tax/records:
     $ref: "./agent-tax.openapi.yaml#/paths/~1admin~1agent-tax~1records"
   /admin/agent-tax/records/{id}:

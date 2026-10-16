@@ -11,6 +11,7 @@ import { logger } from "./lib/logger";
 import { runStartupStep } from "./lib/startup-step";
 import { exitAfterRequiredStartupFailure } from "./lib/required-startup-shutdown";
 import { validateOwnerConfig } from "./lib/auth";
+import { startAgentTaxCleanup } from "./features/agent-tax/runtime";
 import { db, pool } from "@workspace/db";
 import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
 import { ensureFestivalEditionSchema } from "@workspace/db/migrations";
@@ -592,6 +593,7 @@ async function runPostListenMaintenance() {
 }
 
 async function startBackgroundWorkers() {
+  startAgentTaxCleanup();
   if (shutdownRequested) return;
   leadScoutLoop.start();
   scoutAlertLoop.start();

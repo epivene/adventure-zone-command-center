@@ -17,6 +17,9 @@ export default defineConfig({
   "api-client-react": {
     input: {
       target: "./openapi.yaml",
+      parserOptions: {
+        externalRefs: { allow: ["./agent-tax.openapi.yaml", "./agent-tax-planning.openapi.yaml"] },
+      },
       override: {
         transformer: titleTransformer,
       },
@@ -43,6 +46,9 @@ export default defineConfig({
   zod: {
     input: {
       target: "./openapi.yaml",
+      parserOptions: {
+        externalRefs: { allow: ["./agent-tax.openapi.yaml", "./agent-tax-planning.openapi.yaml"] },
+      },
       override: {
         transformer: titleTransformer,
       },

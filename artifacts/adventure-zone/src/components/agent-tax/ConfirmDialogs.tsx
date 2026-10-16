@@ -32,7 +32,7 @@ export function DeleteRecordDialog({ record, onCancel, onDeleted }: { record: Ta
   return (
     <Confirm
       open={!!record} busy={busy} error={error} action="Delete entry" title="Delete this entry?"
-      body={`"${record?.title ?? ""}" and any attached file will be permanently deleted. This cannot be undone.`}
+      body={`"${record?.title ?? ""}" and any attached file will be permanently deleted. This cannot be undone.${record?.payItemId ? " Deleting this payment income entry restores the balance owed on its pay entry." : ""}`}
       onCancel={() => { setError(null); onCancel(); }}
       onConfirm={async () => {
         if (!record) return;
