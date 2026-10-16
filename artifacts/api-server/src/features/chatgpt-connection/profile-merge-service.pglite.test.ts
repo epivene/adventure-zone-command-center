@@ -4,6 +4,7 @@ import { fixture } from "./test-database";
 import { ProfileMergeService } from "./profile-merge-service";
 import { ProfileUpdateService } from "./profile-update-service";
 import type { SqlQuery } from "./contracts";
+import { ensureEmailThreadAttentionSchema } from "../../db/email-thread-attention-schema";
 
 let f: Awaited<ReturnType<typeof fixture>>,
   service: ProfileMergeService,
@@ -52,6 +53,38 @@ const preview = () =>
       sources,
     },
   );
+it("applies an owner-approved merge with mail history and retired backup jobs", async () => {
+  await ensureEmailThreadAttentionSchema(f.db);
+  await f.db.exec(`
+    CREATE TABLE google_workspace_historical_gmail_outcomes(
+      connection_id uuid,message_id text,organization_id uuid REFERENCES organizations(id) ON DELETE SET NULL,
+      outcome text,PRIMARY KEY(connection_id,message_id));
+    CREATE TABLE google_drive_backup_jobs(
+      id uuid PRIMARY KEY,entity_kind text,entity_id uuid,status text,
+      UNIQUE(entity_kind,entity_id));
+  `);
+  const attentionId = randomUUID(), revision = randomUUID(), backupId = randomUUID();
+  await f.db.query(`INSERT INTO email_thread_attention(id,gmail_connection_id,thread_id,profile_id,state,reason,subject,reviewed_message_id,revision,actor_id)
+    VALUES($1,$2,'thread',$3,'needs_your_reply','Incoming reply','Fair contract','message',$4,'owner')`,
+    [attentionId,f.principal.connectionId,duplicateId,revision]);
+  await f.db.query("INSERT INTO google_workspace_historical_gmail_outcomes VALUES($1,'message',$2,'attached')",[f.principal.connectionId,duplicateId]);
+  await f.db.query("INSERT INTO google_drive_backup_jobs VALUES($1,'profile_summary',$2,'queued')",[backupId,duplicateId]);
+  const p = await preview();
+  expect(p.value.blockers).toEqual([]);
+  // Preview alone must not mutate any profile links.
+  expect((await f.db.query("SELECT profile_id FROM email_thread_attention")).rows).toEqual([{profile_id:duplicateId}]);
+  const approval = await service.approve('owner',p.recordId,p.value.contentHash,true);
+  const input = {proposalId:p.recordId,approvalId:approval.approvalId};
+  const result = await service.apply(f.principal,{requestKey:'mail-merge'},input);
+  expect(result.value.mergedProfileIds).toEqual([duplicateId]);
+  const attention = (await f.db.query("SELECT profile_id,revision,state FROM email_thread_attention")).rows[0];
+  expect(attention.profile_id).toBe(f.profileId);
+  expect(attention.revision).not.toBe(revision);
+  expect(attention.state).toBe('needs_your_reply');
+  expect((await f.db.query("SELECT organization_id,outcome FROM google_workspace_historical_gmail_outcomes")).rows).toEqual([{organization_id:f.profileId,outcome:'attached'}]);
+  expect((await f.db.query("SELECT entity_id,status FROM google_drive_backup_jobs")).rows).toEqual([{entity_id:duplicateId,status:'queued'}]);
+  expect((await service.apply(f.principal,{requestKey:'mail-merge'},input)).operationId).toBe(result.operationId);
+});
 async function approved() {
   const p = await preview();
   const a = await service.approve(
@@ -382,3 +415,4 @@ it('moves completed work and distinct-year work while invalidating changed previ
  await service.apply(f.principal,{requestKey:'merge'},{proposalId:p2.recordId,approvalId:a.approvalId});
  expect((await f.db.query('SELECT profile_id FROM booking_work_activities')).rows.every(r=>r.profile_id===f.profileId)).toBe(true);
 });
+

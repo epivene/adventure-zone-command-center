@@ -52,6 +52,8 @@ export const legacyMergeTables = new Set([
 // Preserve newer references without rewriting signed documents, amounts or source text.
 // A uniqueness/consistency conflict aborts the whole operation; no rows are discarded.
 export const extraMergeReferences: Record<string, string> = {
+  email_thread_attention: "profile_id",
+  google_workspace_historical_gmail_outcomes: "organization_id",
   booking_work_activities: "profile_id",
   contract_agreements: "organization_id",
   invoices: "organization_id",
@@ -69,6 +71,13 @@ export const extraMergeReferences: Record<string, string> = {
   assistant_profile_task_evidence: "profile_id",
   assistant_profile_task_change_evidence: "profile_id",
 };
+// These are source identities, not live profile links. Keeping the retired ID
+// lets the backup worker mark its source removed without overwriting the
+// survivor's separate backup files, job generations, leases, or run history.
+export const retainedMergeReferences: Record<string, string> = {
+  google_drive_backup_jobs: "entity_id",
+  google_drive_backup_mappings: "entity_id",
+};
 export async function moveExtraMergeReferences(
   tx: SqlQuery,
   primaryId: string,
@@ -79,7 +88,13 @@ export async function moveExtraMergeReferences(
     const column = extraMergeReferences[table];
     if (column)
       await tx.query(
-        `UPDATE "${table}" SET "${column}"=$1 WHERE "${column}"=ANY($2::uuid[])`,
+        `UPDATE "${table}" SET "${column}"=$1${
+          // Attention edits use revision checks. Invalidate old previews so they
+          // cannot restore a deleted profile ID after this merge commits.
+          table === "email_thread_attention"
+            ? ", revision=gen_random_uuid(), updated_at=now()"
+            : ""
+        } WHERE "${column}"=ANY($2::uuid[])`,
         [primaryId, duplicateIds],
       );
   }
