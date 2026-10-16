@@ -1,0 +1,26 @@
+name: Deadline attention view
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/deadline-rules/**"
+      - "artifacts/adventure-zone/src/features/deadline-rules/**"
+      - "lib/db/migrations/20261018_deadline_attention_reviews.sql"
+      - ".github/workflows/deadline-attention-ci.yml"
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/api-server exec vitest run src/features/deadline-rules/deadline-rules.test.ts
+      - run: pnpm --filter @workspace/adventure-zone run test -- src/features/deadline-rules/attention-view.test.tsx src/features/deadline-rules/reminders.test.tsx src/features/deadline-rules/reminders-performance.test.tsx
+      - run: pnpm --filter @workspace/api-server run build
+      - run: pnpm --filter @workspace/adventure-zone run build

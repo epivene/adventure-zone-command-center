@@ -2,6 +2,24 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { groupAttentionNotices, AttentionView, attentionDay } from "./attention-view";
 const n=(id:string,dueOn:string|null,deadlineKind:string|null,triggerType="deadline_passed")=>({id,organizationId:id,profileName:id,title:"Reminder",dueOn,deadlineKind,triggerType});
+it("partitions reviewed work ahead of waiting and outdated while preserving each original reminder",()=>{
+ const keys=['owner','drafts','calls','first_followup','verification','waiting','outdated'] as const;
+ const reviewed=keys.map(group=>({...n(group,'2026-10-01','next_action'),attentionReview:{group,nextAction:`Reviewed next step for ${group}`,reviewedOn:'2026-10-16'}}));
+ const notices=[...reviewed,n('unreviewed','2026-10-01','next_action')];
+ const groups=groupAttentionNotices(notices,'2026-10-16');
+ expect(Object.values(groups).flat().map(n=>n.id).sort()).toEqual(notices.map(n=>n.id).sort());
+ for(const key of keys)expect(groups[key].map(n=>n.id)).toEqual([key]);
+ expect(groups.due.map(n=>n.id)).toEqual(['unreviewed']);
+ const dismiss=vi.fn();
+ render(<AttentionView notices={notices} today="2026-10-16" onDismiss={dismiss}/>);
+ const headings=screen.getAllByRole('heading').map(h=>h.textContent);
+ expect(headings[0]).toBe('Owner, payment and operations (1)');
+ expect(headings.indexOf('Existing drafts to review (1)')).toBeLessThan(headings.indexOf('Waiting on replies (1)'));
+ expect(headings).toContain('Outdated or overlapping reminders (1)');
+ fireEvent.click(screen.getAllByText('Original reminder')[0]);
+ expect(screen.getAllByText('Reminder')).toHaveLength(8);
+ expect(dismiss).not.toHaveBeenCalled();
+});
 it("partitions every notice without discarding old tasks or confusing event dates with work",()=>{
  const notices=[n("due","2026-10-16","next_action"),n("old-task","2025-01-01","next_action"),n("future","2026-10-17","event"),n("old-event","2026-10-15","event"),n("dormant",null,null,"inactive"),n("unknown",null,null)];
  const groups=groupAttentionNotices(notices,"2026-10-16");

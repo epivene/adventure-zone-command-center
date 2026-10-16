@@ -30,6 +30,7 @@ beforeEach(async()=>{
   `);
   await pg.exec(readFileSync(new URL("../../../../../lib/db/migrations/20261002_booking_date_provenance.sql",import.meta.url),"utf8"));
   await pg.exec(ddl);
+  await pg.exec(readFileSync(new URL("../../../../../lib/db/migrations/20261018_deadline_attention_reviews.sql",import.meta.url),"utf8"));
   await pg.query("INSERT INTO organizations(id,name,created_at) VALUES($1,'Blanding','2026-10-01')",[profile]);
   // PGlite is a single session; transactional locking is exercised by Postgres SQL.
   const db={query:(sql:string,values?:any[])=>pg.query(sql,values),connect:async()=>({query:(sql:string,values?:any[])=>pg.query(sql,values),release(){}})};
@@ -37,6 +38,27 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await pg.close();});
 describe("deadline dates and rules",()=>{
+  it("adds read-only review groups and invalidates them when the source changes",async()=>{
+    const task=(await pg.query("INSERT INTO follow_ups(organization_id,kind,due_at) VALUES($1,'Check draft','2026-10-01T15:00:00Z') RETURNING id",[profile])).rows[0] as {id:string};
+    await service.evaluate(now);
+    const notice=(await service.summary()).notifications.find(n=>n.title==='Check draft')!;
+    await pg.query(`INSERT INTO deadline_attention_reviews(notification_id,follow_up_id,organization_id,source_kind,source_due_at,source_updated_at,review_group,next_action,reviewed_on,batch_key)
+      SELECT $1,id,organization_id,kind,due_at,updated_at,'waiting','Sent already; check newer activity','2026-10-16','test' FROM follow_ups WHERE id=$2`,[notice.id,task.id]);
+    const before=await pg.query("SELECT * FROM deadline_notifications ORDER BY id");
+    const rules=await pg.query("SELECT * FROM deadline_rules ORDER BY id");
+    const tasks=await pg.query("SELECT * FROM follow_ups ORDER BY id");
+    expect((await service.summary()).notifications.find(n=>n.id===notice.id)?.attentionReview).toEqual({group:'waiting',nextAction:'Sent already; check newer activity',reviewedOn:'2026-10-16'});
+    expect(await pg.query("SELECT * FROM deadline_notifications ORDER BY id")).toEqual(before);
+    expect(await pg.query("SELECT * FROM deadline_rules ORDER BY id")).toEqual(rules);
+    expect(await pg.query("SELECT * FROM follow_ups ORDER BY id")).toEqual(tasks);
+    for(const update of ["kind='New action'","due_at='2026-10-20T15:00:00Z'","updated_at=updated_at+interval '1 second'","completed_at=now()"]){
+      await pg.exec('BEGIN');
+      await pg.query('UPDATE follow_ups SET '+update+' WHERE id=$1',[task.id]);
+      expect((await service.summary()).notifications.find(n=>n.id===notice.id)?.attentionReview).toBeNull();
+      await pg.exec('ROLLBACK');
+    }
+    expect((await pg.query('SELECT count(*)::int AS n FROM deadline_attention_reviews')).rows[0]).toEqual({n:1});
+  });
   it("shows audited follow-up edits immediately without changing notification history or rules", async () => {
     const task=(await pg.query("INSERT INTO follow_ups(organization_id,kind,due_at) VALUES($1,'Review unsent draft','2026-10-01T15:00:00Z') RETURNING id",[profile])).rows[0] as {id:string};
     await service.evaluate(now);

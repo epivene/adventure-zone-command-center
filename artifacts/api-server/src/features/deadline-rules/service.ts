@@ -170,8 +170,20 @@ export class DeadlineRulesService {
       .sort((a,b)=>a.dueOn!.localeCompare(b.dueOn!) || a.profileName.localeCompare(b.profileName));
     const notices=await this.db.query(`SELECT n.id,n.organization_id AS "organizationId",o.name AS "profileName",n.title,
       n.due_on::text AS "dueOn",r.actions,n.email_state AS "emailState",
-      n.occurrence_key AS "occurrenceKey",r.trigger->>'type' AS "triggerType"
+      n.occurrence_key AS "occurrenceKey",r.trigger->>'type' AS "triggerType",
+      CASE WHEN f.completed_at IS NULL AND f.kind=review.source_kind
+        AND f.due_at=review.source_due_at AND f.updated_at=review.source_updated_at
+        AND coalesce(f.organization_id,b.organization_id,c.organization_id)=n.organization_id
+        AND split_part(n.occurrence_key,':',1)='followup' AND split_part(n.occurrence_key,':',2)=f.id::text
+        AND n.due_on=(f.due_at AT TIME ZONE 'America/Denver')::date
+        THEN json_build_object('group',review.review_group,'nextAction',review.next_action,
+          'reviewedOn',review.reviewed_on::text) ELSE NULL END AS "attentionReview"
       FROM deadline_notifications n JOIN organizations o ON o.id=n.organization_id JOIN deadline_rules r ON r.id=n.rule_id
+      LEFT JOIN LATERAL (SELECT * FROM deadline_attention_reviews a WHERE a.notification_id=n.id
+        AND a.organization_id=n.organization_id ORDER BY a.created_at DESC,a.id DESC LIMIT 1) review ON true
+      LEFT JOIN follow_ups f ON f.id=review.follow_up_id
+      LEFT JOIN bookings b ON b.id=f.booking_id
+      LEFT JOIN contacts c ON c.id=f.contact_id
       WHERE n.active AND n.dismissed_at IS NULL AND r.enabled AND o.consolidated_into_id IS NULL
       ORDER BY n.due_on NULLS LAST,n.created_at DESC`);
     const state=await this.db.query("SELECT last_evaluated_at FROM deadline_evaluation_state WHERE id=1");
@@ -181,7 +193,8 @@ export class DeadlineRulesService {
         // Use the reviewed task immediately; do not rewrite notification history
         // or run reminder evaluation just to display an edited follow-up.
         const task=sourceKey.startsWith("followup:")?source?.label:undefined;
-        return {...notice,title:task??notice.title,deadlineKind:kinds.get(sourceKey)??null,
+        return {...notice,attentionReview:source && !source.completed && source.dueOn===notice.dueOn ? notice.attentionReview : null,
+          title:task??notice.title,deadlineKind:kinds.get(sourceKey)??null,
           attentionState:task?.startsWith("[Waiting on reply] ")?"waiting_reply":null};
       }),
       count:notices.rows.filter(n=>n.actions.includes("badge")).length,lastEvaluatedAt:state.rows[0]?.last_evaluated_at??null };
