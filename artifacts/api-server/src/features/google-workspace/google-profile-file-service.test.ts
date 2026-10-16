@@ -15,6 +15,14 @@ function gmailClient(overrides: Partial<GoogleWorkspaceReadClient>): GoogleWorks
 }
 
 describe("GoogleProfileFileService", () => {
+  it('does not download an already archived attachment again',async()=>{
+    const attachment={messageId:'m',attachmentId:'new-handle',filename:'contract.pdf',mimeType:'application/pdf',sizeBytes:3};
+    const file={...attachment,attachmentId:'old-handle',id:'f',organizationId:'p',threadId:'t',contentSha256:'sha',storageObjectKey:'key',availability:'available',lastErrorCode:null,createdAt:''};
+    let downloads=0;
+    const service=new GoogleProfileFileService({connection:{createReadClient:async()=>gmailClient({getThreadDetail:async()=>({id:'t',messages:[{id:'m',attachments:[attachment]}]} as any),getAttachment:async()=>{downloads++;return new Uint8Array([1,2,3]);}})},validation:{organizationOwnsApprovedThread:async()=>true},repository:{listForOrganization:async()=>[file],saveFile:async()=>file,markUnavailable:async()=>{}} as any,storage:{exists:async()=>true} as any});
+    expect(await service.copyApprovedThreadAttachments({organizationId:'p',threadId:'t'})).toHaveLength(1);
+    expect(downloads).toBe(0);
+  });
   it("copies approved thread attachments once, deduplicates storage by checksum, and lists profile files", async () => {
     const storage = {
       put: vi.fn(async () => undefined),

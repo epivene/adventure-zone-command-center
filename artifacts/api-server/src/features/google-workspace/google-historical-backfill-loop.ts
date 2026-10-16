@@ -79,6 +79,7 @@ export class GoogleHistoricalBackfillLoop {
     service: HistoricalService;
     lease?: HistoricalLease;
     scheduler: GoogleHistoricalBackfillLoopScheduler;
+    runExclusive?:(work:()=>Promise<void>)=>Promise<void>;
   }) {
     this.lease = dependencies.lease ?? localLease;
   }
@@ -124,6 +125,7 @@ export class GoogleHistoricalBackfillLoop {
   private async runStep(): Promise<void> {
     let nextDelayMs = GOOGLE_HISTORICAL_BACKFILL_IDLE_DELAY_MS;
     try {
+      const work=async()=>{
       if (!this.dependencies.enabled) return;
       if ((await this.dependencies.validation.getStatus()) !== "approved") return;
 
@@ -155,6 +157,8 @@ export class GoogleHistoricalBackfillLoop {
       } finally {
         clearInterval(heartbeat);
       }
+      };
+      if(this.dependencies.runExclusive)await this.dependencies.runExclusive(work);else await work();
     } catch (error) {
       logger.warn(
         { errorCode: error instanceof Error ? error.message : "unknown" },
