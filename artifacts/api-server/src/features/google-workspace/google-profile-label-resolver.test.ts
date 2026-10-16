@@ -99,11 +99,22 @@ function harness(input?: {
   return {
     repository,
     gmail,
-    resolver: new GoogleProfileLabelResolver(repository, gmail),
+    resolver: new GoogleProfileLabelResolver(repository, gmail, "individual"),
   };
 }
 
 describe("GoogleProfileLabelResolver", () => {
+  it("uses one shared category without claiming it for a customer or changing historical mappings", async () => {
+    const h = harness();
+    const resolver = new GoogleProfileLabelResolver(h.repository, h.gmail);
+    for (const organizationId of ["org-1", "org-2"]) {
+      await expect(resolver.resolve({ connectionId: "conn-1", organizationId }))
+        .resolves.toMatchObject({status: "resolved", mapping: {organizationId, gmailLabelId: "Label_profiles", gmailLabelName: "Profiles"}});
+    }
+    expect(h.repository.adopt).not.toHaveBeenCalled();
+    expect(h.repository.findByLabelId).not.toHaveBeenCalled();
+    expect(h.gmail.createLabel).not.toHaveBeenCalled();
+  });
   const currentRoot = { id: "new-root", name: "Profiles", type: "user" as const };
   const currentLabel = { id: "renamed", name: "Profiles/Elko County Fair", type: "user" as const };
 
