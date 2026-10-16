@@ -132,6 +132,22 @@ paths:
           description: All selected-year records, not just the visible page
           content:
             text/csv: { schema: { type: string } }
+  /admin/agent-tax/package:
+    get:
+      operationId: downloadAgentTaxPackage
+      description: Owner bearer authentication required. Streams a private ZIP of all selected-year personal records, income/expense CSV, attached receipts, manifest and deductibility notice. Excludes shared files, unpaid earnings and tax-estimate assumptions. Maximum 10000 records; concurrent exports return 429. Receipt read failures terminate the download rather than returning a complete-looking partial archive.
+      parameters:
+        - { name: year, in: query, required: true, schema: { type: integer, minimum: 1900, maximum: 2200 } }
+      responses:
+        "200":
+          description: Streaming accountant ZIP with private no-store headers; contains no storage keys or signed/public file URLs
+          content:
+            application/zip: { schema: { type: string, format: binary } }
+        "400": { description: Invalid tax year }
+        "401": { description: Owner authentication required }
+        "413": { description: Too many records for one export }
+        "429": { description: Another accountant export is running }
+        "503": { description: Private storage or export unavailable }
   /admin/agent-tax/bookings:
     get:
       operationId: searchAgentTaxBookings

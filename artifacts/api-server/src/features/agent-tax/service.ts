@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
+import type { Writable } from "node:stream";
 import type { PrivateObjectStorage } from "@/lib/private-object-storage";
 import { csvCell, TaxError, type TaxEntryInput } from "./model";
+import { MAX_PACKAGE_RECORDS, receiptPath, writeAccountantPackage, type PackageRecord } from "./accountant-package";
 
 const selectSql = `SELECT r.*, r.record_date::text AS date_text, b.name AS booking_label
   FROM agent_tax_records r LEFT JOIN bookings b ON b.id=r.booking_id`;
@@ -20,6 +22,7 @@ export function presentTaxRecord(row: Row) {
 }
 
 export class AgentTaxService {
+  private exportingPackage = false;
   constructor(private readonly pool: Pool, private readonly storage: PrivateObjectStorage, readonly storageAvailable: boolean) {}
 
   async list(year: number, q: string, page: number, limit: number) {
@@ -164,5 +167,27 @@ export class AgentTaxService {
       row.amount_cents === null ? "" : (Number(row.amount_cents)/100).toFixed(2),row.payment_method,row.counterparty,
       row.booking_label,row.notes,row.file_name]);
     return "\uFEFF" + [header,...rows].map(row=>row.map(csvCell).join(",")).join("\r\n") + "\r\n";
+  }
+
+  async accountantPackage(year: number, destination: Writable) {
+    if (this.exportingPackage) throw new TaxError(429, "Another accountant package is downloading. Try again when it finishes.");
+    this.exportingPackage = true;
+    try {
+      // Bounded single-statement snapshot; never consult shared attachment or estimate tables.
+      const result = await this.pool.query<PackageRecord>(`SELECT r.id,r.tax_year,r.record_date::text AS date_text,
+        r.entry_type,r.title,r.category,r.amount_cents,r.payment_method,r.counterparty,r.notes,
+        r.booking_id,b.name AS booking_label,r.revision,r.storage_key,r.file_name,r.file_mime,r.file_size
+        FROM agent_tax_records r LEFT JOIN bookings b ON b.id=r.booking_id
+        WHERE r.tax_year=$1 ORDER BY r.record_date NULLS LAST,r.created_at,r.id LIMIT $2`,
+      [year, MAX_PACKAGE_RECORDS + 1]);
+      if (result.rows.length > MAX_PACKAGE_RECORDS) throw new TaxError(413, "This year has more than 10,000 records and is too large for one package. Contact your administrator.");
+      for (const row of result.rows) receiptPath(row);
+      if (result.rows.some(row => row.storage_key) && (!this.storageAvailable || !this.storage.openReadStream)) {
+        throw new TaxError(503, "Private receipt storage is unavailable. No complete accountant package can be created right now.");
+      }
+      await writeAccountantPackage(result.rows, year, this.storage, destination);
+    } finally {
+      this.exportingPackage = false;
+    }
   }
 }

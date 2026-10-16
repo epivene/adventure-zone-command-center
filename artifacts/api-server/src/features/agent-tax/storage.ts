@@ -31,6 +31,7 @@ export function createTaxStorage(): { storage: PrivateObjectStorage; available: 
         await file(key).save(Buffer.from(bytes), { resumable: false, contentType, metadata: { cacheControl: "private, no-store" } });
       },
       async get(key) { return new Uint8Array((await file(key).download())[0]); },
+      openReadStream(key) { return file(key).createReadStream(); },
       async exists(key) { return (await file(key).exists())[0]; },
       async delete(key) { await file(key).delete({ ignoreNotFound: true }); },
       async getSignedReadUrl() { throw new Error("Tax files require authenticated downloads"); },

@@ -2,6 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { PGlite } from "@electric-sql/pglite";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
+import { inflateRawSync } from "node:zlib";
 import type { Pool } from "pg";
 import express from "express";
 import request from "supertest";
@@ -18,6 +20,10 @@ class MemoryStorage implements PrivateObjectStorage {
   objects=new Map<string,Uint8Array>(); failDelete=false; failPut=false;
   async put(k:string,b:Uint8Array) {if(this.failPut)throw new Error("synthetic unavailable");this.objects.set(k,new Uint8Array(b));}
   async get(k:string) {const b=this.objects.get(k);if(!b)throw new Error("missing");return b;}
+  openReadStream(k:string) {
+    const bytes=this.objects.get(k);
+    return Readable.from((async function*(){if(!bytes)throw new Error("missing");yield bytes;})());
+  }
   async exists(k:string) {return this.objects.has(k);}
   async delete(k:string) {if(this.failDelete)throw new Error("synthetic unavailable");this.objects.delete(k);}
   async getSignedReadUrl():Promise<string> {throw new Error("Private files never use public URLs.");}
@@ -200,12 +206,99 @@ describe("annual tax planning",()=>{
   });
 });
 
+// Read standard central-directory entries independently of the ZIP writer.
+function unzip(buffer:Buffer) {
+  const entries=new Map<string,Buffer>();
+  let position=buffer.indexOf(Buffer.from([0x50,0x4b,0x01,0x02]));
+  while(position>=0 && buffer.readUInt32LE(position)===0x02014b50) {
+    const compressed=buffer.readUInt32LE(position+20),nameLength=buffer.readUInt16LE(position+28);
+    const name=buffer.subarray(position+46,position+46+nameLength).toString();
+    const offset=buffer.readUInt32LE(position+42);
+    const start=offset+30+buffer.readUInt16LE(offset+26)+buffer.readUInt16LE(offset+28);
+    const bytes=buffer.subarray(start,start+compressed);
+    entries.set(name,buffer.readUInt16LE(position+10)===8 ? inflateRawSync(bytes) : bytes);
+    position+=46+nameLength+buffer.readUInt16LE(position+30)+buffer.readUInt16LE(position+32);
+  }
+  expect(buffer.includes(Buffer.from([0x50,0x4b,0x05,0x06]))).toBe(true);
+  return entries;
+}
+
+describe("accountant year-end package",()=>{
+  function app() {
+    return express().use(express.json()).use("/api",createAgentTaxRouter(service,undefined,planning));
+  }
+  const receiveZip=(res:request.Response,callback:(error:Error|null,body:Buffer)=>void)=>{
+    const chunks:Buffer[]=[];
+    res.on("data",(b:Buffer)=>chunks.push(b));
+    res.on("end",()=>callback(null,Buffer.concat(chunks)));
+    res.on("error",(error:Error)=>callback(error,Buffer.alloc(0)));
+  };
+  it("exports every selected-year record and safe private receipts with an exact manifest, excluding estimates and other years",async()=>{
+    vi.stubEnv("SESSION_SECRET","synthetic-test-session-only");
+    const income=await service.create({...base,title:"=HYPERLINK(\"https://example.test\")"});
+    const expense=await service.create({...base,title:"Travel",entryType:"expense",category:"travel"});
+    const doc=await service.create({...base,title:"Tax form",entryType:"document",amountCents:null,recordDate:null});
+    const pdf=Buffer.from("%PDF-1.7 synthetic private receipt");
+    await service.upload(income.id,1,"../../CON.pdf","application/pdf",pdf);
+    await service.upload(expense.id,1,"../../CON.pdf","application/pdf",pdf);
+    await service.upload(doc.id,1,"bad\\path.pdf","application/pdf",pdf);
+    await service.create({...base,taxYear:2025,recordDate:"2025-01-01",title:"NOT_THIS_YEAR"});
+    await planning.saveEstimate(2026,{...settings,wagesCents:1234567},0);
+    const bufferedRead=vi.spyOn(storage,"get");
+    const signed=vi.spyOn(storage,"getSignedReadUrl");
+    const response=await request(app()).get("/api/admin/agent-tax/package?year=2026&q=no-match&page=99")
+      .set("Authorization",`Bearer ${issueToken()!.token}`).buffer(true).parse(receiveZip);
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/zip");
+    expect(response.headers["cache-control"]).toContain("no-store");
+    expect(response.headers["content-disposition"]).toContain("2026.zip");
+    const files=unzip(response.body);
+    expect(files.size).toBe(6);
+    for(const id of [income.id,expense.id,doc.id]) expect(files.get(`receipts/${id}.pdf`)).toEqual(pdf);
+    expect([...files.keys()].every(name=>!name.includes("..")&&!name.includes("\\")&&!name.startsWith("/"))).toBe(true);
+    const manifest=JSON.parse(files.get("manifest.json")!.toString());
+    expect(manifest.records).toHaveLength(3);
+    for(const r of manifest.records) expect(files.has(r.receiptPath)).toBe(true);
+    expect(manifest.records.find((r:{recordId:string})=>r.recordId===income.id).revision).toBe(2);
+    const csv=files.get("income-expenses.csv")!.toString();
+    expect(csv).toContain(income.id);expect(csv).toContain(expense.id);expect(csv).not.toContain(doc.id);
+    expect(csv).toContain("'=HYPERLINK");
+    const text=[...files.values()].map(b=>b.toString()).join("\n");
+    expect(text).toContain("not proof of deductibility");
+    for(const forbidden of ["storage_key","agent-tax/","NOT_THIS_YEAR","filingStatus","wagesCents","getSignedReadUrl"]) expect(text).not.toContain(forbidden);
+    expect(bufferedRead).not.toHaveBeenCalled();expect(signed).not.toHaveBeenCalled();
+  });
+  it("exports a valid empty-year package and rejects invalid years",async()=>{
+    vi.stubEnv("SESSION_SECRET","synthetic-test-session-only");
+    const auth={Authorization:`Bearer ${issueToken()!.token}`};
+    for(const year of ["","abc","1899","2201","2026.5","2026&year=2025"]) {
+      expect((await request(app()).get(`/api/admin/agent-tax/package?year=${year}`).set(auth)).status).toBe(400);
+    }
+    const response=await request(app()).get("/api/admin/agent-tax/package?year=2026").set(auth).buffer(true).parse(receiveZip);
+    const files=unzip(response.body);
+    expect(files.size).toBe(3);expect(JSON.parse(files.get("manifest.json")!.toString()).records).toEqual([]);
+  });
+  it("rejects unavailable storage and shared/traversal file keys before streaming",async()=>{
+    vi.stubEnv("SESSION_SECRET","synthetic-test-session-only");
+    const r=await service.create(base);
+    await service.upload(r.id,1,"test.pdf","application/pdf",Buffer.from("%PDF-synthetic"));
+    const auth={Authorization:`Bearer ${issueToken()!.token}`};
+    service=new AgentTaxService(pool,storage,false);
+    expect((await request(app()).get("/api/admin/agent-tax/package?year=2026").set(auth)).status).toBe(503);
+    service=new AgentTaxService(pool,storage,true);
+    for(const key of ["company/shared.pdf",`agent-tax/${r.id}/../../shared.pdf`,`https://storage.test/file?signature=secret`]) {
+      await pool.query("UPDATE agent_tax_records SET storage_key=$1 WHERE id=$2",[key,r.id]);
+      expect((await request(app()).get("/api/admin/agent-tax/package?year=2026").set(auth)).status).toBe(503);
+    }
+  });
+});
+
 describe("owner boundary and route validation",()=>{
   it("rejects every private API without owner auth before consulting records/storage",async()=>{
     vi.stubEnv("SESSION_SECRET","synthetic-test-session-only");
-    const noRead={list:vi.fn(),download:vi.fn()} as unknown as AgentTaxService;
+    const noRead={list:vi.fn(),download:vi.fn(),accountantPackage:vi.fn()} as unknown as AgentTaxService;
     const app=express().use(express.json()).use("/api",createAgentTaxRouter(noRead,undefined,planning));
-    for(const path of ["/records","/pay","/pay/export","/export?year=2026","/bookings","/estimate/2026",`/records/${randomUUID()}/file`]) {
+    for(const path of ["/records","/pay","/pay/export","/export?year=2026","/package?year=2026","/bookings","/estimate/2026",`/records/${randomUUID()}/file`]) {
       for(const token of ["","office.synthetic","boss.synthetic","manager.synthetic"]) {
         const req=request(app).get(`/api/admin/agent-tax${path}`);
         if(token)req.set("Authorization",`Bearer ${token}`);
@@ -213,6 +306,7 @@ describe("owner boundary and route validation",()=>{
       }
     }
     expect(noRead.list).not.toHaveBeenCalled();expect(noRead.download).not.toHaveBeenCalled();
+    expect(noRead.accountantPackage).not.toHaveBeenCalled();
     const id=randomUUID();
     for(const [method,path] of [
       ["post","/records"],["patch",`/records/${id}`],["delete",`/records/${id}`],

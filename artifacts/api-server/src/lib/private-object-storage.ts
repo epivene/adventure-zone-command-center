@@ -1,4 +1,5 @@
 import { Storage } from "@google-cloud/storage";
+import type { Readable } from "node:stream";
 
 export type PrivateStorageBucketKey =
   | "LEG_MANAGER_RECEIPT_BUCKET"
@@ -20,6 +21,8 @@ type StorageLike = Pick<Storage, "bucket">;
 export interface PrivateObjectStorage {
   put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   get(key: string): Promise<Uint8Array>;
+  /** Optional for existing consumers; required for bounded-memory accountant exports. */
+  openReadStream?(key: string): Readable;
   exists(key: string): Promise<boolean>;
   getSignedReadUrl(key: string, expiresInSeconds?: number): Promise<string>;
   delete(key: string): Promise<void>;
@@ -90,6 +93,10 @@ export class GoogleCloudPrivateObjectStorage implements PrivateObjectStorage {
   async get(key: string) {
     const [bytes] = await this.bucket().file(key).download();
     return new Uint8Array(bytes);
+  }
+
+  openReadStream(key: string) {
+    return this.bucket().file(key).createReadStream();
   }
 
   async exists(key: string) {

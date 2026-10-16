@@ -34,6 +34,7 @@ export * from './agentTaxRecord';
 export * from './agentTaxUpdate';
 export * from './deleteAgentPay200';
 export * from './deleteAgentTaxRecord200';
+export * from './downloadAgentTaxPackageParams';
 export * from './exportAgentTaxRecordsParams';
 export * from './festivalCrewFact';
 export * from './festivalCrewLocation';

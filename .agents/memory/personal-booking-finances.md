@@ -26,3 +26,12 @@ distort both results.
 **How to apply:** Preserve payment idempotency and the earned/received separation.
 Tax estimates are cash-basis planning with explicit assumptions, year-specific
 official rules and limitations, not guaranteed liabilities or automatic deductions.
+
+Accountant handoffs must exclude tax-estimate assumptions by default and clearly
+state that saved records and receipts are not proof of deductibility.
+
+**Why:** The requested year-end handoff is for personal booking-agent evidence,
+not disclosure of sensitive estimate inputs or a determination that expenses qualify.
+
+**How to apply:** Keep future export formats and sharing flows within that scope;
+do not silently add estimate settings to an accountant package.

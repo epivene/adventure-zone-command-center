@@ -701,6 +701,14 @@ export type ExportAgentTaxRecordsParams = {
 year: number;
 };
 
+export type DownloadAgentTaxPackageParams = {
+/**
+ * @minimum 1900
+ * @maximum 2200
+ */
+year: number;
+};
+
 export type SearchAgentTaxBookingsParams = {
 /**
  * @maxLength 200

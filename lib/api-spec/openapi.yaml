@@ -29,6 +29,8 @@ paths:
     $ref: "./agent-tax.openapi.yaml#/paths/~1admin~1agent-tax~1records~1{id}~1file"
   /admin/agent-tax/export:
     $ref: "./agent-tax.openapi.yaml#/paths/~1admin~1agent-tax~1export"
+  /admin/agent-tax/package:
+    $ref: "./agent-tax.openapi.yaml#/paths/~1admin~1agent-tax~1package"
   /admin/agent-tax/bookings:
     $ref: "./agent-tax.openapi.yaml#/paths/~1admin~1agent-tax~1bookings"
   /manager/bookings/{id}/crew-location:
@@ -547,4 +549,3 @@ components:
           type: string
       required:
         - status
-

@@ -927,6 +927,21 @@ export const ExportAgentTaxRecordsResponse = zod.unknown()
 
 
 /**
+ * Owner bearer authentication required. Streams a private ZIP of all selected-year personal records, income/expense CSV, attached receipts, manifest and deductibility notice. Excludes shared files, unpaid earnings and tax-estimate assumptions. Maximum 10000 records; concurrent exports return 429. Receipt read failures terminate the download rather than returning a complete-looking partial archive.
+ */
+export const downloadAgentTaxPackageQueryYearMin = 1900;
+export const downloadAgentTaxPackageQueryYearMax = 2200;
+
+
+
+export const DownloadAgentTaxPackageQueryParams = zod.object({
+  "year": zod.coerce.number().int().min(downloadAgentTaxPackageQueryYearMin).max(downloadAgentTaxPackageQueryYearMax)
+})
+
+export const DownloadAgentTaxPackageResponse = zod.unknown()
+
+
+/**
  * Owner-only booking search for optional record links
  */
 export const searchAgentTaxBookingsQueryQMax = 200;

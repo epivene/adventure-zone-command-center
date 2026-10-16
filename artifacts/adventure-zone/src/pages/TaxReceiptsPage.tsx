@@ -6,13 +6,13 @@ import { Input } from "@workspace/avz-crm/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/avz-crm/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/avz-crm/components/ui/tabs";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
-import { describeError, exportCsv, listRecords, type RecordsResponse, type TaxRecord } from "@/features/agent-tax/client";
 import { RecordFormDialog } from "@/components/agent-tax/RecordFormDialog";
 import { DeleteRecordDialog } from "@/components/agent-tax/ConfirmDialogs";
 import { RecordList } from "@/components/agent-tax/RecordList";
 import { PayTab } from "@/components/agent-tax/PayTab";
 import { EstimateTab } from "@/components/agent-tax/EstimateTab";
 import { SummaryCards } from "@/components/agent-tax/SummaryCards";
+import { describeError, downloadAccountantPackage, exportCsv, listRecords, type RecordsResponse, type TaxRecord } from "@/features/agent-tax/client";
 
 const LIMIT = 25;
 
@@ -29,6 +29,8 @@ export default function TaxReceiptsPage() {
   const [deleting, setDeleting] = useState<TaxRecord | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [packageDownloading, setPackageDownloading] = useState(false);
+  const [packageStatus, setPackageStatus] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
   const [ledgerKey, setLedgerKey] = useState(0);
@@ -57,6 +59,19 @@ export default function TaxReceiptsPage() {
     if (!year) return;
     setExporting(true); setExportError(null);
     try { await exportCsv(year); } catch (e) { setExportError(describeError(e)); } finally { setExporting(false); }
+  }
+
+  async function doPackageDownload() {
+    if (!year) return;
+    const selectedYear = year;
+    setPackageDownloading(true); setExportError(null); setPackageStatus(null);
+    try {
+      const result = await downloadAccountantPackage(selectedYear);
+      if (result !== "cancelled") setPackageStatus(result === "saved"
+        ? `${selectedYear} accountant package saved. Share it securely with your tax preparer.`
+        : `${selectedYear} package is ready. Check your browser downloads, then share it securely.`);
+    } catch (e) { setExportError(describeError(e)); }
+    finally { setPackageDownloading(false); }
   }
 
   return (
@@ -91,6 +106,17 @@ export default function TaxReceiptsPage() {
         <Button variant="outline" disabled={!year || exporting} onClick={doExport}>{exporting ? "Exporting" : "Export CSV"}</Button>
         <Button onClick={() => openForm(null)}>New entry</Button>
       </div>
+      <Alert>
+        <AlertTitle>Accountant package{year ? ` — ${year}` : ""}</AlertTitle>
+        <AlertDescription className="grid gap-2">
+          <span>Download all personal records for the selected tax year, regardless of search or page: income/expense CSV, attached receipts and documents, and a manifest linking files to records. Company/crew files, unpaid earnings and tax-estimate assumptions are excluded.</span>
+          <span>Records and receipts are not proof of deductibility. Your tax preparer must review them. This ZIP contains private financial information; share it securely. Large packages stream directly to disk in supported browsers; other browsers have a safe 64 MB limit.</span>
+          <span><Button variant="outline" disabled={!year || packageDownloading} onClick={doPackageDownload}>
+            {packageDownloading ? "Downloading package…" : "Download accountant package"}
+          </Button></span>
+          {packageStatus ? <span role="status">{packageStatus}</span> : null}
+        </AlertDescription>
+      </Alert>
       {exportError ? <p className="text-sm text-destructive" role="alert">{exportError}</p> : null}
 
       {data ? <SummaryCards summary={data.summary} year={year} /> : null}

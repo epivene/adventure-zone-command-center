@@ -32,6 +32,7 @@ import type {
   AgentTaxUpdate,
   DeleteAgentPay200,
   DeleteAgentTaxRecord200,
+  DownloadAgentTaxPackageParams,
   ExportAgentTaxRecordsParams,
   FestivalCrewLocation,
   FestivalCrewStop,
@@ -1302,6 +1303,87 @@ export function useExportAgentTaxRecords<TData = Awaited<ReturnType<typeof expor
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportAgentTaxRecordsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDownloadAgentTaxPackageUrl = (params: DownloadAgentTaxPackageParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/agent-tax/package?${stringifiedParams}` : `/api/admin/agent-tax/package`
+}
+
+/**
+ * Owner bearer authentication required. Streams a private ZIP of all selected-year personal records, income/expense CSV, attached receipts, manifest and deductibility notice. Excludes shared files, unpaid earnings and tax-estimate assumptions. Maximum 10000 records; concurrent exports return 429. Receipt read failures terminate the download rather than returning a complete-looking partial archive.
+ */
+export const downloadAgentTaxPackage = async (params: DownloadAgentTaxPackageParams, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getDownloadAgentTaxPackageUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadAgentTaxPackageQueryKey = (params?: DownloadAgentTaxPackageParams,) => {
+    return [
+    `/api/admin/agent-tax/package`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getDownloadAgentTaxPackageQueryOptions = <TData = Awaited<ReturnType<typeof downloadAgentTaxPackage>>, TError = ErrorType<void>>(params: DownloadAgentTaxPackageParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadAgentTaxPackage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadAgentTaxPackageQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadAgentTaxPackage>>> = ({ signal }) => downloadAgentTaxPackage(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadAgentTaxPackage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadAgentTaxPackageQueryResult = NonNullable<Awaited<ReturnType<typeof downloadAgentTaxPackage>>>
+export type DownloadAgentTaxPackageQueryError = ErrorType<void>
+
+
+
+export function useDownloadAgentTaxPackage<TData = Awaited<ReturnType<typeof downloadAgentTaxPackage>>, TError = ErrorType<void>>(
+ params: DownloadAgentTaxPackageParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadAgentTaxPackage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadAgentTaxPackageQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

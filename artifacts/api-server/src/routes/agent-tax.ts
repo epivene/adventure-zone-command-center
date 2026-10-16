@@ -24,6 +24,13 @@ export function createAgentTaxRouter(service?: AgentTaxService, ownerGate: Reque
   const run = (action: (req: express.Request,res: express.Response) => Promise<void>): RequestHandler => async (req,res) => {
     try { await action(req,res); }
     catch (error) {
+      // A failed streamed receipt must terminate the ZIP, not append JSON to it.
+      if (res.headersSent || res.destroyed) {
+        res.destroy();
+        return;
+      }
+      res.removeHeader("Content-Disposition");
+      res.type("application/json");
       if (error instanceof TaxError) { res.status(error.status).json({error:error.message}); return; }
       const code = (error as {code?:string})?.code;
       if (code === "23503") { res.status(400).json({error:"The linked booking no longer exists. Choose another booking or clear the link."}); return; }
@@ -51,6 +58,13 @@ export function createAgentTaxRouter(service?: AgentTaxService, ownerGate: Reque
     const year=yearSchema.safeParse(req.query.year);
     if(!year.success){res.status(400).json({error:"Choose a valid tax year."});return;}
     res.type("text/csv").attachment(`booking-agent-tax-${year.data}.csv`).send(await getService().csv(year.data));
+  }));
+  router.get("/admin/agent-tax/package",run(async(req,res) => {
+    const year=yearSchema.safeParse(req.query.year);
+    if(!year.success){res.status(400).json({error:"Choose a valid tax year."});return;}
+    res.type("application/zip").attachment(`booking-agent-accountant-${year.data}.zip`);
+    // No URLs, credentials, or storage identifiers are issued for package downloads.
+    await getService().accountantPackage(year.data,res);
   }));
   router.post("/admin/agent-tax/records",run(async(req,res) => {
     const input=createTaxEntry.safeParse(req.body);
