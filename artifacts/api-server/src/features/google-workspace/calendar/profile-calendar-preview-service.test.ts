@@ -30,7 +30,7 @@ function fixture() {
  const client={
   getEvent:vi.fn(async(_calendar,id)=>remote.get(id)??null),
   listEvents:vi.fn(async()=>({events:[...remote.values()],nextPageToken:null})),
-  createEvent:vi.fn(async(_calendar,input)=>{const event={...input,id:input.id,etag:"v1",updated:null,status:"confirmed"};remote.set(input.id,event);return event;}),
+  createEvent:vi.fn(async(_calendar,input)=>{const event={...input,id:input.id,etag:"v1",updated:null,status:"confirmed",eventKind:"all_day" as const};remote.set(input.id,event);return event;}),
   updateEvent:vi.fn(),
  };
  const db={execute:vi.fn(async()=>({rows:[]}))};
@@ -60,19 +60,19 @@ describe("profile preview apply (database boundaries mocked)",()=>{
  });
  it("reconciles provider success after a lost response without creating again",async()=>{
   const f=fixture();
-  f.remote.set(f.eventId,{...f.desired,id:f.eventId,etag:"v1",updated:null,status:"confirmed"});
+  f.remote.set(f.eventId,{...f.desired,id:f.eventId,etag:"v1",updated:null,status:"confirmed",eventKind:"all_day" as const});
   await expect(f.service.apply({previewId:"preview",fingerprint:"revision"},"owner")).resolves.toMatchObject({state:"saved"});
   expect(f.client.createEvent).not.toHaveBeenCalled();expect(f.client.updateEvent).not.toHaveBeenCalled();
  });
  it("does not report success when provider readback differs",async()=>{
   const f=fixture();f.client.createEvent.mockImplementation(async(_calendar,input)=>{
-    const bad={...input,id:input.id,description:"changed remotely",etag:"v1",updated:null,status:"confirmed"};f.remote.set(input.id,bad);return bad;
+    const bad={...input,id:input.id,description:"changed remotely",etag:"v1",updated:null,status:"confirmed",eventKind:"all_day" as const};f.remote.set(input.id,bad);return bad;
   });
   await expect(f.service.apply({previewId:"preview",fingerprint:"revision"},"owner")).rejects.toMatchObject({code:"CALENDAR_SAVE_NOT_VERIFIED"});
   expect(recordAuditEntry).not.toHaveBeenCalled();
  });
  it("blocks a newly discovered duplicate before writing",async()=>{
-  const f=fixture();f.remote.set("manual",{...f.desired,id:"manual",etag:"v1",status:"confirmed"});
+  const f=fixture();f.remote.set("manual",{...f.desired,id:"manual",etag:"v1",status:"confirmed",eventKind:"all_day" as const});
   await expect(f.service.apply({previewId:"preview",fingerprint:"revision"},"owner")).rejects.toMatchObject({code:"POSSIBLE_DUPLICATE_REQUIRES_REVIEW"});
   expect(f.client.createEvent).not.toHaveBeenCalled();
  });
@@ -86,4 +86,15 @@ describe("profile preview apply (database boundaries mocked)",()=>{
   await expect(f.service.apply({previewId:"preview",fingerprint:"revision"},"different")).rejects.toMatchObject({code:"PREVIEW_ACTOR_MISMATCH"});
   expect(f.client.createEvent).not.toHaveBeenCalled();
  });
+});
+
+it("rejects timed provider readback even when projected dates match", async () => {
+ const f=fixture();
+ f.client.createEvent.mockImplementation(async(_calendar,input)=>{
+   const timed={...input,id:input.id,etag:"v1",updated:null,status:"confirmed",eventKind:"timed"};
+   f.remote.set(input.id,timed); return timed;
+ });
+ await expect(f.service.apply({previewId:"preview",fingerprint:"revision"},"owner"))
+   .rejects.toMatchObject({code:"CALENDAR_SAVE_NOT_VERIFIED"});
+ expect(recordAuditEntry).not.toHaveBeenCalled();
 });
