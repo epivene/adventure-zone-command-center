@@ -36,7 +36,8 @@ export function createChatGPTMcpRouter(deps: {
       return res.status(403).json({ error: "CONNECTION_ORIGIN_DENIED" });
     return next();
   });
-  router.use(express.json({ limit: "256kb" }));
+  // Payment image uploads carry at most four MiB of binary as base64.
+  router.use(express.json({ limit: "6mb" }));
   router.all("/", async (req, res) => {
     if (req.method !== "POST")
       return res

@@ -1,4 +1,5 @@
 import { ContactCreateService } from "./contact-create-service";
+import { ConnectionInvoicePayments } from "./invoice-payment-tools";
 import { ConnectionConventionService } from "./convention-tools";
 import { WebsiteInquiryReads } from "./website-inquiry-reads";
 import { WebsiteInquiryReviewService } from "../website-inquiries/website-inquiry-review-service";
@@ -157,6 +158,7 @@ export function mountChatGPTConnection(
         });
       },
       services: {
+        invoicePayments: new ConnectionInvoicePayments(db),
         contacts: new ContactCreateService(db),
         conventions: new ConnectionConventionService(db),
         inquiries: new WebsiteInquiryReads(db, new WebsiteInquiryReviewService({repository:new DrizzleWebsiteInquiryRepository(appDatabase)}), appOrigin),

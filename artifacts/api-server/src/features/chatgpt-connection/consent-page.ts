@@ -7,7 +7,7 @@ export const consentScript = String.raw`
   let token = '', details;
   const labels = {
     'crm:read':'Read saved app records, profile history, emails, contracts, invoices and document text',
-    'crm:append':'Create researched leads and append notes',
+    'crm:append':'Create researched leads, append notes, record received invoice payments and upload private payment receipt images',
     'crm:update':'Edit notes and profiles with saved history; removing information and merging profiles need exact approval',
     'drafts:write':'Save and edit app drafts',
     'followups:write':'Create and edit follow-up reminders',
