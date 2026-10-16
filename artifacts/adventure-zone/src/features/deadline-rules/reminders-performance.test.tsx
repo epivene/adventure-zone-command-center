@@ -6,6 +6,34 @@ vi.mock("@/lib/auth-token",()=>({apiGet:f.get,apiPost:f.post,apiPut:vi.fn()}));
 import { RemindersProvider, ReminderBell, RemindersPage } from "./reminders";
 beforeEach(()=>{f.path="/profiles";f.get.mockReset();f.post.mockReset();f.get.mockImplementation(async(path:string)=>path==="/deadline-rules"?{rules:[],email:{enabled:false,providerConfigured:false}}:{count:7,lastEvaluatedAt:null,notifications:[],upcoming:[]});});
 afterEach(cleanup);
+it("dismisses a notice and updates the list and badge without running the evaluator",async()=>{
+  f.path="/settings/reminders";
+  let dismissed=false;
+  const notice={id:"old",organizationId:"p",profileName:"Reviewed customer",title:"Old reminder",dueOn:"2026-10-01",deadlineKind:"next_action",triggerType:"deadline_passed"};
+  f.get.mockImplementation(async(path:string)=>path==="/deadline-rules"?{rules:[],email:{enabled:false,providerConfigured:false}}:{count:dismissed?0:1,lastEvaluatedAt:null,notifications:dismissed?[]:[notice],upcoming:[]});
+  f.post.mockImplementation(async(path:string)=>{
+    if(path==="/deadline-rules/notifications/old/dismiss")dismissed=true;
+    // A slow evaluation must not hold up a saved dismissal.
+    if(path==="/deadline-rules/evaluate")return new Promise(()=>{});
+    return {ok:true};
+  });
+  render(<RemindersProvider><ReminderBell/><RemindersPage/></RemindersProvider>);
+  fireEvent.click(await screen.findByRole("button",{name:"Dismiss Reviewed customer: Old reminder"}));
+  await screen.findByLabelText("Reminders, 0 active");
+  expect(screen.queryByRole("button",{name:"Dismiss Reviewed customer: Old reminder"})).toBeNull();
+  expect(f.post.mock.calls.map(c=>c[0])).toEqual(["/deadline-rules/notifications/old/dismiss"]);
+});
+it("keeps a reminder visible and reports a failed dismissal without evaluating",async()=>{
+  f.path="/settings/reminders";
+  f.get.mockImplementation(async(path:string)=>path==="/deadline-rules"?{rules:[],email:{enabled:false,providerConfigured:false}}:{count:1,lastEvaluatedAt:null,notifications:[{id:"old",organizationId:"p",profileName:"Reviewed customer",title:"Old reminder",dueOn:"2026-10-01",deadlineKind:"next_action",triggerType:"deadline_passed"}],upcoming:[]});
+  f.post.mockRejectedValue(new Error("Unavailable"));
+  render(<RemindersProvider><ReminderBell/><RemindersPage/></RemindersProvider>);
+  fireEvent.click(await screen.findByRole("button",{name:"Dismiss Reviewed customer: Old reminder"}));
+  await screen.findByRole("alert");
+  expect(screen.getByLabelText("Reminders, 1 active")).toBeTruthy();
+  expect(screen.getByRole("button",{name:"Dismiss Reviewed customer: Old reminder"})).toBeTruthy();
+  expect(f.post.mock.calls.map(c=>c[0])).toEqual(["/deadline-rules/notifications/old/dismiss"]);
+});
 it("opens search with a small read-only badge request and loads full details only when needed",async()=>{
   const view=render(<RemindersProvider><ReminderBell/></RemindersProvider>);
   await screen.findByLabelText("Reminders, 7 active");
