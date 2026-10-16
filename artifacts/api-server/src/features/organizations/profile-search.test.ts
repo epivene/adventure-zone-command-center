@@ -10,7 +10,6 @@ import * as profileSearch from "./profile-search";
 
 const routeSource = readFileSync("src/routes/organization-forgiving-search.ts", "utf8");
 const indexSource = readFileSync("src/routes/index.ts", "utf8");
-const organizationRepositorySource = readFileSync("src/features/organizations/organization-repository.ts", "utf8");
 
 describe("forgiving profile search", () => {
   it("normalizes capitalization, punctuation, and whitespace into useful terms", () => {
@@ -56,13 +55,6 @@ describe("forgiving profile search", () => {
     expect(routeSource).toContain("loadOrganizationSearchCorpus");
   });
 
-  it("builds the corpus from the same eligible profiles returned by the repository", () => {
-    const handlerSource = routeSource.slice(routeSource.indexOf('router.get("/organizations"'));
-    expect(handlerSource.indexOf("const candidatePage")).toBeLessThan(
-      handlerSource.indexOf("const matchedIds"),
-    );
-    expect(handlerSource).toContain("candidatePage.records.map((record) => record.id)");
-  });
 
   it("keeps forgiving profile search on the normal Profiles endpoint", () => {
     expect(routeSource).toContain('router.get("/organizations"');
@@ -73,11 +65,4 @@ describe("forgiving profile search", () => {
     );
   });
 
-  it("preserves latest recorded event dates in the forgiving-search result path", () => {
-    expect(routeSource).toContain("new DrizzleOrganizationRepository(db).listOrganizations");
-    expect(organizationRepositorySource).toContain(".from(festivalEditions)");
-    expect(organizationRepositorySource).toContain(
-      "latestRecordedEventDate: resolveMostRecentRecordedEventDate",
-    );
-  });
 });

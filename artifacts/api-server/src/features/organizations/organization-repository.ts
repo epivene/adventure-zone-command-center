@@ -925,8 +925,18 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     };
   }
 
-  async listOrganizations(query: OrganizationListQuery): Promise<OrganizationListPage> {
-    const condition = buildOrganizationListCondition(query);
+  async listOrganizationIds(query: OrganizationListQuery): Promise<string[]> {
+    const rows = await this.database.select({ id: organizations.id })
+      .from(organizations)
+      .where(buildOrganizationListCondition(query))
+      .orderBy(...buildOrganizationListOrderBy(query))
+      .limit(query.pageSize);
+    return rows.map(row => row.id);
+  }
+
+  async listOrganizations(query: OrganizationListQuery, matchingIds?: string[]): Promise<OrganizationListPage> {
+    const condition = and(buildOrganizationListCondition(query),
+      matchingIds === undefined ? undefined : inArray(organizations.id, matchingIds));
     const [totals] = await this.database
       .select({ value: count() })
       .from(organizations)
