@@ -43,7 +43,9 @@ describe("deadline dates and rules",()=>{
       INSERT INTO activities(id,organization_id,kind,occurred_at,created_at)
       SELECT gen_random_uuid(),id,'note','2026-09-02','2026-09-02' FROM organizations`);
     const scans: any[] = [];
+    let notificationWrites = 0;
     const query = async (sql: string, values?: any[]) => {
+      if (sql.includes("INSERT INTO deadline_notifications")) notificationWrites++;
       if (sql.includes("last_activity")) {
         const result = await pg.query("EXPLAIN (ANALYZE, FORMAT JSON) " + sql, values);
         const visit = (plan: any) => {
@@ -59,6 +61,7 @@ describe("deadline dates and rules",()=>{
     expect(scans.every(scan => scan["Actual Loops"] === 1)).toBe(true);
     // The original October profile is recent; only the 20 September prospects qualify.
     expect((await pg.query("SELECT * FROM deadline_notifications WHERE active")).rows).toHaveLength(20);
+    expect(notificationWrites).toBeLessThanOrEqual(2);
   });
   it("bounds reminder queries and idle transactions before acquiring application locks", async () => {
     let limits: any;

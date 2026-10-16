@@ -4,6 +4,7 @@ import { readDeadlines, type Query } from "./sources";
 export type Database = Query & { connect(): Promise<Query & { release(destroy?: boolean): void }> };
 export type EmailReminder = { idempotencyKey: string; organizationId: string; title: string; dueOn: string | null };
 export interface ReminderEmailProvider { send(reminder: EmailReminder): Promise<void> }
+type ReminderMatch = { key: string; profile: string; title: string; due: string | null };
 export class DeadlineRulesService {
   constructor(private readonly db: Database, private readonly emailEnabled = false, private readonly emailProvider?: ReminderEmailProvider) {}
   async evaluate(now = new Date()) {
@@ -29,10 +30,11 @@ export class DeadlineRulesService {
       // Historical receipts remain; only current matches contribute to badges.
       await tx.query("UPDATE deadline_notifications SET active=false WHERE active");
       for (const rule of rules) {
+        const matches: ReminderMatch[] = [];
         for (const item of deadlines) {
           const match = deadlineMatch(rule,item,today);
-          if (match !== null) await this.record(tx,rule,`${item.sourceKey}:${item.dueOn}:${match}`,
-            item.organizationId,`${item.label} — ${match==='overdue'?'overdue':'due '+item.dueOn}`,item.dueOn,today);
+          if (match !== null) matches.push({ key: `${item.sourceKey}:${item.dueOn}:${match}`,
+            profile: item.organizationId, title: `${item.label} — ${match==='overdue'?'overdue':'due '+item.dueOn}`, due: item.dueOn });
         }
         if (rule.trigger.type === "inactive") {
           const profiles = await tx.query(`
@@ -61,17 +63,18 @@ export class DeadlineRulesService {
           for (const p of profiles.rows) {
             const last = new Date(p.last_activity);
             if (daysBetween(businessDay(last),today) >= rule.trigger.days)
-              await this.record(tx,rule,`inactive:${p.id}:${last.toISOString()}:${rule.trigger.days}`,p.id,
-                `No activity for ${rule.trigger.days} days`,null,today);
+              matches.push({ key: `inactive:${p.id}:${last.toISOString()}:${rule.trigger.days}`, profile: p.id,
+                title: `No activity for ${rule.trigger.days} days`, due: null });
           }
         }
         if (rule.trigger.type === "status_changed") {
           const changes = await tx.query(`SELECT e.* FROM deadline_status_events e JOIN organizations o ON o.id=e.organization_id
             WHERE e.occurred_at >= $1 AND e.occurred_at <= $2 AND o.consolidated_into_id IS NULL
               AND ($3::text IS NULL OR e.new_status=$3)`,[(rule as Rule & {updated_at?:string}).updated_at??rule.created_at,now,rule.trigger.status??null]);
-          for (const event of changes.rows) await this.record(tx,rule,`status:${event.id}`,event.organization_id,
-            `Status changed: ${event.old_status} → ${event.new_status}`,null,today);
+          for (const event of changes.rows) matches.push({ key: `status:${event.id}`, profile: event.organization_id,
+            title: `Status changed: ${event.old_status} → ${event.new_status}`, due: null });
         }
+        await this.recordMatches(tx, rule, matches, today);
       }
       // Retire only next actions owned by this engine when their condition is no longer active.
       await tx.query(`UPDATE follow_ups f SET completed_at=$1,outcome='Reminder condition no longer active',updated_at=$1
@@ -90,6 +93,25 @@ export class DeadlineRulesService {
       throw error;
     }
     finally { tx.release(discard); }
+  }
+  private async recordMatches(tx: Query, rule: Rule, matches: ReminderMatch[], today: string) {
+    // Next-action rules retain their receipt/ownership workflow. Badge-only rules
+    // should not pay one network round trip for every inactive customer.
+    if (rule.actions.includes("next_action")) {
+      for (const match of matches) await this.record(tx, rule, match.key, match.profile, match.title, match.due, today);
+      return;
+    }
+    const unique = [...new Map(matches.map(match => [match.key, match])).values()];
+    const emailState = rule.actions.includes("email")
+      ? (this.emailEnabled ? (this.emailProvider ? "pending" : "provider_not_configured") : "disabled")
+      : "not_requested";
+    for (let offset = 0; offset < unique.length; offset += 250) {
+      await tx.query(`INSERT INTO deadline_notifications(rule_id,occurrence_key,organization_id,title,due_on,email_state)
+        SELECT $1, m.key, m.profile::uuid, m.title, m.due::date, $3
+        FROM jsonb_to_recordset($2::jsonb) AS m(key text,profile text,title text,due text)
+        ON CONFLICT(rule_id,occurrence_key) DO UPDATE SET active=true,title=excluded.title`,
+        [rule.id, JSON.stringify(unique.slice(offset, offset + 250)), emailState]);
+    }
   }
   private async record(tx: Query, rule: Rule, key: string, profile: string, title: string, due: string|null, today: string) {
     const result = await tx.query(`INSERT INTO deadline_notifications(rule_id,occurrence_key,organization_id,title,due_on,email_state)
