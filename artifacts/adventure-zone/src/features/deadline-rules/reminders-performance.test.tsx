@@ -1,0 +1,32 @@
+import { act, cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+const f=vi.hoisted(()=>({path:"/profiles", get:vi.fn(), post:vi.fn()}));
+vi.mock("wouter",()=>({useLocation:()=>[f.path],Link:({children,...props}:any)=><a {...props}>{children}</a>}));
+vi.mock("@/lib/auth-token",()=>({apiGet:f.get,apiPost:f.post,apiPut:vi.fn()}));
+import { RemindersProvider, ReminderBell, RemindersPage } from "./reminders";
+beforeEach(()=>{f.path="/profiles";f.get.mockReset();f.post.mockReset();f.get.mockImplementation(async(path:string)=>path==="/deadline-rules"?{rules:[],email:{enabled:false,providerConfigured:false}}:{count:7,lastEvaluatedAt:null,notifications:[],upcoming:[]});});
+afterEach(cleanup);
+it("opens search with a small read-only badge request and loads full details only when needed",async()=>{
+  const view=render(<RemindersProvider><ReminderBell/></RemindersProvider>);
+  await screen.findByLabelText("Reminders, 7 active");
+  expect(f.get.mock.calls.map(c=>c[0])).toEqual(["/deadline-rules/badge"]);
+  expect(f.post).not.toHaveBeenCalled();
+  f.path="/settings/reminders";
+  view.rerender(<RemindersProvider><RemindersPage/></RemindersProvider>);
+  await waitFor(()=>expect(f.get).toHaveBeenCalledWith("/deadline-rules/summary"));
+  expect(f.post).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button",{name:"Check reminders"}));
+  await waitFor(()=>expect(f.post).toHaveBeenCalledWith("/deadline-rules/evaluate",{}));
+});
+it("does not replace full reminder details with an old badge refresh after navigation",async()=>{
+  let finish!:()=>void;
+  f.post.mockImplementation(()=>new Promise<void>(resolve=>{finish=resolve;}));
+  const view=render(<RemindersProvider><RemindersPage/></RemindersProvider>);
+  await waitFor(()=>expect(f.get).toHaveBeenCalledWith("/deadline-rules/badge"));
+  fireEvent.click(screen.getByRole("button",{name:"Check reminders"}));
+  f.path="/settings/reminders";
+  view.rerender(<RemindersProvider><RemindersPage/></RemindersProvider>);
+  await waitFor(()=>expect(f.get).toHaveBeenCalledWith("/deadline-rules/summary"));
+  await act(async()=>finish());
+  expect(f.get.mock.calls.filter(c=>c[0]==="/deadline-rules/badge")).toHaveLength(1);
+});
