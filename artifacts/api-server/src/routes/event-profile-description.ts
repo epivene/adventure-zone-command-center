@@ -16,10 +16,6 @@ function rowsOf<T>(result: unknown): T[] {
   return Array.isArray(result) ? (result as T[]) : [];
 }
 
-async function ensureDescriptionColumn() {
-  await db.execute(sql.raw("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS description text"));
-}
-
 router.get("/event-profiles/:id/description", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!uuid.safeParse(id).success) {
@@ -27,7 +23,6 @@ router.get("/event-profiles/:id/description", async (req, res): Promise<void> =>
     return;
   }
   try {
-    await ensureDescriptionColumn();
     const result = await db.execute(sql`select description from organizations where id = ${id}::uuid limit 1`);
     const row = rowsOf<{ description: string | null }>(result)[0];
     if (!row) {
@@ -54,7 +49,6 @@ router.patch("/event-profiles/:id/description", async (req, res): Promise<void> 
     return;
   }
   try {
-    await ensureDescriptionColumn();
     const result = await db.execute(sql`
       update organizations
       set description = ${parsed.data.description}, updated_at = now()

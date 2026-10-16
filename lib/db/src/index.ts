@@ -86,6 +86,14 @@ export const gmailThreadLockPool = new Pool({
   max: 2,
   ...databasePoolTimeouts(),
 });
+
+// pg removes failed idle clients before emitting this event. Handle it so a
+// database timeout or an administrator closing a stale session cannot crash the API.
+for (const [name, databasePool] of [["api", pool], ["gmail-thread-lock", gmailThreadLockPool]] as const) {
+  databasePool.on("error", (error) => {
+    console.error(`[db:${name}] Idle connection removed: ${error.message}`);
+  });
+}
 import * as outreachPlannerSchema from "./outreach-planner-schema";
 type DatabaseSchema = typeof legPlanningSchema & typeof chatgptConnectionSchema & typeof assistantWorkspaceSchema &
   typeof outreachPlannerSchema &
