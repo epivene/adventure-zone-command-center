@@ -56,6 +56,31 @@ const moved = [
   "google_sync_history",
   "google_sync_archive_jobs",
 ];
+it("blocks oversized preservation evidence before moving any references", async () => {
+  const db = await fixture();
+  try {
+    await db.query("UPDATE google_sync_history SET snapshot=$1", [
+      JSON.stringify({ body: "x".repeat(4 * 1024 * 1024) }),
+    ]);
+    await expect(
+      db.transaction((tx) =>
+        moveExtraMergeReferences(tx, primary, [duplicate], moved),
+      ),
+    ).rejects.toMatchObject({ code: "CONNECTION_MERGE_BLOCKED" });
+    expect(
+      (
+        await db.query<{ organization_id: string }>(
+          "SELECT organization_id FROM deadline_notifications",
+        )
+      ).rows[0].organization_id,
+    ).toBe(duplicate);
+    expect((await db.query("SELECT * FROM audit_entries")).rows).toHaveLength(
+      0,
+    );
+  } finally {
+    await db.close();
+  }
+});
 it("preserves notification status, every sync observation, retry metadata and original reference evidence", async () => {
   const db = await fixture();
   try {

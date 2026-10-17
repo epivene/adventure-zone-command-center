@@ -18,8 +18,25 @@ export async function preserveSyncMergeReferences(
   tables: string[],
 ): Promise<Set<string>> {
   const selected = Object.keys(references).filter((t) => tables.includes(t));
+  const tooLarge = () =>
+    new ConnectionError(
+      "CONNECTION_MERGE_BLOCKED",
+      409,
+      "Sync preservation evidence exceeds the safe merge size. Keep these profiles separate pending recovery review.",
+    );
   const read = async () => {
     const result: Record<string, unknown[]> = {};
+    // Bound in PostgreSQL before materializing bodies in the API process. The
+    // caller's table locks keep this preflight and the subsequent reads stable.
+    let bytes = 0;
+    for (const table of selected) {
+      const size = await tx.query(
+        `SELECT coalesce(sum(octet_length(to_jsonb(r)::text)),0) AS bytes FROM "${table}" r WHERE "${references[table]}"=ANY($1::uuid[])`,
+        [[primaryId, ...duplicateIds]],
+      );
+      bytes += Number(size.rows[0].bytes);
+      if (bytes > 4 * 1024 * 1024) throw tooLarge();
+    }
     for (const table of selected)
       result[table] = (
         await tx.query(
@@ -28,11 +45,7 @@ export async function preserveSyncMergeReferences(
         )
       ).rows;
     if (Buffer.byteLength(JSON.stringify(result)) > 4 * 1024 * 1024)
-      throw new ConnectionError(
-        "CONNECTION_MERGE_BLOCKED",
-        409,
-        "Sync preservation evidence exceeds the safe merge size. Keep these profiles separate pending recovery review.",
-      );
+      throw tooLarge();
     return result;
   };
   if (!selected.length) return new Set();
