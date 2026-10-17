@@ -90,6 +90,7 @@ export function attentionLabelHandler(
         fresh.gmailConnectionId !== mutation.connectionId
       )
         throw new Error("GOOGLE_WORKSPACE_ATTENTION_REVIEW_REQUIRED");
+      source = fresh;
     };
     return applyAttentionLabels(
       gmail,
@@ -98,6 +99,7 @@ export function attentionLabelHandler(
         profileLabelId,
         oldProfileLabelIds,
         state: r.state,
+        readMessages: async () => source.messageLabels,
         archive:
           mutation.operation === "assign_thread" &&
           latest === operation.result.record.reviewedMessageId,

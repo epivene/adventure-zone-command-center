@@ -1,5 +1,8 @@
 import { PostgresGoogleConnectionRepository } from "./google-connection-repository";
-import type { GoogleWorkspaceReadClient, GoogleThreadDetail } from "./google-api-types";
+import type {
+  GoogleWorkspaceReadClient,
+  GoogleThreadDetail,
+} from "./google-api-types";
 import {
   GoogleProfileFileService,
   type GoogleProfileFile,
@@ -54,7 +57,7 @@ function archiveMessages(detail: GoogleThreadDetail) {
     date: message.date,
     direction: message.direction,
     bodyText: message.bodyText,
-    ...(message.bodyHtml ? {bodyHtml:message.bodyHtml} : {}),
+    ...(message.bodyHtml ? { bodyHtml: message.bodyHtml } : {}),
     attachments: message.attachments,
   }));
 }
@@ -135,7 +138,15 @@ export class GoogleProfileEmailArchiveService {
         throw new Error("GOOGLE_WORKSPACE_PROFILE_EMAIL_UNAVAILABLE");
       }
 
-      const detail = await client.getThreadDetail(input.gmailThreadId);
+      const fetched = await client.getThreadDetail(input.gmailThreadId);
+      // Drafts have their own saved-draft workflow; never turn edits into delivered history.
+      // Existing archived rows remain preserved by the repository's additive upsert.
+      const detail = {
+        ...fetched,
+        messages: fetched.messages.filter(
+          (m) => !m.labelIds?.includes("DRAFT"),
+        ),
+      };
       const syncedAt = this.now();
       const messages = archiveMessages(detail);
       const pending = await this.archive.upsertThread({
