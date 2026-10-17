@@ -69,6 +69,7 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
       "propose_profile_update",
       "preview_profile_merge",
       "apply_approved_profile_merge",
+      "apply_chat_authorized_profile_merge",
       "apply_approved_profile_update",
       "list_app_drafts",
       "read_app_draft",
@@ -227,4 +228,14 @@ it("requires read permission before exposing Today data",async()=>{
  expect(tool.inputSchema.properties.section.enum).toContain("decisionReview");
  expect(tool.annotations.readOnlyHint).toBe(true);
  expect(tool._meta.securitySchemes).toEqual([{type:"oauth2",scopes:["crm:read"]}]);
+});
+
+it('denies chat merges without edit permission and advertises destructive exact consent',async()=>{
+ const {app}=setup(['crm:read']);
+ const list=await rpc(app,'tools/list');
+ const tool=list.body.result.tools.find((t:any)=>t.name==='apply_chat_authorized_profile_merge');
+ expect(tool.annotations.destructiveHint).toBe(true);
+ const r=await rpc(app,'tools/call',{name:'apply_chat_authorized_profile_merge',arguments:{requestKey:'denied-chat',proposalId:randomUUID(),expectedContentHash:'a'.repeat(64),primaryId:randomUUID(),duplicateIds:[randomUUID()],authorization:{source:'current_owner_message',instruction:'Merge the displayed pair.',confirmedSameEvent:true}}});
+ expect(r.body.result.isError).toBe(true);
+ expect(JSON.parse(r.body.result.content[0].text).code).toBe('CONNECTION_ACCESS_DENIED');
 });
