@@ -10,6 +10,7 @@ export async function runMailboxTurn(input: {
   ingest: (a: AccountClaim) => Promise<unknown>;
   process: (c: ThreadClaim, a: AccountClaim) => Promise<void>;
   archive?: (a: AccountClaim) => Promise<boolean>;
+  reconcileArchives?: (a: AccountClaim) => Promise<number>;
   historyDue: boolean;
   now?: () => number;
   stopped?: () => boolean;
@@ -28,6 +29,8 @@ export async function runMailboxTurn(input: {
       await input.ingest(a);
     const current = await input.repo.current(a);
     if (!current) return { processed, archived };
+    if (input.reconcileArchives && !input.stopped?.())
+      archived += await input.reconcileArchives(current);
     // Reserve part of each turn for archive work so initial hydration cannot
     // indefinitely starve it. Individual provider calls retain their deadlines.
     const hydrationBudget = input.archive ? 15000 : 30000;
@@ -38,14 +41,16 @@ export async function runMailboxTurn(input: {
       await input.process(claim, current);
       processed++;
     }
+    let archiveAttempts = 0;
     while (
-      archived < 10 &&
+      archiveAttempts < 10 &&
       !input.stopped?.() &&
       now() - started < 30000 &&
       input.archive &&
       (await input.repo.renew(current))
     ) {
       if (!(await input.archive(current))) break;
+      archiveAttempts++;
       archived++;
     }
   } catch (e) {
