@@ -169,6 +169,60 @@ function appFor(options?: {
 }
 
 describe("Google Workspace profile email routes", () => {
+  it("releases failed list loads so a later refresh can recover", async () => {
+    let fail = true;
+    const client = googleClient();
+    const app = appFor({
+      client: googleClient({
+        getThreadDetail: async (id) => {
+          if (fail) throw new Error("GOOGLE_WORKSPACE_API_REQUEST_FAILED");
+          return client.getThreadDetail!(id);
+        },
+      }),
+    });
+    expect(
+      (await request(app).get("/google-workspace/profiles/org-1/emails"))
+        .status,
+    ).toBe(503);
+    fail = false;
+    const recovered = await request(app).get(
+      "/google-workspace/profiles/org-1/emails",
+    );
+    expect(recovered.status).toBe(200);
+    expect(recovered.body.conversations).toHaveLength(1);
+  });
+
+  it("bounds overlapping list refreshes and shares work without dropping conversations", async () => {
+    let active = 0;
+    let peak = 0;
+    let calls = 0;
+    const client = googleClient();
+    const getThreadDetail = async (id: string) => {
+      calls++;
+      peak = Math.max(peak, ++active);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      active--;
+      return client.getThreadDetail!(id);
+    };
+    const mappings = Array.from({ length: 20 }, (_, i) => ({
+      ...defaultMappings[0],
+      messageId: `m-${i}`,
+      threadId: `t-${i}`,
+    }));
+    const app = appFor({ mappings, client: googleClient({ getThreadDetail }) });
+    const [first, second] = await Promise.all([
+      request(app).get("/google-workspace/profiles/org-1/emails"),
+      request(app).get("/google-workspace/profiles/org-1/emails"),
+    ]);
+    expect(first.status).toBe(200);
+    expect(second.body).toEqual(first.body);
+    expect(first.body.conversations).toHaveLength(20);
+    expect(peak).toBeLessThanOrEqual(2);
+    expect(calls).toBe(20);
+    await request(app).get("/google-workspace/profiles/org-1/emails");
+    expect(calls).toBe(40); // Completed results are not kept as stale cache.
+  });
+
   it("loads matched conversations from the live Gmail thread", async () => {
     const getThreadDetail = vi.fn(googleClient().getThreadDetail!);
     const getMessageMetadata = vi.fn(googleClient().getMessageMetadata!);

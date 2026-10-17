@@ -111,6 +111,45 @@ function errorStatus(code: string): number {
   return 500;
 }
 
+// Bound expensive Gmail/archive work across profile-list requests in this process.
+let activeListLoads = 0;
+const listLoadWaiters: Array<() => void> = [];
+async function withListLoadSlot<T>(load: () => Promise<T>): Promise<T> {
+  if (activeListLoads >= 2)
+    await new Promise<void>((resolve) => listLoadWaiters.push(resolve));
+  else activeListLoads++;
+  try {
+    return await load();
+  } finally {
+    const next = listLoadWaiters.shift();
+    if (next) next();
+    else activeListLoads--;
+  }
+}
+async function mapListSummaries<T, R>(
+  items: T[],
+  load: (item: T) => Promise<R>,
+) {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let index = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(2, items.length) }, async () => {
+      while (index < items.length) {
+        const current = index++;
+        try {
+          results[current] = {
+            status: "fulfilled",
+            value: await withListLoadSlot(() => load(items[current])),
+          };
+        } catch (reason) {
+          results[current] = { status: "rejected", reason };
+        }
+      }
+    }),
+  );
+  return results;
+}
+
 function gmailUrl(threadId: string): string {
   return `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(threadId)}`;
 }
@@ -173,122 +212,130 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
       ? { reconcileOrganization: async () => [] }
       : new GoogleProfileLabelValidationImportService());
 
+  // Share only unfinished loads. Different routers/actors cannot share a response.
+  const listLoads = new Map<string, Promise<Record<string, unknown>>>();
   router.get(
     `${profilePath}/:organizationId/emails`,
     async (req, res): Promise<void> => {
+      const key = `${(req as OwnerRequest).userId ?? "owner"}:${req.params.organizationId}`;
       try {
-        let mappings = await validationRepository.listApprovedForOrganization(
-          req.params.organizationId,
-        );
-        try {
-          const reconciled = await labelImportService.reconcileOrganization(
-            req.params.organizationId,
-          );
-          if (reconciled.length || !mappings.length) mappings = reconciled;
-        } catch (error) {
-          if (
-            !mappings.length &&
-            errorCode(error) === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"
-          ) {
-            throw error;
-          }
-          // Label recovery is best effort. A Gmail rate limit or stale label
-          // must not make an otherwise healthy profile fail to load.
-        }
-        const grouped = mappingsByThread(mappings);
+        let pending = listLoads.get(key);
+        if (!pending) {
+          pending = (async () => {
+            let mappings =
+              await validationRepository.listApprovedForOrganization(
+                req.params.organizationId,
+              );
+            try {
+              const reconciled = await labelImportService.reconcileOrganization(
+                req.params.organizationId,
+              );
+              if (reconciled.length || !mappings.length) mappings = reconciled;
+            } catch (error) {
+              if (
+                !mappings.length &&
+                errorCode(error) === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"
+              ) {
+                throw error;
+              }
+              // Label recovery is best effort. A Gmail rate limit or stale label
+              // must not make an otherwise healthy profile fail to load.
+            }
+            const grouped = mappingsByThread(mappings);
 
-        // Profiles with no matched Gmail should render an empty live mailbox area
-        // without requiring a Google round-trip.
-        if (!grouped.size) {
-          res.json({
-            validationSampleOnly: false,
-            historicalBackfillIncluded: true,
-            liveGmail: true,
-            unavailableThreadCount: 0,
-            conversations: [],
-          });
-          return;
-        }
+            // Profiles with no matched Gmail should render an empty live mailbox area
+            // without requiring a Google round-trip.
+            if (!grouped.size) {
+              return {
+                validationSampleOnly: false,
+                historicalBackfillIncluded: true,
+                liveGmail: true,
+                unavailableThreadCount: 0,
+                conversations: [],
+              };
+            }
 
-        const threadEntries = [...grouped.entries()];
-        const settled = await Promise.allSettled(
-          threadEntries.map(async ([threadId, threadMappings]) => ({
-            threadId,
-            threadMappings,
-            thread: await archiveService.archiveApprovedThread({
-              organizationId: req.params.organizationId,
-              contactId:
-                threadMappings.find((mapping) => mapping.contactId)?.contactId ??
-                null,
-              gmailThreadId: threadId,
-            }),
-          })),
-        );
+            const settled = await mapListSummaries(
+              [...grouped.entries()],
+              async ([threadId, threadMappings]) => {
+                const thread = await archiveService.archiveApprovedThread({
+                  organizationId: req.params.organizationId,
+                  contactId:
+                    threadMappings.find((mapping) => mapping.contactId)
+                      ?.contactId ?? null,
+                  gmailThreadId: threadId,
+                });
+                const latest = thread.messages.at(-1) ?? null;
+                return {
+                  threadId,
+                  subject: thread.subject || latest?.subject || "",
+                  from: latest?.from ?? "",
+                  to: latest?.to ?? "",
+                  date: latest?.date ?? "",
+                  internalDateMs: latest?.internalDateMs ?? null,
+                  hasAttachments: thread.messages.some(
+                    (message) => message.attachments.length > 0,
+                  ),
+                  contactId:
+                    threadMappings.find((mapping) => mapping.contactId)
+                      ?.contactId ?? null,
+                  evidenceCodes: [
+                    ...new Set(
+                      threadMappings.flatMap(
+                        (mapping) => mapping.evidenceCodes,
+                      ),
+                    ),
+                  ],
+                  originalGmailUrl:
+                    thread.originalGmailUrl || gmailUrl(threadId),
+                  conversationId: thread.id,
+                  savedCopy: true,
+                  archiveState: thread.archiveState,
+                  sourceState: sourceState(thread),
+                };
+              },
+            );
+            const successes = settled.flatMap((result) =>
+              result.status === "fulfilled" ? [result.value] : [],
+            );
+            const failures = settled.flatMap((result) =>
+              result.status === "rejected" ? [result.reason] : [],
+            );
+            if (!successes.length && failures.length) throw failures[0];
+            const allConversations = successes.sort(
+              (left, right) =>
+                (right.internalDateMs ?? 0) - (left.internalDateMs ?? 0) ||
+                left.threadId.localeCompare(right.threadId),
+            );
 
-        const successes = settled.flatMap((result) =>
-          result.status === "fulfilled" ? [result.value] : [],
-        );
-        const failures = settled.flatMap((result) =>
-          result.status === "rejected" ? [result.reason] : [],
-        );
+            const currentYear = new Date().getUTCFullYear();
+            const conversations = allConversations.filter(
+              (conversation) => conversationYear(conversation) === currentYear,
+            );
+            const historicalConversations = allConversations.filter(
+              (conversation) => conversationYear(conversation) !== currentYear,
+            );
 
-        // A stale/deleted Gmail thread should not break every other matched
-        // conversation on the profile. If Gmail itself is unavailable, however,
-        // surface the real Google error instead of pretending the mailbox is empty.
-        if (!successes.length && failures.length) {
-          throw failures[0];
-        }
-
-        const allConversations = successes
-          .map(({ threadId, threadMappings, thread }) => {
-            const latest = thread.messages.at(-1) ?? null;
-            return {
-              threadId,
-              subject: thread.subject || latest?.subject || "",
-              from: latest?.from ?? "",
-              to: latest?.to ?? "",
-              date: latest?.date ?? "",
-              internalDateMs: latest?.internalDateMs ?? null,
-              hasAttachments: thread.messages.some(
-                (message) => message.attachments.length > 0,
-              ),
-              contactId:
-                threadMappings.find((mapping) => mapping.contactId)?.contactId ?? null,
-              evidenceCodes: [
-                ...new Set(threadMappings.flatMap((mapping) => mapping.evidenceCodes)),
-              ],
-              originalGmailUrl: thread.originalGmailUrl || gmailUrl(threadId),
-              conversationId: thread.id,
-              savedCopy: true,
-              archiveState: thread.archiveState,
-              sourceState: sourceState(thread),
+            const response: Record<string, unknown> = {
+              validationSampleOnly: false,
+              historicalBackfillIncluded: true,
+              liveGmail: true,
+              unavailableThreadCount: failures.length,
+              conversations,
             };
-          })
-          .sort(
-            (left, right) =>
-              (right.internalDateMs ?? 0) - (left.internalDateMs ?? 0) ||
-              left.threadId.localeCompare(right.threadId),
-          );
-
-        const currentYear = new Date().getUTCFullYear();
-        const conversations = allConversations.filter(
-          (conversation) => conversationYear(conversation) === currentYear,
-        );
-        const historicalConversations = allConversations.filter(
-          (conversation) => conversationYear(conversation) !== currentYear,
-        );
-
-        const response: Record<string, unknown> = {
-          validationSampleOnly: false,
-          historicalBackfillIncluded: true,
-          liveGmail: true,
-          unavailableThreadCount: failures.length,
-          conversations,
-        };
-        if (historicalConversations.length) {
-          response.historicalConversations = historicalConversations;
+            if (historicalConversations.length) {
+              response.historicalConversations = historicalConversations;
+            }
+            return response;
+          })();
+          listLoads.set(key, pending);
+          void pending
+            .finally(() => {
+              if (listLoads.get(key) === pending) listLoads.delete(key);
+            })
+            .catch(() => {});
         }
-        res.json(response);
+        res.json(await pending);
       } catch (error) {
         const code = errorCode(error);
         res.status(errorStatus(code)).json({ error: code });
