@@ -8,6 +8,7 @@ export async function applyAttentionLabels(
     oldProfileLabelIds: string[];
     state: AttentionState;
     archive: boolean;
+    readMessages?: () => Promise<{ id: string; labelIds: string[] }[]>;
   },
   guard: () => Promise<void>,
 ): Promise<string[]> {
@@ -30,6 +31,64 @@ export async function applyAttentionLabels(
     }
   }
   await guard();
+  if (input.readMessages) {
+    const eligible = (await input.readMessages()).filter(
+      (m) => !m.labelIds.includes("DRAFT"),
+    );
+    if (!eligible.length)
+      throw new Error("GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND");
+    const addLabelIds = [
+      input.profileLabelId,
+      ...(input.state !== "resolved" && label ? [label.id] : []),
+    ];
+    for (const message of eligible) {
+      if (addLabelIds.every((id) => message.labelIds.includes(id))) continue;
+      await guard();
+      await gmail.modifyMessageLabels({
+        messageId: message.id,
+        addLabelIds,
+        removeLabelIds: [],
+      });
+    }
+    await guard();
+    const verified = await input.readMessages();
+    for (const message of eligible) {
+      const current = verified.find((m) => m.id === message.id);
+      if (
+        !current ||
+        current.labelIds.includes("DRAFT") ||
+        addLabelIds.some((id) => !current.labelIds.includes(id))
+      )
+        throw new Error("GOOGLE_WORKSPACE_ATTENTION_LABEL_NOT_VERIFIED");
+    }
+    const removed = new Set<string>();
+    for (const message of eligible) {
+      const attached = new Set(
+        verified.find((m) => m.id === message.id)!.labelIds,
+      );
+      const removeLabelIds = [
+        ...new Set([
+          ...input.oldProfileLabelIds.filter(
+            (id) => id !== input.profileLabelId && attached.has(id),
+          ),
+          ...(input.state === "resolved" && label && attached.has(label.id)
+            ? [label.id]
+            : []),
+          ...(input.archive && attached.has("INBOX") ? ["INBOX"] : []),
+        ]),
+      ];
+      if (removeLabelIds.length) {
+        await guard();
+        await gmail.modifyMessageLabels({
+          messageId: message.id,
+          addLabelIds: [],
+          removeLabelIds,
+        });
+      }
+      removeLabelIds.forEach((id) => removed.add(id));
+    }
+    return [...removed];
+  }
   await gmail.modifyThreadLabels({
     threadId: input.threadId,
     addLabelIds: [

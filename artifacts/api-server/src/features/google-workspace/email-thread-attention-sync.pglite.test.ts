@@ -54,12 +54,19 @@ it("restores attention for new inbound without archiving and blocks revoked sync
         i.addLabelIds.forEach((x: string) => labels.add(x));
         i.removeLabelIds.forEach((x: string) => labels.delete(x));
       },
+      modifyMessageLabels: async (i: any) => {
+        i.addLabelIds.forEach((x: string) => labels.add(x));
+        i.removeLabelIds.forEach((x: string) => labels.delete(x));
+      },
     };
     source.value = {
       gmailConnectionId: account,
       threadId: "t",
       latestMessageId: "new",
       latestDirection: "incoming",
+      get messageLabels() {
+        return [{ id: "new", labelIds: [...labels] }];
+      },
     };
     const mutation: any = {
       connectionId: account,
