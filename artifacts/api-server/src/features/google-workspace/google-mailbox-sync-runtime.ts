@@ -13,6 +13,7 @@ import { SyncFailure } from "./google-mailbox-sync-client";
 import { logger } from "@/lib/logger";
 import { SyncArchiveWorker } from "./google-mailbox-sync-archive-worker";
 import { archiveSyncThread } from "./google-mailbox-sync-archive-runtime";
+import { completeCoveredArchives } from "./google-mailbox-sync-archive-covered";
 import { withScheduledGoogleBudget } from "./google-scheduled-request-budget";
 
 const database: SyncDatabase = {
@@ -205,6 +206,14 @@ async function tick(stopped: () => boolean) {
       ingest: (a) => ingestor.step(a),
       process: (c, a) => processor.process(c, a),
       archive: (a) => archiver.step(a),
+      reconcileArchives: async (a) => {
+        try { return await completeCoveredArchives(syncRepository, a); }
+        catch {
+          // A contended shortcut must not prevent ordinary, individually guarded work.
+          logger.warn("Saved archive coverage check deferred; ordinary sync retained");
+          return 0;
+        }
+      },
       historyDue:
         !state.next_history_at ||
         new Date(state.next_history_at).getTime() <= Date.now(),
