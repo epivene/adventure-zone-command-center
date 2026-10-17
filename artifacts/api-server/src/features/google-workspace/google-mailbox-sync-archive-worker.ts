@@ -10,15 +10,15 @@ export class SyncArchiveWorker {
       account: AccountClaim,
     ) => Promise<boolean>,
   ) {}
-  async step(a: AccountClaim): Promise<void> {
-    if (a.mode !== "active" || !(await this.repo.renew(a))) return;
+  async step(a: AccountClaim): Promise<boolean> {
+    if (a.mode !== "active" || !(await this.repo.renew(a))) return false;
     const job = (
       await this.repo.db.query(
         `SELECT * FROM google_sync_archive_jobs WHERE connection_id=$1 AND status='pending' AND retry_at<=now() ORDER BY retry_at,thread_id LIMIT 1`,
         [a.connectionId],
       )
     ).rows[0];
-    if (!job) return;
+    if (!job) return false;
     let complete = false;
     try {
       complete = await this.archive(
@@ -45,5 +45,6 @@ export class SyncArchiveWorker {
         ],
       );
     });
+    return true;
   }
 }

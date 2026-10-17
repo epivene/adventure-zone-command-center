@@ -1,5 +1,10 @@
 import { expect, it } from "vitest";
 import { createGoogleWorkspaceReadClient } from "./google-api-client";
+import { syncFailure } from "./google-mailbox-sync-client";
+it("retains a safe specific rate-limit reason and provider retry delay", () => {
+  expect(syncFailure({code: "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED", retryAfterSeconds: 90}))
+    .toMatchObject({kind: "retryable", code: "SYNC_RATE_LIMITED", retryAfterMs: 90000});
+});
 const environment = {
   clientId: "client",
   clientSecret: "secret",

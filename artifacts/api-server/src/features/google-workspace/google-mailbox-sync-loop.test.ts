@@ -1,5 +1,22 @@
 import { expect, it, vi } from "vitest";
 import { runMailboxTurn, MailboxSyncLoop } from "./google-mailbox-sync-loop";
+it("gives archives a bounded share even while thread hydration exhausts each turn", async () => {
+  let time = 0, archived = 0, processed = 0;
+  const account = { checkpoint: { phase: "ready" }, cohortLimit: 0 };
+  const repo: any = {
+    claimAccount: async () => account, current: async () => account,
+    renew: async () => true, claimThreads: async () => [{}], release: async () => {},
+  };
+  await runMailboxTurn({repo, connectionId: "c", ingest: async () => {}, historyDue: false,
+    now: () => time,
+    archive: async () => { archived++; time += 1000; return true; },
+    process: async () => { processed++; time += 10000; },
+  });
+  expect(archived).toBeGreaterThan(0);
+  expect(archived).toBeLessThanOrEqual(10);
+  expect(processed).toBeGreaterThan(0);
+  expect(processed).toBeLessThanOrEqual(25);
+});
 it("exposes shutdown to the active turn and does not schedule another turn", async () => {
   vi.useFakeTimers();
   try {
