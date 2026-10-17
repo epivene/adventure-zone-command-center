@@ -1,4 +1,5 @@
 import type { SqlQuery } from "./contracts";
+import { preserveSyncMergeReferences } from "./profile-merge-sync-preservation";
 
 // These tables already have conflict-aware handling in the legacy merge flow.
 export const legacyMergeTables = new Set([
@@ -52,6 +53,10 @@ export const legacyMergeTables = new Set([
 // Preserve newer references without rewriting signed documents, amounts or source text.
 // A uniqueness/consistency conflict aborts the whole operation; no rows are discarded.
 export const extraMergeReferences: Record<string, string> = {
+  deadline_notifications: "organization_id",
+  google_sync_snapshots: "profile_id",
+  google_sync_history: "profile_id",
+  google_sync_archive_jobs: "profile_id",
   email_thread_attention: "profile_id",
   google_workspace_historical_gmail_outcomes: "organization_id",
   booking_work_activities: "profile_id",
@@ -75,6 +80,9 @@ export const extraMergeReferences: Record<string, string> = {
 // lets the backup worker mark its source removed without overwriting the
 // survivor's separate backup files, job generations, leases, or run history.
 export const retainedMergeReferences: Record<string, string> = {
+  // Enrollment is rollout configuration, not a business FK. Retain source rows
+  // and also enroll the survivor without discarding a colliding enrollment.
+  google_sync_enrollments: "profile_id",
   google_drive_backup_jobs: "entity_id",
   google_drive_backup_mappings: "entity_id",
 };
@@ -84,7 +92,9 @@ export async function moveExtraMergeReferences(
   duplicateIds: string[],
   tables: string[],
 ) {
+  const preserved = await preserveSyncMergeReferences(tx, primaryId, duplicateIds, tables);
   for (const table of tables) {
+    if (preserved.has(table)) continue;
     const column = extraMergeReferences[table];
     if (column)
       await tx.query(
