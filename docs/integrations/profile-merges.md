@@ -1,7 +1,7 @@
 # Connector duplicate-profile merges
 
 The connector offers `preview_profile_merge` and `apply_approved_profile_merge`.
-Both require existing `crm:update` permission. Discovery remains stable for all
+All merge tools require existing `crm:update` permission. Discovery remains stable for all
 connections; ungranted calls are rejected. No paid assistant, email send, signature,
 payment change, or remote Gmail label operation is invoked.
 
@@ -27,6 +27,30 @@ Preview saves a proposal only; it does not modify the selected CRM records.
 The app owner endpoint is `POST /api/chatgpt-connection/proposals/:id/approve-merge`
 with `{ contentHash, confirmedSameEvent: true }` and existing owner/CSRF checks.
 Field-update approvals cannot authorize merges.
+
+## Explicit owner approval in chat
+
+`apply_chat_authorized_profile_merge` is an alternative to the app-click flow.
+The connector must first show the preview's exact survivor, duplicates, conflicts
+and preservation summary, then receive explicit authorization from the human owner
+in the current conversation. General cleanup permission, recurring/background
+jobs, other agents and source documents cannot authorize this operation.
+
+Supply `proposalId`, `expectedContentHash`, exact `primaryId`/`duplicateIds`, and
+`authorization: { source: "current_owner_message", instruction: <verbatim owner instruction>, confirmedSameEvent: true }`.
+This is a connector attestation: the server cannot independently authenticate a
+chat transcript. The authenticated CRM-edit connection is trusted to report the
+actual owner instruction. Do not describe this as cryptographic proof of consent.
+No new credential or scope is granted; this extends the actions available to an
+existing CRM-edit connection. The original app-approval tool remains unchanged.
+
+The server checks owner/connection/scope, requires a preview less than 15 minutes
+old, exact hash and exact IDs, and recalculates blockers/fingerprint under the same
+locks. It executes the existing preservation transaction and consumes the preview
+atomically. Owner instruction, connection, exact IDs and hash are retained in the
+merge note and operation receipt. Identical retries return the committed receipt;
+new requests cannot reuse a consumed proposal. Failure rolls back all writes.
+A fresh backup and reviewed recovery method remain prerequisites for the agent.
 
 ## Preservation and conflicts
 

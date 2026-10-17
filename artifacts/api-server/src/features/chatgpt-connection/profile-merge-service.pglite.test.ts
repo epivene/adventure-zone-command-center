@@ -416,3 +416,123 @@ it('moves completed work and distinct-year work while invalidating changed previ
  expect((await f.db.query('SELECT profile_id FROM booking_work_activities')).rows.every(r=>r.profile_id===f.profileId)).toBe(true);
 });
 
+async function chatInput() {
+  const p = await preview();
+  return {
+    proposalId: p.recordId,
+    expectedContentHash: p.value.contentHash,
+    primaryId: f.profileId,
+    duplicateIds: [duplicateId],
+    authorization: {
+      source: "current_owner_message" as const,
+      instruction:
+        "Merge these exact County Fair profiles, keeping the richer profile and all history.",
+      confirmedSameEvent: true as const,
+    },
+  };
+}
+it("applies exact chat authorization, preserves contacts/history and records a retry-safe receipt", async () => {
+  await f.db.query(
+    "INSERT INTO contacts(organization_id,first_name,email) VALUES($1,'Original','contact@example.com')",
+    [duplicateId],
+  );
+  const input = await chatInput();
+  const result = await service.applyChatAuthorized(
+    f.principal,
+    { requestKey: "chat" },
+    input,
+  );
+  expect(result.value.authorization).toMatchObject(input.authorization);
+  expect(
+    (await f.db.query("SELECT organization_id,email FROM contacts")).rows,
+  ).toEqual([{ organization_id: f.profileId, email: "contact@example.com" }]);
+  expect(
+    (
+      await f.db.query<{body:string}>(
+        "SELECT body FROM activities WHERE subject='Original history'",
+      )
+    ).rows[0].body,
+  ).toBe("Keep my wording");
+  expect(
+    (
+      await f.db.query<{body:string}>(
+        "SELECT body FROM activities WHERE subject='Duplicate profiles merged'",
+      )
+    ).rows[0].body,
+  ).toContain(input.authorization.instruction);
+  expect(
+    await service.applyChatAuthorized(
+      f.principal,
+      { requestKey: "chat" },
+      input,
+    ),
+  ).toEqual(result);
+  await expect(
+    service.applyChatAuthorized(f.principal, { requestKey: "again" }, input),
+  ).rejects.toThrow();
+});
+it.each([
+  "missing instruction",
+  "background",
+  "unconfirmed",
+  "wrong pair",
+  "wrong hash",
+  "stale",
+  "expired",
+  "scope",
+  "wrong connection",
+  "revoked",
+  "blocker",
+])("rejects chat merge: %s", async (kind) => {
+  const input: any = await chatInput();
+  let principal = f.principal;
+  if (kind === "missing instruction") input.authorization.instruction = "";
+  if (kind === "background") input.authorization.source = "background_audit";
+  if (kind === "unconfirmed") input.authorization.confirmedSameEvent = false;
+  if (kind === "wrong pair") input.duplicateIds = [randomUUID()];
+  if (kind === "wrong hash") input.expectedContentHash = "0".repeat(64);
+  if (kind === "stale")
+    await f.db.query("UPDATE activities SET body='Owner correction'");
+  if (kind === "expired")
+    await f.db.query(
+      "UPDATE chatgpt_update_proposals SET created_at=now()-interval '16 minutes'",
+    );
+  if (kind === "scope") principal = { ...f.principal, scopes: ["crm:read"] };
+  if (kind === "wrong connection")
+    principal = { ...f.principal, connectionId: randomUUID() };
+  if (kind === "revoked")
+    await f.db.query("UPDATE chatgpt_connections SET revoked_at=now()");
+  if (kind === "blocker")
+    await f.db.exec(
+      "CREATE TABLE unexpected_child(id uuid,profile_id uuid REFERENCES organizations(id) ON DELETE CASCADE)",
+    );
+  if (kind === "blocker")
+    await f.db.query("INSERT INTO unexpected_child VALUES($1,$2)", [
+      randomUUID(),
+      duplicateId,
+    ]);
+  await expect(
+    service.applyChatAuthorized(principal, { requestKey: "chat" }, input),
+  ).rejects.toThrow();
+  expect((await f.db.query("SELECT id FROM organizations")).rows).toHaveLength(
+    2,
+  );
+});
+it("rolls back chat authorization and data on merge failure", async () => {
+  const input = await chatInput();
+  const failing = new ProfileMergeService(f.db, async (tx, primary, ids) => {
+    await coreMerge(tx, primary, ids);
+    throw Error("failure");
+  });
+  await expect(
+    failing.applyChatAuthorized(f.principal, { requestKey: "chat" }, input),
+  ).rejects.toThrow("failure");
+  expect((await f.db.query("SELECT id FROM organizations")).rows).toHaveLength(
+    2,
+  );
+  expect(
+    (await f.db.query<{consumed_at:string|null}>("SELECT consumed_at FROM chatgpt_update_proposals"))
+      .rows[0].consumed_at,
+  ).toBeNull();
+  await service.applyChatAuthorized(f.principal, { requestKey: "chat" }, input);
+});

@@ -36,6 +36,22 @@ export const mergeInputSchema = z
       new Set(v.duplicateIds).size === v.duplicateIds.length,
     "Select distinct duplicate profiles and a separate surviving profile.",
   );
+export const chatMergeInputSchema = z
+  .object({
+    proposalId: z.string().uuid(),
+    expectedContentHash: z.string().regex(/^[a-f0-9]{64}$/),
+    primaryId: z.string().uuid(),
+    duplicateIds: z.array(z.string().uuid()).min(1).max(5),
+    authorization: z
+      .object({
+        source: z.literal("current_owner_message"),
+        instruction: z.string().trim().min(1).max(4000),
+        confirmedSameEvent: z.literal(true),
+      })
+      .strict(),
+  })
+  .strict();
+
 type MergeExecutor = (
   tx: SqlQuery,
   primaryId: string,
@@ -222,55 +238,125 @@ export class ProfileMergeService {
         )
           throw new ConnectionError("CONNECTION_APPROVAL_REQUIRED", 403);
         const content = await this.revalidate(tx, row);
-        // Keep source identities and saved owner edits attached to the live profile.
-        await tx.query(
-          "UPDATE chatgpt_lead_identities SET profile_id=$1 WHERE profile_id=ANY($2::uuid[])",
-          [content.primaryId, content.duplicateIds],
-        );
-        await tx.query(
-          `UPDATE chatgpt_external_drafts SET content=jsonb_set(content,'{organizationId}',to_jsonb($1::text)),revision=gen_random_uuid(),updated_at=clock_timestamp()
-        WHERE content->>'organizationId'=ANY($2::text[])`,
-          [content.primaryId, content.duplicateIds],
-        );
-        const execute =
-          this.execute ??
-          (await import("./profile-merge-executor")).executeProfileMerge;
-        await moveExtraMergeReferences(
-          tx,
-          content.primaryId,
-          content.duplicateIds,
-          content.references.map((r: { table: string }) => r.table),
-        );
-        await execute(tx, content.primaryId, content.duplicateIds);
-        await tx.query(
-          "UPDATE organizations SET updated_at=clock_timestamp() WHERE id=$1",
-          [content.primaryId],
-        );
-        await insertResearchNote(
-          tx,
-          content.primaryId,
-          "Duplicate profiles merged",
-          JSON.stringify({
-            reason: content.reason,
-            proposalId: row.id,
-            primaryId: content.primaryId,
-            originalProfiles: [content.primary, ...content.duplicates],
-            policy: content.policy,
-          }),
-          content.sources,
-        );
-        await tx.query(
-          "UPDATE chatgpt_update_proposals SET consumed_at=now() WHERE id=$1",
-          [row.id],
-        );
-        const profile = profileSummary(await profileRow(tx, content.primaryId));
-        return receipt(tx, profile.id, profile.href, profile.revision, {
-          primaryId: profile.id,
-          mergedProfileIds: content.duplicateIds,
-          profile,
-          proposalId: row.id,
-        });
+        return this.executeValidated(tx, row, content);
       },
     );
+  }
+  async applyChatAuthorized(
+    p: ConnectionPrincipal,
+    key: MutationKey,
+    raw: z.input<typeof chatMergeInputSchema>,
+  ) {
+    requireConnectionScope(p, "crm:update");
+    const parsed = chatMergeInputSchema.safeParse(raw);
+    if (!parsed.success)
+      throw new ConnectionError("CONNECTION_MERGE_CONFIRMATION_REQUIRED", 400);
+    const input = {
+      ...parsed.data,
+      primaryId: parsed.data.primaryId.toLowerCase(),
+      duplicateIds: parsed.data.duplicateIds
+        .map((id) => id.toLowerCase())
+        .sort(),
+    };
+    return this.operations.perform(
+      p,
+      "apply_chat_authorized_profile_merge",
+      key,
+      input,
+      async (tx) => {
+        const row = (
+          await tx.query(
+            "SELECT *,created_at>now()-interval '15 minutes' AS fresh FROM chatgpt_update_proposals WHERE id=$1 AND connection_id=$2 FOR UPDATE",
+            [input.proposalId, p.connectionId],
+          )
+        ).rows[0];
+        if (
+          !row ||
+          row.consumed_at ||
+          !row.fresh ||
+          row.content_hash !== input.expectedContentHash
+        )
+          throw new ConnectionError("CONNECTION_STALE_PROPOSAL", 409);
+        const content = await this.revalidate(tx, row);
+        if (
+          content.primaryId !== input.primaryId ||
+          JSON.stringify([...content.duplicateIds].sort()) !==
+            JSON.stringify(input.duplicateIds)
+        )
+          throw new ConnectionError(
+            "CONNECTION_MERGE_CONFIRMATION_REQUIRED",
+            409,
+          );
+        // Connector attestation of the owner's current message, not an independently
+        // authenticated chat transcript. Never accept background/source-text consent.
+        const authorization = {
+          ...input.authorization,
+          ownerId: p.ownerId,
+          connectionId: p.connectionId,
+          proposalId: row.id,
+          contentHash: row.content_hash,
+          primaryId: input.primaryId,
+          duplicateIds: input.duplicateIds,
+        };
+        return this.executeValidated(tx, row, content, authorization);
+      },
+    );
+  }
+  private async executeValidated(
+    tx: SqlQuery,
+    row: any,
+    content: any,
+    authorization?: Record<string, unknown>,
+  ) {
+    // Keep source identities and saved owner edits attached to the live profile.
+    await tx.query(
+      "UPDATE chatgpt_lead_identities SET profile_id=$1 WHERE profile_id=ANY($2::uuid[])",
+      [content.primaryId, content.duplicateIds],
+    );
+    await tx.query(
+      `UPDATE chatgpt_external_drafts SET content=jsonb_set(content,'{organizationId}',to_jsonb($1::text)),revision=gen_random_uuid(),updated_at=clock_timestamp()
+        WHERE content->>'organizationId'=ANY($2::text[])`,
+      [content.primaryId, content.duplicateIds],
+    );
+    const execute =
+      this.execute ??
+      (await import("./profile-merge-executor")).executeProfileMerge;
+    await moveExtraMergeReferences(
+      tx,
+      content.primaryId,
+      content.duplicateIds,
+      content.references.map((r: { table: string }) => r.table),
+    );
+    await execute(tx, content.primaryId, content.duplicateIds);
+    await tx.query(
+      "UPDATE organizations SET updated_at=clock_timestamp() WHERE id=$1",
+      [content.primaryId],
+    );
+    await insertResearchNote(
+      tx,
+      content.primaryId,
+      "Duplicate profiles merged",
+      JSON.stringify({
+        reason: content.reason,
+        proposalId: row.id,
+        primaryId: content.primaryId,
+        originalProfiles: [content.primary, ...content.duplicates],
+        policy: content.policy,
+        ...(authorization ? { authorization } : {}),
+      }),
+      content.sources,
+    );
+    await tx.query(
+      "UPDATE chatgpt_update_proposals SET consumed_at=now() WHERE id=$1",
+      [row.id],
+    );
+    const profile = profileSummary(await profileRow(tx, content.primaryId));
+    return receipt(tx, profile.id, profile.href, profile.revision, {
+      primaryId: profile.id,
+      mergedProfileIds: content.duplicateIds,
+      profile,
+      proposalId: row.id,
+      ...(authorization ? { authorization } : {}),
+    });
   }
 }
