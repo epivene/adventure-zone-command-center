@@ -29,7 +29,7 @@ export function syncFailure(error: unknown, history = false): SyncFailure {
     return new SyncFailure("auth", "SYNC_REAUTH_REQUIRED");
   return new SyncFailure(
     "retryable",
-    "SYNC_PROVIDER_UNAVAILABLE",
+    code === "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED" ? "SYNC_RATE_LIMITED" : "SYNC_PROVIDER_UNAVAILABLE",
     e?.retryAfterSeconds ? e.retryAfterSeconds * 1000 : undefined,
   );
 }

@@ -212,7 +212,7 @@ async function tick(stopped: () => boolean) {
   });
   return {
     nextDelayMs:
-      result?.processed || state.checkpoint.phase !== "ready" ? 1000 : 30000,
+      result?.processed || result?.archived || state.checkpoint.phase !== "ready" ? 1000 : 30000,
   };
 }
 export const mailboxSyncLoop = new MailboxSyncLoop(tick, () =>
