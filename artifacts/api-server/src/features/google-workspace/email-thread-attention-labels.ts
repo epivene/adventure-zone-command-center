@@ -42,6 +42,7 @@ export async function applyAttentionLabels(
       ...(input.state !== "resolved" && label ? [label.id] : []),
     ];
     for (const message of eligible) {
+      if (addLabelIds.every((id) => message.labelIds.includes(id))) continue;
       await guard();
       await gmail.modifyMessageLabels({
         messageId: message.id,
@@ -62,7 +63,6 @@ export async function applyAttentionLabels(
     }
     const removed = new Set<string>();
     for (const message of eligible) {
-      await guard();
       const attached = new Set(
         verified.find((m) => m.id === message.id)!.labelIds,
       );
@@ -77,12 +77,14 @@ export async function applyAttentionLabels(
           ...(input.archive && attached.has("INBOX") ? ["INBOX"] : []),
         ]),
       ];
-      if (removeLabelIds.length)
+      if (removeLabelIds.length) {
+        await guard();
         await gmail.modifyMessageLabels({
           messageId: message.id,
           addLabelIds: [],
           removeLabelIds,
         });
+      }
       removeLabelIds.forEach((id) => removed.add(id));
     }
     return [...removed];
