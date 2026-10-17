@@ -44,6 +44,15 @@ Field-update approvals cannot authorize merges.
 - Email attention and historical Gmail outcome associations follow the survivor.
   Attention IDs, state, deadlines and existing audit entries are preserved; the
   attention revision changes to reject edits prepared before the merge.
+- Deadline notifications and mailbox sync snapshots, observations and archive jobs
+  follow the survivor without changing their payloads, timestamps, dismissal state,
+  retry metadata or original observation fingerprints. A transactional
+  `merge_sync_references` audit entry saves complete before/after rows for these
+  references. An audit-write failure aborts the merge. Evidence over 4 MiB blocks
+  application rather than truncating history. Source enrollment rows remain and
+  the survivor is enrolled without overwriting an existing enrollment.
+  Observation fingerprints describe the original observation; the audit retains
+  its original profile association. Future sync observations use the current profile.
 - Drive backup jobs and file mappings keep their original source IDs, generations,
   leases and file identities. The normal backup worker can mark retired sources
   removed without overwriting the survivor's backups. These retained rows remain
@@ -82,6 +91,13 @@ available. A five-second lock timeout aborts safely; a busy app can require retr
 The legacy Drizzle repository runs on that same pinned client, not another pool.
 
 ## Verification
+
+`profile-merge-sync-preservation.test.ts` covers notification/sync row preservation,
+colliding and new enrollments, and rollback on later failure or receipt failure.
+This does not add an automatic undo command. Before a production merge, retain a
+fresh database backup and verify restore separately; database backups do not
+contain the private object-storage attachment bytes. The preview remains an
+identity/conflict review, not proof that a recent recovery point exists.
 
 `profile-merge-service.pglite.test.ts` covers approval, expiry, scope, revocation,
 tampering, stale linked data, rollback, retries, original fields, drafts, identities,
