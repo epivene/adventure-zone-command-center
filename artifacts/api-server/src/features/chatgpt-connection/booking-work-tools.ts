@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ConnectionPrincipal, ConnectionScope } from "./contracts";
-import { BookingWorkService, workKeySchema } from "../booking-work/service";
+import { BookingWorkService, workKeySchema, recoverWorkSchema } from "../booking-work/service";
 import {
   createWorkSchema,
   filterSchema,
@@ -19,8 +19,16 @@ export function bookingWorkTools(
     call: (a: any) => Promise<unknown>,
   ) => ({ name, scope, readOnly, schema, description, call });
   const safety =
-    " Coordination metadata only: never sends email, schedules a worker or invokes paid app AI. Preserve user edits and verify receipts. On WORK_NOT_ASSIGNED read_booking_work: if unassigned, claim_existing_booking_work with its current revision, then update with the returned revision. If assigned to another actor (including an older connection), report its ID and review link for owner reassignment. Never take over based on age/reconnection or create a duplicate card.";
+    " Coordination metadata only: never sends email, schedules a worker or invokes paid app AI. Preserve user edits and verify receipts. On WORK_NOT_ASSIGNED read_booking_work: if unassigned, claim_existing_booking_work with its current revision, then update with the returned revision. If assigned to another connection, try recover_booking_work with the exact revision and previousConnectionId; it only recovers revoked connections for the same owner/client. On WORK_OWNER_HANDOFF_REQUIRED, or for an owner assignment, use /settings/booking-work for an owner handoff. Never take over based on age/reconnection or create a duplicate card.";
   return [
+    make(
+      "recover_booking_work",
+      "crm:update",
+      false,
+      recoverWorkSchema,
+      "Resume an existing card after reconnection only when its previous connection is revoked and belongs to the same owner and OAuth client. Read the card first; supply its exact revision and previousConnectionId. Preserves all progress, links, dates and status; returns an audited idempotent receipt. An active foreign assignment requires owner handoff at /settings/booking-work, never takeover or a duplicate card. Does not send mail. For outreach, determine the planned send date in the recipient timezone (8 a.m. local), calculate a 30-calendar-day offer from that date, and preserve explicitly approved campaign deadlines and deadlines already sent; do not ask the owner what today's date is.",
+      (a) => s.recover(p, a),
+    ),
     make(
       "list_booking_work",
       "crm:read",
@@ -77,4 +85,5 @@ export function bookingWorkTools(
     ),
   ];
 }
+
 

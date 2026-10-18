@@ -1,3 +1,4 @@
+import BookingWorkPage from "./pages/BookingWorkPage";
 import ProfileDuplicatesPage from "./pages/ProfileDuplicatesPage";
 import { RemindersProvider, RemindersPage } from "@/features/deadline-rules/reminders";
 import { WorkspaceSessionProvider } from "@/features/assistant-workspace/WorkspaceSessionProvider";
@@ -248,6 +249,7 @@ function ActMigrationRedirect() {
 
 function SettingsStub() {
   const tools = [
+    ["Shared booking work", "/settings/booking-work", "Review assignments and release or hand off existing work without losing progress."],
     ["ChatGPT connection", "/settings/chatgpt-connection", "Manage direct access, review profile changes and find saved app drafts."],
     ["Tax & receipts", "/settings/tax-receipts", "Private owner record of self-employed 1099 documents, income and expenses for tax preparation."],
     ["Business sources", "/settings/business-sources", "Review protected business source files, conflicts, links, and historical terms."],
@@ -398,6 +400,7 @@ function AdminProtectedApp() {
           <Route path="/contacts/:id/edit"><ContactEditPage /></Route>
           <Route path="/contacts/:id">{(params)=><ContactDetailPage contactId={params.id}/>}</Route>
           <Route path="/contacts" component={ContactsPage} />
+          <Route path="/settings/booking-work" component={BookingWorkPage} />
           <Route path="/settings/reminders" component={RemindersPage} />
           <Route path="/settings/chatgpt-connection" component={SettingsChatGPTConnectionPage} />
           <Route path="/chatgpt-connection/consent" component={ChatGPTConnectionConsentPage} />
@@ -494,5 +497,6 @@ export default function App() {
     </QueryClientProvider>
   );
 }
+
 
 
