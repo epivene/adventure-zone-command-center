@@ -49,6 +49,18 @@ function emptyRecentResult(): GoogleRecentValidationResult {
 }
 
 describe("GoogleSentProfileLinkSweepLoop", () => {
+  it('keeps scheduling but skips legacy scanners when the incremental owner holds the account',async()=>{
+    const scheduler=new FakeScheduler();const calls:string[]=[];
+    const loop=new GoogleSentProfileLinkSweepLoop({scheduler,clock:{now:()=>new Date()},runExclusive:async()=>{},recent:{run:async()=>{calls.push('recent');return emptyRecentResult();}},sentSweep:{run:async()=>{calls.push('sent');return {counts:{}} as any;}}});
+    loop.start();scheduler.run(0);await settle();expect(calls).toEqual([]);expect(scheduler.scheduled).toHaveLength(2);await loop.close();
+  });
+  it("runs the bounded pilot on the existing schedule", async () => {
+    const scheduler=new FakeScheduler();
+    let observations=0;
+    const loop=new GoogleSentProfileLinkSweepLoop({scheduler,clock:{now:()=>new Date()},recent:{run:async()=>emptyRecentResult()},sentSweep:{run:async()=>({counts:{}} as any)},pilot:{run:async()=>{observations++;}}});
+    loop.start();scheduler.run(0);await settle();await loop.close();
+    expect(observations).toBe(1);
+  });
   it("keeps late-August sent mail inside the September catch-up window", () => {
     const septemberTenth = Date.parse("2026-09-10T13:00:00.000Z");
     const augustTwentyFifth = Date.parse("2026-08-25T00:00:00.000Z");

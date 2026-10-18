@@ -4,6 +4,8 @@ const tokenEndpoint = "https://oauth2.googleapis.com/token";
 const calendarBaseEndpoint = "https://www.googleapis.com/calendar/v3/calendars";
 
 export type OperationalCalendarEventInput = {
+  /** Optional stable Google event identity for retry-safe creation. */
+  id?: string;
   summary: string;
   description: string;
   startDate: string;
@@ -15,6 +17,10 @@ export type OperationalCalendarEvent = OperationalCalendarEventInput & {
   etag: string | null;
   updated: string | null;
   status: string | null;
+  /** Missing on historical snapshots; never sufficient to verify an all-day save. */
+  eventKind?: "all_day" | "timed";
+  rawStart?: Record<string, unknown>;
+  rawEnd?: Record<string, unknown>;
 };
 
 export interface OperationalCalendarClient {
@@ -117,6 +123,9 @@ function parseEvent(value: Record<string, unknown>): OperationalCalendarEvent {
   }
   return {
     id: value.id,
+    eventKind: allDayRange && !timedRange ? "all_day" : "timed",
+    rawStart: { ...start },
+    rawEnd: { ...end },
     etag: typeof value.etag === "string" ? value.etag : null,
     summary: value.summary,
     description: typeof value.description === "string" ? value.description : "",
@@ -191,14 +200,15 @@ export function createOperationalCalendarClient(input: {
     return eventId ? `${base}/${encodeURIComponent(eventId)}` : base;
   }
 
-  function eventBody(event: OperationalCalendarEventInput) {
+  function eventBody(event: OperationalCalendarEventInput, patch = false) {
     validateEventInput(event);
     return JSON.stringify({
+      ...(!patch && event.id ? { id: event.id } : {}),
       summary: event.summary.trim(),
       description: event.description,
-      start: { date: event.startDate },
-      end: { date: event.endDateExclusive },
-      transparency: "opaque",
+      start: { date: event.startDate, ...(patch ? { dateTime: null, timeZone: null } : {}) },
+      end: { date: event.endDateExclusive, ...(patch ? { dateTime: null, timeZone: null } : {}) },
+      ...(!patch ? { transparency: "opaque" } : {}),
     });
   }
 
@@ -245,9 +255,10 @@ export function createOperationalCalendarClient(input: {
       const headers = new Headers({ "content-type": "application/json" });
       if (etag) headers.set("if-match", etag);
       const response = await request(endpoint(calendarId, eventId), {
-        method: "PUT",
+        method: "PATCH",
         headers,
-        body: eventBody(event),
+        // Patch only reviewed fields; preserve reminders, attendees, location and other provider settings.
+        body: eventBody(event, true),
       });
       if (response.status === 412) {
         throw clientError("GOOGLE_OPERATIONAL_CALENDAR_CONFLICT", 412);

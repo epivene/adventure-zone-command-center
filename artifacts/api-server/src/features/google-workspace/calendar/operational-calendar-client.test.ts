@@ -77,6 +77,8 @@ describe("operational calendar client", () => {
     expect(page.events).toEqual([
       expect.objectContaining({
         id: "timed-1",
+        eventKind: "timed",
+        rawStart: { dateTime: "2026-09-12T10:00:00-06:00", timeZone: "America/Denver" },
         startDate: "2026-09-12",
         endDateExclusive: "2026-09-13",
       }),
@@ -116,4 +118,27 @@ describe("operational calendar client", () => {
     })).rejects.toMatchObject({ code: "GOOGLE_OPERATIONAL_CALENDAR_DATE_RANGE_INVALID" });
     expect(fetcher).not.toHaveBeenCalled();
   });
+});
+it("patches only reviewed fields and preserves provider settings", async () => {
+  const settings = { reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 45 }] },
+    location: "Keep venue detail", attendees: [{ email: "owner@example.com" }], transparency: "transparent" };
+  let provider: any = { ...settings, id: "google-1", summary: "Old", description: "Old",
+    start: { dateTime: "2026-09-10T09:00:00-06:00", timeZone: "America/Denver" },
+    end: { dateTime: "2026-09-10T17:00:00-06:00", timeZone: "America/Denver" }, etag: "v1" };
+  const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => {
+    if (init?.method === "POST") return response({ access_token: "token" });
+    expect(init?.method).toBe("PATCH");
+    expect(new Headers(init?.headers).get("if-match")).toBe("v1");
+    const patch = JSON.parse(String(init?.body));
+    expect(Object.keys(patch).sort()).toEqual(["description", "end", "start", "summary"]);
+    for (const key of ["start", "end"]) {
+      expect(patch[key].dateTime).toBeNull(); expect(patch[key].timeZone).toBeNull();
+    }
+    provider = { ...provider, ...patch, etag: "v2" };
+    return response(provider);
+  });
+  const client = createOperationalCalendarClient({ environment, refreshToken: "refresh", fetcher });
+  const result = await client.updateEvent({calendarId:"calendar", eventId:"google-1", event:{...event,id:"ignored"},etag:"v1"});
+  expect(provider).toMatchObject(settings);
+  expect(result.eventKind).toBe("all_day");
 });

@@ -1,9 +1,9 @@
 import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
-import { sql } from "drizzle-orm";
+import { sql, type SQLWrapper } from "drizzle-orm";
 
 import { db } from "@workspace/db";
 import { attachEventFamiliesToOrganizationPage } from "@/features/event-families/event-family-list";
-import { DrizzleOrganizationRepository, type OrganizationListPage } from "@/features/organizations/organization-repository";
+import { DrizzleOrganizationRepository } from "@/features/organizations/organization-repository";
 import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
 import { loadOrganizationSearchCorpus } from "@/features/organizations/organization-search-corpus";
 import {
@@ -15,7 +15,7 @@ import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-reposit
 const router: IRouter = Router();
 const MAX_SEARCH_CANDIDATES = 5_000;
 
-async function matchedOrganizationIds(terms: string[], candidateIds: string[]): Promise<Map<string, number>> {
+async function matchedOrganizationIds(terms: string[], candidateIds: SQLWrapper): Promise<Map<string, number>> {
   const corpus = await loadOrganizationSearchCorpus(db, candidateIds);
   const matchedIds = new Map<string, number>();
   for (const row of corpus) {
@@ -79,7 +79,7 @@ async function loadProfileCardDetails(ids: string[]): Promise<Map<string, Profil
   }));
 }
 
-function paginate(records: OrganizationListPage["records"], page: number, pageSize: number): OrganizationListPage {
+function paginate<T>(records: T[], page: number, pageSize: number) {
   const total = records.length;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const resolvedPage = Math.min(Math.max(1, page), pageCount);
@@ -116,22 +116,29 @@ router.get("/organizations", async (req: Request, res: Response, next: NextFunct
   try {
     const terms = buildProfileSearchTerms(query.search);
     if (!terms.length) return next();
-    const candidatePage = await new DrizzleOrganizationRepository(db).listOrganizations({
+    const repository = new DrizzleOrganizationRepository(db);
+    const candidateQuery = {
       ...query,
       search: "",
       showMembers: true,
       includeRetired: true,
       page: 1,
       pageSize: MAX_SEARCH_CANDIDATES,
-    });
+    };
+    const candidateIds = repository.organizationIdsQuery(candidateQuery);
     const matchedIds = await matchedOrganizationIds(
       terms,
-      candidatePage.records.map((record) => record.id),
+      candidateIds,
     );
-    const matchedRecords = candidatePage.records
-      .filter((record) => matchedIds.has(record.id))
-      .sort((left, right) => (matchedIds.get(left.id) ?? 0) - (matchedIds.get(right.id) ?? 0));
-    const organizationPage = paginate(matchedRecords, query.page, query.pageSize);
+    // Corpus order is the database's name/id order, the same tie-breaker as the
+    // existing directory. Stable score sorting preserves it across pages.
+    const matchPage = paginate([...matchedIds.entries()]
+      .sort((left, right) => left[1] - right[1]).map(([id]) => id), query.page, query.pageSize);
+    // Fetch bookings, dates and contacts only for the visible page.
+    const candidatePage = await repository.listOrganizations(candidateQuery, matchPage.records);
+    const rank = new Map(matchPage.records.map((id, index) => [id, index]));
+    const organizationPage = { ...matchPage, records: candidatePage.records
+      .sort((left, right) => (rank.get(left.id) ?? 0) - (rank.get(right.id) ?? 0)) };
     const cardDetails = await loadProfileCardDetails(organizationPage.records.map((record) => record.id));
     const enrichedPage = {
       ...organizationPage,

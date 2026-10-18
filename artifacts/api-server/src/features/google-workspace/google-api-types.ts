@@ -113,6 +113,7 @@ export type GoogleMessageMetadata = {
 };
 
 export type GoogleThreadAttachment = {
+  partId?: string;
   attachmentId: string;
   filename: string;
   mimeType: string;
@@ -122,6 +123,7 @@ export type GoogleThreadAttachment = {
 
 export type GoogleThreadMessage = {
   id: string;
+  labelIds?: string[];
   internalDateMs: number | null;
   from: string;
   to: string;
@@ -174,6 +176,7 @@ export type GoogleCalendarEvent = {
 };
 
 export interface GoogleWorkspaceReadClient {
+  mailboxSync?: import('./google-mailbox-sync-client').MailboxChangeClient;
   driveBackup?: GoogleDriveBackupClient;
   authorizationUrl(input: { state: string; scopes?: readonly string[] }): string;
   exchangeCode(code: string): Promise<{
@@ -204,12 +207,14 @@ export interface GoogleWorkspaceReadClient {
     labelIds?: string[];
   }): Promise<GoogleMessagePage>;
   getMessageMetadata?(id: string): Promise<GoogleMessageMetadata>;
-  getThreadDetail?(threadId: string): Promise<GoogleThreadDetail>;
+  getThreadDetail?(threadId: string,options?:{bounded:boolean}): Promise<GoogleThreadDetail>;
+  getSyncThreadDetail?(threadId: string): Promise<GoogleThreadDetail>;
   getGmailDraftRaw?(draftId:string):Promise<GoogleGmailDraftRaw>;
   getGmailMessageRaw?(messageId:string):Promise<{messageId:string;threadId:string;raw:string;labelIds:string[]}>;
   listGmailDrafts?(query:string, pageToken?:string | null):Promise<{drafts:{id:string;message:{id:string;threadId:string}}[];nextPageToken:string|null}>;
   getThreadLabelIds?(threadId: string): Promise<string[]>;
-  getAttachment?(input: { messageId: string; attachmentId: string }): Promise<Uint8Array>;
+  getAttachment?(input: { messageId: string; attachmentId: string },options?:{bounded:boolean}): Promise<Uint8Array>;
+  getSyncAttachment?(input: { messageId: string; attachmentId: string }): Promise<Uint8Array>;
   createGmailDraft?(input: { raw: string; threadId?: string | null }): Promise<GoogleGmailDraft>;
   updateGmailDraft?(input: { draftId: string; raw: string; threadId?: string | null }): Promise<GoogleGmailDraft>;
   deleteLabel?(labelId: string): Promise<void>;

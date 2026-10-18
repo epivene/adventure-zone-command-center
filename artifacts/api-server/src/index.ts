@@ -188,6 +188,8 @@ const paperNoteLoop = new PaperNoteWorkerLoop({
 });
 
 const gmailProfileLinkSweepLoop = new GoogleSentProfileLinkSweepLoop({
+  runExclusive: async work=>{const {runLegacyGmail}=await import('./features/google-workspace/google-mailbox-sync-runtime');await runLegacyGmail(work);},
+  pilot: {run: async () => { const {pilotSync}=await import("./features/google-workspace/google-pilot-sync-runtime"); await pilotSync.run(); }},
   recent: new GoogleRecentValidationService(),
   sentSweep: new GoogleSentProfileLinkSweepService(),
   clock: { now: () => new Date() },
@@ -195,6 +197,7 @@ const gmailProfileLinkSweepLoop = new GoogleSentProfileLinkSweepLoop({
 });
 
 const historicalGmailBackfillLoop = new GoogleHistoricalBackfillLoop({
+  runExclusive:async work=>{const {runAuxiliaryGmail}=await import('./features/google-workspace/google-mailbox-sync-runtime');await runAuxiliaryGmail(work);},
   enabled:
     process.env.GOOGLE_WORKSPACE_SYNC_ENABLED?.trim().toLowerCase() === "true",
   validation: new PostgresGoogleValidationRepository(),
@@ -206,6 +209,7 @@ const historicalGmailBackfillLoop = new GoogleHistoricalBackfillLoop({
 
 const googleConnectionRepository = new PostgresGoogleConnectionRepository();
 const googleDocumentLoop = new GoogleDocumentWorkerLoop({
+  runExclusive:async work=>{const {runAuxiliaryGmail}=await import('./features/google-workspace/google-mailbox-sync-runtime');await runAuxiliaryGmail(work);},
   worker: new GoogleDocumentWorker({
     connection: googleConnectionRepository,
     sourceFactory: (client) => new GoogleGmailDocumentSource(client, new PostgresExistingGoogleProfileFileLookup()),
@@ -321,6 +325,7 @@ const shutdown = createActServerShutdown({
       assistantJobLoop.close(),
       paperNoteLoop.close(),
       gmailProfileLinkSweepLoop.close(),
+      import('./features/google-workspace/google-mailbox-sync-runtime').then(m=>m.mailboxSyncLoop.close()),
       historicalGmailBackfillLoop.close(),
       googleDocumentLoop.close(),
       googleDriveBackupLoop?.close(),
@@ -601,6 +606,7 @@ async function startBackgroundWorkers() {
   assistantJobLoop.start();
   paperNoteLoop.start();
   gmailProfileLinkSweepLoop.start();
+  void import('./features/google-workspace/google-mailbox-sync-runtime').then(m=>m.mailboxSyncLoop.start());
   if (readModelConfig(process.env).enabled) {
     try {
       const stopAssistant = workspaceStartup.start(startWorkspaceRuntime);

@@ -289,6 +289,20 @@ export class PostgresGoogleValidationRepository {
     }
   }
 
+  async countPendingReviewItems(): Promise<number> {
+    const connectionId = await this.currentConnectionId();
+    const result = await this.pool.query(`SELECT count(*)::int AS count FROM (
+      SELECT DISTINCT ON (lower(btrim(from_header)), lower(btrim(subject)))
+        message_id, thread_id, subject, from_header, to_header, review_state
+      FROM google_workspace_validation_review_items WHERE connection_id=$1
+      ORDER BY lower(btrim(from_header)), lower(btrim(subject)),
+        CASE review_state WHEN 'pending' THEN 0 WHEN 'resolved' THEN 1 ELSE 2 END,
+        updated_at DESC, message_id DESC
+    ) queue WHERE review_state='pending' AND message_id IS NOT NULL
+      AND thread_id IS NOT NULL AND subject IS NOT NULL AND from_header IS NOT NULL AND to_header IS NOT NULL`,[connectionId]);
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
   async listReviewItems(): Promise<GoogleValidationReviewItem[]> {
     const connectionId = await this.currentConnectionId();
     const result = await this.pool.query(

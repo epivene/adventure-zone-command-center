@@ -1,5 +1,47 @@
 import { it, expect } from "vitest";
 import { applyAttentionLabels } from "./email-thread-attention-labels";
+it("files delivered messages without changing draft labels or content", async () => {
+  const h = harness();
+  const draft = {
+    id: "draft",
+    labelIds: ["DRAFT", "INBOX"],
+    body: "Unsent text",
+  };
+  h.gmail.modifyMessageLabels = async (input: any) => {
+    expect(input.messageId).toBe("sent");
+    input.addLabelIds.forEach((x: string) => h.attached.add(x));
+    input.removeLabelIds.forEach((x: string) => h.attached.delete(x));
+  };
+  h.gmail.modifyThreadLabels = async () => {
+    throw Error("would modify draft");
+  };
+  await applyAttentionLabels(
+    h.gmail,
+    {
+      threadId: "t",
+      profileLabelId: "profile",
+      oldProfileLabelIds: ["oldProfile"],
+      state: "waiting_for_their_reply",
+      archive: true,
+      readMessages: async () => [
+        { id: "sent", labelIds: [...h.attached] },
+        draft,
+      ],
+    },
+    h.guard,
+  );
+  expect([...h.attached].sort()).toEqual([
+    "UNREAD",
+    "attention",
+    "profile",
+    "unrelated",
+  ]);
+  expect(draft).toEqual({
+    id: "draft",
+    labelIds: ["DRAFT", "INBOX"],
+    body: "Unsent text",
+  });
+});
 function harness() {
   const attached = new Set(["INBOX", "UNREAD", "unrelated", "oldProfile"]);
   const steps: any[] = [];
@@ -35,6 +77,53 @@ function harness() {
     },
   };
 }
+it("does not rewrite already-correct delivered labels on a retry", async () => {
+  const h = harness();
+  h.gmail.modifyMessageLabels = async () => {
+    throw Error("unnecessary Gmail write");
+  };
+  await expect(
+    applyAttentionLabels(
+      h.gmail,
+      {
+        threadId: "t",
+        profileLabelId: "profile",
+        oldProfileLabelIds: [],
+        state: "waiting_for_their_reply",
+        archive: true,
+        readMessages: async () => [
+          { id: "sent", labelIds: ["SENT", "profile", "attention"] },
+        ],
+      },
+      h.guard,
+    ),
+  ).resolves.toEqual([]);
+});
+it("keeps delivered Inbox when scoped labeling fails or a new reply arrives", async () => {
+  for (const fail of [true, false]) {
+    const h = harness();
+    h.gmail.modifyMessageLabels = async (input: any) => {
+      if (fail) throw Error("offline");
+      input.addLabelIds.forEach((id: string) => h.attached.add(id));
+      h.changed();
+    };
+    await expect(
+      applyAttentionLabels(
+        h.gmail,
+        {
+          threadId: "t",
+          profileLabelId: "profile",
+          oldProfileLabelIds: [],
+          state: "waiting_for_their_reply",
+          archive: true,
+          readMessages: async () => [{ id: "sent", labelIds: [...h.attached] }],
+        },
+        h.guard,
+      ),
+    ).rejects.toThrow(fail ? "offline" : "new reply");
+    expect(h.attached.has("INBOX")).toBe(true);
+  }
+});
 it("adds both labels before archiving while preserving unrelated labels and unread", async () => {
   const h = harness();
   await applyAttentionLabels(

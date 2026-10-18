@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Bot, Check, ChevronDown, Ellipsis, Moon, Palette, Plus, Sun } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
@@ -17,7 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { readAppearance, saveAppearance, type Appearance } from "@/lib/appearance";
 import { saveBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
-import { apiGet } from "@/lib/auth-token";
+import { useDocumentReviewCount } from "./use-document-review-count";
 import { ToolFinder, type ToolFinderItem } from "./tool-finder";
 
 type MenuItem = { href: string; label: string; rememberBookingBeforeOpen?: boolean; badgeCount?: number; keywords?: string[] };
@@ -322,25 +322,7 @@ export function AppMenu({
   const [location] = useLocation();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [appearance, setAppearance] = useState<Appearance>(() => readAppearance());
-  const [pendingDocumentReviewCount, setPendingDocumentReviewCount] = useState(0);
-  useEffect(() => {
-    let active = true;
-    const refresh = () => apiGet<{ count: number }>("/business-documents/review-count")
-      .then((result) => { if (active) setPendingDocumentReviewCount(result.count); })
-      .catch(() => undefined);
-    const changed = (event: Event) => {
-      const count = (event as CustomEvent<number>).detail;
-      if (active && Number.isFinite(count)) setPendingDocumentReviewCount(count);
-    };
-    void refresh();
-    const interval = window.setInterval(refresh, 60_000);
-    window.addEventListener("business-document-review-count-changed", changed);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-      window.removeEventListener("business-document-review-count-changed", changed);
-    };
-  }, []);
+  const pendingDocumentReviewCount = useDocumentReviewCount();
   const visibleAdminToolsGroups = adminToolsGroups.map((group) => ({
     ...group,
     items: group.items.map((item) => item.href === "/business-documents" ? { ...item, badgeCount: pendingDocumentReviewCount } : item),

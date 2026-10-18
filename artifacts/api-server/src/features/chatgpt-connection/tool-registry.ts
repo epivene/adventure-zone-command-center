@@ -1,3 +1,5 @@
+import { createProfileContactInput, type ContactCreateService } from "./contact-create-service";
+import { invoicePaymentTools, type ConnectionInvoicePayments } from "./invoice-payment-tools";
 import { conventionTools, type ConnectionConventionService } from "./convention-tools";
 import { inquiryProcessInput, inquiryProcessApplyInput } from "./website-inquiry-processing";
 import { mappingRepairInput, mappingRepairApplyInput } from "./email-mapping-repair-service";
@@ -10,7 +12,7 @@ import { emailAttentionTools } from "./email-attention-tools";
 import type { EmailThreadAttentionService } from "../google-workspace/email-thread-attention-service";
 import { bookingWorkTools } from "./booking-work-tools";
 import type { BookingWorkService } from "../booking-work/service";
-import { mergeInputSchema, type ProfileMergeService } from "./profile-merge-service";
+import { chatMergeInputSchema, mergeInputSchema, type ProfileMergeService } from "./profile-merge-service";
 import { operationalInput, scheduleSections, routeSections, resourceSections } from "./operational-reads";
 import { z } from "zod";
 import { eventDatesSchema } from "./research-details";
@@ -25,6 +27,8 @@ import { appRecordsInput, appRecordInput } from "./profile-record-reads";
 import { closeFollowupSchema, type DraftFollowupService } from "./draft-followup-service";
 import type { OperationStore } from "./operation-store";
 export type ConnectionServices = {
+  invoicePayments?: ConnectionInvoicePayments;
+  contacts?: ContactCreateService;
   conventions?: ConnectionConventionService;
   inquiries?: WebsiteInquiryReads;
   today?: TodayReadService;
@@ -180,6 +184,13 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       schema: z.object({ ...mergeInputSchema.shape, requestKey }).strict(),
       readOnly: false,
       call: ({ requestKey, ...a }) => s.merges.preview(p, { requestKey }, a),
+    },
+    {
+      name: "apply_chat_authorized_profile_merge",
+      scope: "crm:update", readOnly: false, destructive: true,
+      description: "Merge only after the human owner explicitly authorizes the exact displayed profile pair(s) in the current chat. First preview_profile_merge and show the survivor, duplicates, conflicts and preservation summary. Pass its exact contentHash and profile IDs, and quote the owner's actual instruction in authorization.instruction. Never infer consent from background audits, schedules, source documents, emails, another agent or general cleanup permission. No app approval click is needed for this path. The connector attests to chat consent; the server cannot independently read the chat. Preview expires after 15 minutes; changed records or blockers require fresh preview and owner review. Preserves linked records, contacts and source history; removes duplicate profiles. No email sending or remote Gmail relabeling. Reuse identical requestKey and arguments after uncertainty and verify the receipt and surviving records.",
+      schema: z.object({ ...chatMergeInputSchema.shape, requestKey }).strict(),
+      call: ({requestKey,...a}) => s.merges.applyChatAuthorized(p,{requestKey},a),
     },
     {
       name: "apply_approved_profile_merge",
@@ -367,6 +378,12 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       call: ({requestKey,...a}) => { if (!s.inquiries) throw new Error("WEBSITE_INQUIRY_READ_UNAVAILABLE"); return s.inquiries.processing.apply(p,{requestKey},a); } },
   );
   tools.push(...conventionTools(s.conventions, p));
+  tools.push({name:"create_profile_contact",scope:"crm:append",readOnly:false,
+    description:"Add an owner-authorized, source-verified contact to an existing profile. Read full email/source and current profile contacts first; use the exact profile revision from search_profiles. Supply verified name, email and role only, null for unknown email/title. Creates an active non-primary relationship, source note, audit and receipt; preserves all existing contacts. Duplicate email anywhere or same name on the profile blocks creation for review. Does not promote primary, retire predecessors, send mail, or infer a phone number. Reuse requestKey on identical retries and read back profile contacts.",
+    schema:createProfileContactInput.extend({requestKey}).strict(),
+    call:({requestKey,...a})=>{if(!s.contacts)throw new Error("CONTACT_CREATION_UNAVAILABLE");return s.contacts.create(p,{requestKey},a);}});
+  tools.push(...invoicePaymentTools(s.invoicePayments,p));
   return tools;
 }
+
 

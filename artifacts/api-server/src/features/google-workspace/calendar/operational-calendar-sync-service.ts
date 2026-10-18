@@ -1,3 +1,4 @@
+import { eventIdentity } from "./calendar-preview-model";
 import { createHash } from "node:crypto";
 
 import type { OperationalCalendarPackageKey } from "@/db/schema";
@@ -128,6 +129,9 @@ export class OperationalCalendarSyncService {
         bookingId,
         packageKey: row.packageKey,
       });
+      // Owner-reviewed calendar buffers require a fresh profile preview. Legacy sync
+      // must not silently replace them with inferred operational dates or internal notes.
+      if (link?.lastAppSnapshot.profilePreviewId) { reviewCount += 1; continue; }
       try {
         if (!link) {
           const listed = await connection.client.listEvents({
@@ -160,7 +164,7 @@ export class OperationalCalendarSyncService {
             reviewCount += 1;
             continue;
           }
-          const googleEvent = await connection.client.createEvent(connection.calendarId, eventInput);
+          const googleEvent = await connection.client.createEvent(connection.calendarId, { ...eventInput, id: eventIdentity(bookingId, row.packageKey) });
           await this.links.saveSuccessfulSync({
             connectionId: connection.connectionId, calendarId: connection.calendarId,
             googleEventId: googleEvent.id, bookingId, packageKey: row.packageKey,
@@ -235,7 +239,7 @@ export class OperationalCalendarSyncService {
           connectionId: connection.connectionId, calendarId: connection.calendarId,
           googleEventId: googleEvent.id, bookingId, packageKey: link.packageKey,
           etag: googleEvent.etag, sourceChecksum: checksum(eventSnapshot(googleEvent)),
-          lastAppSnapshot: appSnapshot, reservedStartsAt: link.reservedStartsAt,
+          lastAppSnapshot: { ...link.lastAppSnapshot, ...appSnapshot }, reservedStartsAt: link.reservedStartsAt,
           reservedEndsAt: link.reservedEndsAt, syncedAt: this.now(),
         });
         updated += 1;

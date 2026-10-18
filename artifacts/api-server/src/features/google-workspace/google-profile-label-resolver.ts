@@ -5,6 +5,7 @@ import type {
 import {
   canonicalProfileLabelName,
   GOOGLE_PROFILE_LABEL_HIERARCHY,
+  GOOGLE_PROFILE_LABEL_ROOT,
   isCurrentProfileLabelPath,
   normalizedProfileLabelPath,
   profileLabelIdentity,
@@ -36,6 +37,7 @@ export class GoogleProfileLabelResolver {
   constructor(
     private readonly repository: GoogleProfileLabelRepositoryPort,
     private readonly gmail: GoogleGmailLabelMutationClient,
+    private readonly mode: "shared" | "individual" = "shared",
   ) {}
 
   async ensureHierarchy(
@@ -98,6 +100,20 @@ export class GoogleProfileLabelResolver {
     const organization = await this.repository.getOrganization(input);
     if (!organization || organization.consolidatedIntoId) {
       throw new Error("GOOGLE_WORKSPACE_REVIEW_TARGET_NOT_FOUND");
+    }
+
+    if (this.mode === "shared") {
+      const labels = await this.ensureHierarchy();
+      const category = labels.find(label => label.type === "user" &&
+        normalizedProfileLabelPath(label.name) === normalizedProfileLabelPath(GOOGLE_PROFILE_LABEL_ROOT));
+      if (!category) throw new Error("GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND");
+      // A shared category is not a customer identity. Keep historical mappings
+      // intact; the committed message/thread association owns the CRM identity.
+      return { status: "resolved", mapping: {
+        connectionId: input.connectionId, organizationId: input.organizationId,
+        gmailLabelId: category.id, gmailLabelName: GOOGLE_PROFILE_LABEL_ROOT,
+        state: "active", lastErrorCode: null,
+      } };
     }
 
     if (input.reuseOnly) {

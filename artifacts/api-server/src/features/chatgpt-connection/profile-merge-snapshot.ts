@@ -3,6 +3,7 @@ import { selectedProfilesHaveConflictingCompleteLocations } from "../organizatio
 import {
   extraMergeReferences,
   legacyMergeTables,
+  retainedMergeReferences,
 } from "./profile-merge-references";
 import { organizationFamilyReviewAdvisoryLockKey } from "../organizations/organization-family-lock";
 
@@ -126,10 +127,16 @@ export async function mergeSnapshot(
   }[] = [];
   const blockers: string[] = [];
   if (tables.has("booking_work_activities")) {
-    const collisions = await tx.query(`SELECT event_year FROM booking_work_activities
+    const collisions = await tx.query(
+      `SELECT event_year FROM booking_work_activities
       WHERE profile_id=ANY($1::uuid[]) AND status NOT IN ('completed','cancelled')
-      GROUP BY event_year HAVING count(*)>1 ORDER BY event_year`, [ids]);
-    for (const row of collisions.rows) blockers.push(`Resolve active booking work for ${row.event_year} before merging; both activities will be preserved.`);
+      GROUP BY event_year HAVING count(*)>1 ORDER BY event_year`,
+      [ids],
+    );
+    for (const row of collisions.rows)
+      blockers.push(
+        `Resolve active booking work for ${row.event_year} before merging; both activities will be preserved.`,
+      );
   }
   for (const [table, fields] of [...tables].sort(([a], [b]) =>
     a.localeCompare(b),
@@ -157,7 +164,8 @@ export async function mergeSnapshot(
     if (
       Number(row.duplicate_count) > 0 &&
       !legacyMergeTables.has(table) &&
-      !(fields.length === 1 && fields[0] === extraMergeReferences[table])
+      !(fields.length === 1 && fields[0] === extraMergeReferences[table]) &&
+      !(fields.length === 1 && fields[0] === retainedMergeReferences[table])
     )
       blockers.push(
         `Linked records in ${table} need a supported preservation path before these profiles can be merged.`,
@@ -208,6 +216,6 @@ export async function mergeSnapshot(
     blockers,
     fingerprint: inputHash({ profiles, references }),
     policy:
-      "Keep the surviving profile's fields. Move supported linked records and preserve original profile fields in the merge history. Equivalent links may be consolidated. Conflicting active date facts remain for review. This does not send email or relabel Gmail remotely.",
+      "Keep the surviving profile's fields. Move supported linked records and preserve original profile fields in the merge history. Equivalent links may be consolidated. Backup jobs and file mappings retain original source IDs so retired sources can be marked removed. Conflicting active date facts remain for review. This does not send email or relabel Gmail remotely.",
   };
 }

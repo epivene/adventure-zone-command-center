@@ -1,3 +1,4 @@
+import BookingWorkPage from "./pages/BookingWorkPage";
 import ProfileDuplicatesPage from "./pages/ProfileDuplicatesPage";
 import { RemindersProvider, RemindersPage } from "@/features/deadline-rules/reminders";
 import { WorkspaceSessionProvider } from "@/features/assistant-workspace/WorkspaceSessionProvider";
@@ -30,7 +31,6 @@ import { OFFICE_PROTECTED_PATH } from "@/lib/office-route-pattern";
 import { CommandTerminalLanding } from "@/components/command-terminal/command-terminal-landing";
 
 const SettingsChatGPTConnectionPage = lazy(() => import("@/pages/SettingsChatGPTConnectionPage"));
-const BookingWorkPage = lazy(() => import("@/pages/BookingWorkPage"));
 const ChatGPTConnectionConsentPage = lazy(() => import("@/pages/ChatGPTConnectionConsentPage"));
 const ManagerIssuesAdminPage = lazy(() => import("@/pages/ManagerIssuesAdminPage"));
 const ManagerRoutePage = lazy(() => import("@/pages/ManagerRoutePage"));
@@ -249,8 +249,8 @@ function ActMigrationRedirect() {
 
 function SettingsStub() {
   const tools = [
+    ["Shared booking work", "/settings/booking-work", "Review assignments and release or hand off existing work without losing progress."],
     ["ChatGPT connection", "/settings/chatgpt-connection", "Manage direct access, review profile changes and find saved app drafts."],
-    ["Shared booking work", "/settings/booking-work", "Review progress and hand off work between you and Com, including older connections."],
     ["Tax & receipts", "/settings/tax-receipts", "Private owner record of self-employed 1099 documents, income and expenses for tax preparation."],
     ["Business sources", "/settings/business-sources", "Review protected business source files, conflicts, links, and historical terms."],
     ["Certificates of insurance", "/settings/coi", "Create, review, and renew workspace-scoped certificates linked to Studio files."],
@@ -400,9 +400,9 @@ function AdminProtectedApp() {
           <Route path="/contacts/:id/edit"><ContactEditPage /></Route>
           <Route path="/contacts/:id">{(params)=><ContactDetailPage contactId={params.id}/>}</Route>
           <Route path="/contacts" component={ContactsPage} />
+          <Route path="/settings/booking-work" component={BookingWorkPage} />
           <Route path="/settings/reminders" component={RemindersPage} />
           <Route path="/settings/chatgpt-connection" component={SettingsChatGPTConnectionPage} />
-          <Route path="/settings/booking-work" component={BookingWorkPage} />
           <Route path="/chatgpt-connection/consent" component={ChatGPTConnectionConsentPage} />
           <Route path="/profiles/duplicate-review" component={ProfileDuplicatesPage} />
                 <Route path="/profiles/:profileId" component={EventProfilePage} />

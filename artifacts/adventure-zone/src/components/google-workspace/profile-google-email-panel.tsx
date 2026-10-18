@@ -1,6 +1,6 @@
 import { EmailMessageBody } from "@/features/emails/email-message-body";
 import { formatEmailDate, newestEmails } from "@/features/emails/email-presentation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, FileText, Mail, Paperclip } from "lucide-react";
 
 import {
@@ -288,6 +288,27 @@ function ProfileFiles({
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [showDownloadHistory, setShowDownloadHistory] = useState(false);
+  const groups = useMemo(() => {
+    const grouped = new Map<string, { file: GoogleProfileFile; references: number; sources: Map<string, GoogleProfileFile> }>();
+    for (const file of files) {
+      // Only verified storage identity groups saved files. A filename alone
+      // must never hide a different contract or an unresolved download.
+      const key = file.availability === "available" && file.storageObjectKey
+        ? JSON.stringify([file.organizationId, "saved", file.storageObjectKey])
+        : JSON.stringify([file.organizationId, "download-history", file.threadId, file.messageId, file.filename, file.mimeType, file.sizeBytes]);
+      let group = grouped.get(key);
+      if (!group) {
+        group = { file, references: 0, sources: new Map() };
+        grouped.set(key, group);
+      }
+      group.references++;
+      group.sources.set(JSON.stringify([file.threadId, file.messageId, file.filename]), file);
+    }
+    return [...grouped.values()];
+  }, [files]);
+  const downloadRecords = files.filter(file => file.availability !== "available").length;
 
   async function open(file: GoogleProfileFile) {
     if (file.availability !== "available") return;
@@ -314,12 +335,37 @@ function ProfileFiles({
   return (
     <div className="grid gap-2">
       {error ? <p className="text-sm font-medium text-rose-700">{error}</p> : null}
-      {files.map((file) => (
+      {downloadRecords ? (
+        <div>
+          <button type="button" className="button-secondary text-sm" aria-expanded={showDownloadHistory}
+            onClick={() => setShowDownloadHistory(!showDownloadHistory)}>
+            Download history ({downloadRecords} records)
+          </button>
+          {showDownloadHistory ? <p className="mt-2 text-xs text-slate-500">Previous download attempts are retained below. Some may now have a saved copy.</p> : null}
+        </div>
+      ) : null}
+      {groups.filter(({ file }) => file.availability === "available" || showDownloadHistory).map(({ file, references, sources }) => (
         <article className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40" key={file.id}>
           <Paperclip className="h-5 w-5 shrink-0 text-slate-500" />
           <div className="min-w-0 flex-1">
             <p className="break-words font-semibold text-slate-900 dark:text-slate-100">{file.filename}</p>
             <p className="mt-1 text-xs text-slate-500">{file.mimeType} · {fileSize(file.sizeBytes)}</p>
+            <button type="button" className="mt-1 text-xs text-blue-700 underline dark:text-blue-300"
+              aria-expanded={expanded === file.id} onClick={() => setExpanded(expanded === file.id ? null : file.id)}>
+              {new Set([...sources.values()].map(source => source.messageId)).size} source emails · {references} saved references
+            </button>
+            {expanded === file.id ? (
+              <ul className="mt-2 space-y-1 text-xs">
+                {[...sources.values()].map(source => (
+                  <li key={JSON.stringify([source.threadId, source.messageId, source.filename])}>
+                    <a className="text-blue-700 underline dark:text-blue-300" target="_blank" rel="noopener noreferrer"
+                      href={`https://mail.google.com/mail/u/0/#all/${encodeURIComponent(source.threadId)}`}>
+                      Open source email · {source.filename}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {file.availability !== "available" ? (
               <p className="mt-1 text-xs font-semibold text-amber-700">Attachment needs retry</p>
             ) : null}

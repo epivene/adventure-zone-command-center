@@ -23,6 +23,10 @@ interface MigrationPool {
 
 const migrationFiles = [
   {
+    name: "20261016_profile_calendar_previews.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.profile_calendar_previews') IS NOT NULL AS ready",
+  },
+  {
     name: "20261016_agent_tax_records.sql",
     markerSql: "SELECT to_regclass(current_schema() || '.agent_tax_records') IS NOT NULL AND to_regclass(current_schema() || '.agent_tax_file_deletions') IS NOT NULL AS ready",
   },
@@ -752,6 +756,10 @@ const migrationFiles = [
   {
     name: "20261014_deadline_rules.sql",
     markerSql: "SELECT to_regclass(current_schema() || '.deadline_evaluation_state') IS NOT NULL AND to_regclass(current_schema() || '.deadline_notifications') IS NOT NULL AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='deadline_booking_status_event' AND tgrelid='bookings'::regclass) AS ready",
+  },
+  {
+    name: "20261018_deadline_attention_reviews.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.deadline_attention_reviews') IS NOT NULL AS ready",
   },
 ] as const;
 

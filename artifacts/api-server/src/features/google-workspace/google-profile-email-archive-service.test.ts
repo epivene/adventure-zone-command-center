@@ -32,6 +32,75 @@ function archived(overrides: Partial<ArchivedProfileEmailThread> = {}): Archived
 }
 
 describe("GoogleProfileEmailArchiveService", () => {
+  it("does not archive unsent draft bodies or attachments as delivered history", async () => {
+    const saved: any[] = [];
+    let copied: string[] = [];
+    const messages = ["sent", "draft"].map((id) => ({
+      id,
+      labelIds: [id === "draft" ? "DRAFT" : "SENT"],
+      internalDateMs: 1,
+      from: "zone@example.com",
+      to: "customer@example.com",
+      cc: "",
+      subject: "Fair",
+      date: "today",
+      direction: "outgoing" as const,
+      bodyText: id === "draft" ? "Unsent private edit" : "Sent text",
+      attachments:
+        id === "draft"
+          ? [
+              {
+                messageId: id,
+                attachmentId: "private",
+                filename: "draft.pdf",
+                mimeType: "application/pdf",
+                sizeBytes: 3,
+              },
+            ]
+          : [],
+    }));
+    const service = new GoogleProfileEmailArchiveService({
+      connection: {
+        createReadClient: async () =>
+          client({
+            getThreadDetail: async () => ({
+              id: "thread-1",
+              subject: "Fair",
+              originalGmailUrl: "url",
+              messages,
+            }),
+          }),
+      },
+      validation: { organizationOwnsApprovedThread: async () => true },
+      archive: {
+        findByProviderThread: async () => null,
+        upsertThread: async (input: any) => {
+          saved.push(...input.messages);
+          return archived({
+            messages: input.messages,
+            archiveState: input.archiveState,
+          });
+        },
+        recordSyncFailure: vi.fn(),
+      } as never,
+      files: {
+        copyApprovedThreadAttachments: async (input) => {
+          copied = input.detail!.messages.map((m) => m.id);
+          return [];
+        },
+      },
+    });
+    const result = await service.archiveApprovedThread({
+      organizationId: "org-1",
+      contactId: null,
+      gmailThreadId: "thread-1",
+    });
+    expect(result.archiveState).toBe("complete");
+    expect(saved.map((m) => m.gmailMessageId)).not.toContain("draft");
+    expect(saved.map((m) => m.gmailMessageId)).toContain("sent");
+    expect(copied).toEqual([]);
+    expect(messages[1].bodyText).toBe("Unsent private edit");
+  });
   it("archives message bodies before copying attachments and finishes complete", async () => {
     const calls: string[] = [];
     const upsertThread = vi.fn(async (input) => {

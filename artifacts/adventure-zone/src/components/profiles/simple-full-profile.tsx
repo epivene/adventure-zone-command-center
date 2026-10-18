@@ -480,6 +480,7 @@ export function SimpleFullProfile({
         </div>
         <div className="flex w-full items-center gap-2 sm:w-auto">
           {boss ? <button className="button-secondary" type="button" onClick={() => setEditing(true)}>Edit Profile</button> : <ProfileActionsMenu
+            loadedLastResortState={profile.place}
             profileId={profile.id}
             contactId={primaryContact?.id ?? null}
             showAddNote={false}
@@ -608,7 +609,7 @@ export function SimpleFullProfile({
         />}
       />
       </> : <div className="flex justify-end">
-        <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id} showAddNote={false} showFollowUp={false} onEdit={() => setEditing(true)}
+        <ProfileActionsMenu loadedLastResortState={profile.place} profileId={profile.id} contactId={primaryContact?.id} showAddNote={false} showFollowUp={false} onEdit={() => setEditing(true)}
           callHref={callHref} onAssistant={onAskAssistant ?? (() => navigate("/assistant/workspace"))} />
       </div>}
 
@@ -678,7 +679,7 @@ export function SimpleFullProfile({
                       <span className="font-semibold">{primaryContact.name}</span>
                     </span>
                   </div>
-                  {!boss ? <ProfileActionsMenu profileId={profile.id} contactId={primaryContact.id} showAddNote={false} /> : null}
+                  {!boss ? <ProfileActionsMenu loadedLastResortState={profile.place} profileId={profile.id} contactId={primaryContact.id} showAddNote={false} /> : null}
                 </div>
               ) : null}
             </section>

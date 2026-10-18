@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { setLastResortAction } from "@/actions/organizations";
 import {
@@ -24,14 +24,27 @@ async function loadLastResortState(profileId: string): Promise<ProfileLastResort
   };
 }
 
-export function useProfileLastResortState(profileId: string) {
-  const [state, setState] = useState<ProfileLastResortState | null>(null);
+export function useProfileLastResortState(profileId: string, supplied?: ProfileLastResortState) {
+  const [state, setState] = useState<ProfileLastResortState | null>(supplied ?? null);
+  const generation = useRef(0);
   const refresh = useCallback(async () => {
+    const request = ++generation.current;
     const next = await loadLastResortState(profileId);
-    setState(next);
+    if (request === generation.current) setState(next);
     return next;
   }, [profileId]);
-  useEffect(() => { void refresh().catch(() => undefined); }, [refresh]);
+  const suppliedLastResort = supplied?.lastResort;
+  const suppliedReason = supplied?.lastResortReason;
+  useEffect(() => {
+    ++generation.current;
+    if (suppliedLastResort !== undefined) {
+      setState({ lastResort: suppliedLastResort, lastResortReason: suppliedReason ?? null });
+    } else {
+      setState(null);
+      void refresh().catch(() => undefined);
+    }
+    return () => { ++generation.current; };
+  }, [refresh, suppliedLastResort, suppliedReason]);
   return { state, refresh };
 }
 

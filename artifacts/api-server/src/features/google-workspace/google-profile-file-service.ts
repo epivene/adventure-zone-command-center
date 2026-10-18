@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { pool as defaultPool } from "@workspace/db";
 
 import { PostgresGoogleConnectionRepository } from "./google-connection-repository";
-import type { GoogleWorkspaceReadClient } from "./google-api-types";
+import type { GoogleWorkspaceReadClient, GoogleThreadDetail } from "./google-api-types";
 import { PostgresGoogleValidationRepository } from "./google-validation-repository";
 import {
   GoogleCloudPrivateObjectStorage,
@@ -80,9 +80,10 @@ function toFile(row: Record<string, unknown>): GoogleProfileFile | null {
 }
 
 export class PostgresGoogleProfileFileRepository {
-  constructor(private readonly pool: SqlPool = defaultPool as unknown as SqlPool) {}
+  constructor(private readonly pool: SqlPool = defaultPool as unknown as SqlPool,private readonly pinnedConnectionId?:string) {}
 
   private async currentConnectionId(): Promise<string> {
+    if(this.pinnedConnectionId)return this.pinnedConnectionId;
     const result = await this.pool.query(
       `SELECT id
          FROM google_workspace_connections
@@ -290,6 +291,7 @@ export class GoogleProfileFileService {
   async copyApprovedThreadAttachments(input: {
     organizationId: string;
     threadId: string;
+    detail?: GoogleThreadDetail;
   }): Promise<GoogleProfileFile[]> {
     const owns = await this.validation.organizationOwnsApprovedThread(input);
     if (!owns) throw new Error("GOOGLE_WORKSPACE_PROFILE_THREAD_NOT_FOUND");
@@ -299,11 +301,26 @@ export class GoogleProfileFileService {
     if (!client.getThreadDetail || !client.getAttachment) {
       throw new Error("GOOGLE_WORKSPACE_PROFILE_FILES_UNAVAILABLE");
     }
-    const detail = await client.getThreadDetail(input.threadId);
+    // Reuse the archive's snapshot: Gmail attachment handles can differ on a
+    // second read, which otherwise leaves successfully copied files "partial".
+    const detail = input.detail ?? await client.getThreadDetail(input.threadId);
+    if (detail.id !== input.threadId) {
+      throw new Error("GOOGLE_WORKSPACE_PROFILE_THREAD_NOT_FOUND");
+    }
 
+    const existing=await this.repository.listForOrganization(input.organizationId);
     for (const message of detail.messages) {
       for (const attachment of message.attachments) {
         try {
+          const samePart=(part:{filename:string;mimeType:string;sizeBytes:number})=>part.filename===attachment.filename&&part.mimeType===attachment.mimeType&&part.sizeBytes===attachment.sizeBytes;
+          // Gmail messages are immutable, but download handles may rotate. Only
+          // reuse metadata identity when that part is unambiguous in the message.
+          const unique=message.attachments.filter(samePart).length===1;
+          const cached=existing.find(file=>file.threadId===input.threadId&&file.messageId===message.id&&(file.attachmentId===attachment.attachmentId||(unique&&samePart(file)))&&file.availability==='available'&&file.storageObjectKey);
+          if(cached?.storageObjectKey&&await this.storage.exists(cached.storageObjectKey)){
+            if(cached.attachmentId!==attachment.attachmentId)await this.repository.saveFile({...cached,attachmentId:attachment.attachmentId});
+            continue;
+          }
           const bytes = await client.getAttachment({
             messageId: message.id,
             attachmentId: attachment.attachmentId,

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import {createMailboxSyncRouter} from './google-mailbox-sync';
 import { z } from "zod";
 import { requireOwnerMiddleware } from "../lib/auth";
 import {
@@ -16,6 +17,16 @@ export function createEmailThreadAttentionRouter(
     next();
   });
   const actor = { ownerId: "owner", connectorId: null };
+  r.use('/sync',createMailboxSyncRouter());
+  r.get("/pilot", async (_req,res)=>{
+    const {readCompatiblePilotSync}=await import("../features/google-workspace/google-mailbox-sync-runtime");
+    res.json(await readCompatiblePilotSync());
+  });
+  r.post("/pilot/sync", async (req,res)=>{
+    z.object({}).strict().parse(req.body);
+    const {requestCompatiblePilotSync}=await import("../features/google-workspace/google-mailbox-sync-runtime");
+    res.status(202).json(await requestCompatiblePilotSync());
+  });
   r.get("/list", async (req, res) => {
     const input = z.object({gmailConnectionId:z.string().uuid(),state:z.enum(["needs_your_reply","waiting_for_their_reply"]),cursor:z.string().max(2000).optional(),limit:z.coerce.number().int().min(1).max(100).optional()}).strict().parse(req.query);
     res.json(await service.list(actor,input));

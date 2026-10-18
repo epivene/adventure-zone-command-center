@@ -11,11 +11,15 @@ export async function readAttentionSource(messageId: string) {
   const after = await connections.getCurrent();
   if (after?.id !== before.id)
     throw new Error("GOOGLE_WORKSPACE_CONNECTION_CHANGED");
-  const messages = [...detail.messages].sort(
-    (a, b) =>
-      (a.internalDateMs ?? 0) - (b.internalDateMs ?? 0) ||
-      a.id.localeCompare(b.id),
-  );
+  if (metadata.labelIds?.includes("DRAFT"))
+    throw new Error("GOOGLE_WORKSPACE_DRAFT_REQUIRES_DRAFT_FILING");
+  const messages = detail.messages
+    .filter((m) => !m.labelIds?.includes("DRAFT"))
+    .sort(
+      (a, b) =>
+        (a.internalDateMs ?? 0) - (b.internalDateMs ?? 0) ||
+        a.id.localeCompare(b.id),
+    );
   const latest = messages.at(-1);
   if (!latest || !messages.some((m) => m.id === messageId))
     throw new Error("GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND");
@@ -41,6 +45,10 @@ export async function readAttentionSource(messageId: string) {
     gmailConnectionId: before.id,
     threadId: detail.id,
     latestMessageId: latest.id,
+    messageLabels: messages.map((m) => ({
+      id: m.id,
+      labelIds: m.labelIds ?? [],
+    })),
     // Gmail message IDs/content identify the reviewed source. Attachment download
     // references and label-derived direction are retrieval state, not content.
     sourceFingerprint: inputHash(

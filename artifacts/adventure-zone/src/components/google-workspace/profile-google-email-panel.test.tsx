@@ -257,6 +257,43 @@ describe("ProfileGoogleEmailPanel", () => {
       "noopener,noreferrer",
     );
   });
+
+  it("shows one saved file for repeated references while keeping both email sources", async () => {
+    client.getGoogleProfileFiles.mockResolvedValue({ files: [storedFile,
+      { ...storedFile, id: "alias", attachmentId: "rotated" },
+      { ...storedFile, id: "second-email", messageId: "m2", threadId: "thread-2", filename: "renamed.pdf" },
+    ] });
+    render(<ProfileGoogleEmailPanel organizationId="org-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    expect(await screen.findAllByRole("button", { name: "Open file" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: /2 source emails/i }));
+    expect(screen.getByRole("link", { name: /application.pdf/ })).toHaveAttribute("href", "https://mail.google.com/mail/u/0/#all/thread-1");
+    expect(screen.getByRole("link", { name: /renamed.pdf/ })).toHaveAttribute("href", "https://mail.google.com/mail/u/0/#all/thread-2");
+  });
+
+  it("keeps different content with the same filename separate and retry records visible", async () => {
+    client.getGoogleProfileFiles.mockResolvedValue({ files: [storedFile,
+      { ...storedFile, id: "different", contentSha256: "different", storageObjectKey: "different" },
+      { ...storedFile, id: "retry", contentSha256: null, storageObjectKey: null, availability: "retry_required" },
+    ] });
+    render(<ProfileGoogleEmailPanel organizationId="org-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    expect(await screen.findAllByRole("button", { name: "Open file" })).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: /Download history/ }));
+    expect(screen.getByText("Attachment needs retry")).toBeInTheDocument();
+  });
+
+  it("groups repeated failed attempts separately without hiding their record count", async () => {
+    const retry = { ...storedFile, contentSha256: null, storageObjectKey: null, availability: "retry_required" };
+    client.getGoogleProfileFiles.mockResolvedValue({ files: [storedFile, { ...retry, id: "r1" }, { ...retry, id: "r2", attachmentId: "old-handle" }] });
+    render(<ProfileGoogleEmailPanel organizationId="org-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    expect(await screen.findAllByRole("button", { name: "Open file" })).toHaveLength(1);
+    expect(screen.queryByText("Attachment needs retry")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Download history.*2 records/ }));
+    expect(screen.getAllByText("Attachment needs retry")).toHaveLength(1);
+    expect(screen.getByText(/2 saved references/)).toBeInTheDocument();
+  });
 });
 
 describe("Boss read-only conversation transport", () => {

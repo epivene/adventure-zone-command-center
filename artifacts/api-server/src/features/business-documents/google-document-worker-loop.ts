@@ -20,6 +20,7 @@ export class GoogleDocumentWorkerLoop {
     worker: Pick<GoogleDocumentWorker, "runOnce">;
     clock: { now(): Date };
     scheduler: GoogleDocumentWorkerLoopScheduler;
+    runExclusive?:(work:()=>Promise<void>)=>Promise<void>;
   }) {}
   start() {
     if (this.started || this.stopped) return;
@@ -49,8 +50,11 @@ export class GoogleDocumentWorkerLoop {
   }
   private async run() {
     try {
+      const work=async()=>{
       const summary = await this.dependencies.worker.runOnce(this.dependencies.clock.now());
       logger.info(summary, summary.connected ? "Hourly Gmail document intake completed" : "Hourly Gmail document intake skipped; Workspace is disconnected");
+      };
+      if(this.dependencies.runExclusive)await this.dependencies.runExclusive(work);else await work();
     } catch (error) {
       logger.warn({ errorCode: error instanceof Error ? error.message : "unknown" }, "Hourly Gmail document intake deferred");
     } finally {

@@ -19,7 +19,7 @@ export function bookingWorkTools(
     call: (a: any) => Promise<unknown>,
   ) => ({ name, scope, readOnly, schema, description, call });
   const safety =
-    " Coordination metadata only: never sends email, schedules a worker or invokes paid app AI. Preserve user edits and verify receipts. If work is already assigned, use its review link; do not take over.";
+    " Coordination metadata only: never sends email, schedules a worker or invokes paid app AI. Preserve user edits and verify receipts. On WORK_NOT_ASSIGNED read_booking_work: if unassigned, claim_existing_booking_work with its current revision, then update with the returned revision. If assigned to another connection, try recover_booking_work with the exact revision and previousConnectionId; it only recovers revoked connections for the same owner/client. On WORK_OWNER_HANDOFF_REQUIRED, or for an owner assignment, use /settings/booking-work for an owner handoff. Never take over based on age/reconnection or create a duplicate card.";
   return [
     make(
       "recover_booking_work",
@@ -85,4 +85,5 @@ export function bookingWorkTools(
     ),
   ];
 }
+
 

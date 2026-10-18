@@ -10,10 +10,11 @@ vi.mock("./google-connection-repository", () => ({
     }
     async createReadClient() {
       return {
-        getMessageMetadata: async () => ({
+        getMessageMetadata: async (id: string) => ({
           threadId: "thread",
           hasAttachments: false,
-          labelIds: data.labels,
+          labelIds:
+            data.messages?.find((m) => m.id === id)?.labelIds ?? data.labels,
           headers: { from: "customer@example.com", to: "office@example.com" },
         }),
         getThreadDetail: async () => ({
@@ -47,10 +48,35 @@ it("does not mistake sent mail or drafts for incoming replies", async () => {
     "outgoing",
   );
   data.labels = ["DRAFT"];
-  expect((await readAttentionSource("message")).latestDirection).toBe(
-    "unknown",
+  await expect(readAttentionSource("message")).rejects.toThrow(
+    "DRAFT_REQUIRES_DRAFT_FILING",
   );
   data.labels = [];
+});
+
+it("files the latest delivered message while ignoring a newer unsent draft", async () => {
+  data.messages = [
+    { ...message(), labelIds: ["SENT"], from: "office@example.com" },
+    {
+      ...message(),
+      id: "draft",
+      internalDateMs: 2,
+      labelIds: ["DRAFT"],
+      bodyText: "Unsent",
+      attachments: [],
+    },
+  ];
+  const source = await readAttentionSource("message");
+  expect(source.latestMessageId).toBe("message");
+  expect(source.latestDirection).toBe("outgoing");
+  data.messages[1].bodyText = "Edited unsent draft";
+  expect((await readAttentionSource("message")).sourceFingerprint).toBe(
+    source.sourceFingerprint,
+  );
+  data.messages[1].labelIds = ["SENT"];
+  expect((await readAttentionSource("message")).sourceFingerprint).not.toBe(
+    source.sourceFingerprint,
+  );
 });
 
 afterEach(() => {

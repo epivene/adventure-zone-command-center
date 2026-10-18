@@ -19,7 +19,6 @@ import { adminWorkspaceForPath, readBookingReturnPath, type AdminWorkspace } fro
 import { IncomingCallingProvider } from "@/features/calls/incoming-calling-context";
 import { IncomingAvailabilityControl } from "@/components/calls/incoming-availability-control";
 import { IncomingCallPanel } from "@/components/calls/incoming-call-panel";
-import { getGoogleWorkspaceValidationReview } from "@/features/google-workspace/google-workspace-client";
 
 type PrimaryNavigationItem = { href: string; label: string; icon: LucideIcon; keywords?: readonly string[] };
 
@@ -100,9 +99,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (immersiveProfile) return;
     let active = true;
     const refresh = () =>
-      getGoogleWorkspaceValidationReview()
+      apiGet<{ count: number }>("/google-workspace/validation/review-count")
         .then((data) => {
-          if (active) setPendingEmailReviewCount(data.items.filter((item) => item.state === "pending").length);
+          if (active) setPendingEmailReviewCount(data.count);
         })
         .catch(() => {});
     const updateFromReview = (event: Event) => {

@@ -20,13 +20,15 @@ it("shows Not set and saves reminder offsets on the existing application field",
   fireEvent.click(screen.getByRole("button",{name:"Save reminder"}));
   await waitFor(()=>expect(api.apiPut).toHaveBeenCalledWith("/deadline-rules/profiles/p/item",expect.objectContaining({sourceKey:"application:p",offsets:[30,14,7],dueOn:null})));
 });
-it("evaluates on load and shows linked upcoming items and the badge",async()=>{
+it("reads linked upcoming items and the badge without evaluating on load",async()=>{
+  window.history.replaceState({},"","/leads");
   api.apiPost.mockResolvedValue({});
   api.apiGet.mockResolvedValue({upcoming:[{sourceKey:"vendor:p",organizationId:"p",profileName:"Blanding",label:"Vendor deadline",dueOn:"2026-10-20"}],notifications:[],count:2,lastEvaluatedAt:null});
   render(<RemindersProvider><ReminderBell/><UpcomingDeadlines/></RemindersProvider>);
   await screen.findByRole("link",{name:"Reminders, 2 active"});
   expect(screen.getByRole("link",{name:"Blanding"}).getAttribute("href")).toBe("/profiles/p");
-  expect(api.apiPost).toHaveBeenCalledWith("/deadline-rules/evaluate",{});
+  expect(api.apiGet).toHaveBeenCalledWith("/deadline-rules/summary");
+  expect(api.apiPost).not.toHaveBeenCalled();
 });
 it("toggles a rule without needing code and marks email setup off",async()=>{
   const rule={id:"rule",name:"Upcoming",enabled:true,trigger:{type:"deadline_before",days:[14,7],useItemOffsets:true},actions:["notify","badge"]};

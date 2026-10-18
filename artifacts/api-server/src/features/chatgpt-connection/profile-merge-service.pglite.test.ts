@@ -4,6 +4,7 @@ import { fixture } from "./test-database";
 import { ProfileMergeService } from "./profile-merge-service";
 import { ProfileUpdateService } from "./profile-update-service";
 import type { SqlQuery } from "./contracts";
+import { ensureEmailThreadAttentionSchema } from "../../db/email-thread-attention-schema";
 
 let f: Awaited<ReturnType<typeof fixture>>,
   service: ProfileMergeService,
@@ -52,6 +53,38 @@ const preview = () =>
       sources,
     },
   );
+it("applies an owner-approved merge with mail history and retired backup jobs", async () => {
+  await ensureEmailThreadAttentionSchema(f.db);
+  await f.db.exec(`
+    CREATE TABLE google_workspace_historical_gmail_outcomes(
+      connection_id uuid,message_id text,organization_id uuid REFERENCES organizations(id) ON DELETE SET NULL,
+      outcome text,PRIMARY KEY(connection_id,message_id));
+    CREATE TABLE google_drive_backup_jobs(
+      id uuid PRIMARY KEY,entity_kind text,entity_id uuid,status text,
+      UNIQUE(entity_kind,entity_id));
+  `);
+  const attentionId = randomUUID(), revision = randomUUID(), backupId = randomUUID();
+  await f.db.query(`INSERT INTO email_thread_attention(id,gmail_connection_id,thread_id,profile_id,state,reason,subject,reviewed_message_id,revision,actor_id)
+    VALUES($1,$2,'thread',$3,'needs_your_reply','Incoming reply','Fair contract','message',$4,'owner')`,
+    [attentionId,f.principal.connectionId,duplicateId,revision]);
+  await f.db.query("INSERT INTO google_workspace_historical_gmail_outcomes VALUES($1,'message',$2,'attached')",[f.principal.connectionId,duplicateId]);
+  await f.db.query("INSERT INTO google_drive_backup_jobs VALUES($1,'profile_summary',$2,'queued')",[backupId,duplicateId]);
+  const p = await preview();
+  expect(p.value.blockers).toEqual([]);
+  // Preview alone must not mutate any profile links.
+  expect((await f.db.query("SELECT profile_id FROM email_thread_attention")).rows).toEqual([{profile_id:duplicateId}]);
+  const approval = await service.approve('owner',p.recordId,p.value.contentHash,true);
+  const input = {proposalId:p.recordId,approvalId:approval.approvalId};
+  const result = await service.apply(f.principal,{requestKey:'mail-merge'},input);
+  expect(result.value.mergedProfileIds).toEqual([duplicateId]);
+  const attention = (await f.db.query("SELECT profile_id,revision,state FROM email_thread_attention")).rows[0];
+  expect(attention.profile_id).toBe(f.profileId);
+  expect(attention.revision).not.toBe(revision);
+  expect(attention.state).toBe('needs_your_reply');
+  expect((await f.db.query("SELECT organization_id,outcome FROM google_workspace_historical_gmail_outcomes")).rows).toEqual([{organization_id:f.profileId,outcome:'attached'}]);
+  expect((await f.db.query("SELECT entity_id,status FROM google_drive_backup_jobs")).rows).toEqual([{entity_id:duplicateId,status:'queued'}]);
+  expect((await service.apply(f.principal,{requestKey:'mail-merge'},input)).operationId).toBe(result.operationId);
+});
 async function approved() {
   const p = await preview();
   const a = await service.approve(
@@ -381,4 +414,125 @@ it('moves completed work and distinct-year work while invalidating changed previ
  const a=await service.approve('owner',p2.recordId,p2.value.contentHash,true);
  await service.apply(f.principal,{requestKey:'merge'},{proposalId:p2.recordId,approvalId:a.approvalId});
  expect((await f.db.query('SELECT profile_id FROM booking_work_activities')).rows.every(r=>r.profile_id===f.profileId)).toBe(true);
+});
+
+async function chatInput() {
+  const p = await preview();
+  return {
+    proposalId: p.recordId,
+    expectedContentHash: p.value.contentHash,
+    primaryId: f.profileId,
+    duplicateIds: [duplicateId],
+    authorization: {
+      source: "current_owner_message" as const,
+      instruction:
+        "Merge these exact County Fair profiles, keeping the richer profile and all history.",
+      confirmedSameEvent: true as const,
+    },
+  };
+}
+it("applies exact chat authorization, preserves contacts/history and records a retry-safe receipt", async () => {
+  await f.db.query(
+    "INSERT INTO contacts(organization_id,first_name,email) VALUES($1,'Original','contact@example.com')",
+    [duplicateId],
+  );
+  const input = await chatInput();
+  const result = await service.applyChatAuthorized(
+    f.principal,
+    { requestKey: "chat" },
+    input,
+  );
+  expect(result.value.authorization).toMatchObject(input.authorization);
+  expect(
+    (await f.db.query("SELECT organization_id,email FROM contacts")).rows,
+  ).toEqual([{ organization_id: f.profileId, email: "contact@example.com" }]);
+  expect(
+    (
+      await f.db.query<{body:string}>(
+        "SELECT body FROM activities WHERE subject='Original history'",
+      )
+    ).rows[0].body,
+  ).toBe("Keep my wording");
+  expect(
+    (
+      await f.db.query<{body:string}>(
+        "SELECT body FROM activities WHERE subject='Duplicate profiles merged'",
+      )
+    ).rows[0].body,
+  ).toContain(input.authorization.instruction);
+  expect(
+    await service.applyChatAuthorized(
+      f.principal,
+      { requestKey: "chat" },
+      input,
+    ),
+  ).toEqual(result);
+  await expect(
+    service.applyChatAuthorized(f.principal, { requestKey: "again" }, input),
+  ).rejects.toThrow();
+});
+it.each([
+  "missing instruction",
+  "background",
+  "unconfirmed",
+  "wrong pair",
+  "wrong hash",
+  "stale",
+  "expired",
+  "scope",
+  "wrong connection",
+  "revoked",
+  "blocker",
+])("rejects chat merge: %s", async (kind) => {
+  const input: any = await chatInput();
+  let principal = f.principal;
+  if (kind === "missing instruction") input.authorization.instruction = "";
+  if (kind === "background") input.authorization.source = "background_audit";
+  if (kind === "unconfirmed") input.authorization.confirmedSameEvent = false;
+  if (kind === "wrong pair") input.duplicateIds = [randomUUID()];
+  if (kind === "wrong hash") input.expectedContentHash = "0".repeat(64);
+  if (kind === "stale")
+    await f.db.query("UPDATE activities SET body='Owner correction'");
+  if (kind === "expired")
+    await f.db.query(
+      "UPDATE chatgpt_update_proposals SET created_at=now()-interval '16 minutes'",
+    );
+  if (kind === "scope") principal = { ...f.principal, scopes: ["crm:read"] };
+  if (kind === "wrong connection")
+    principal = { ...f.principal, connectionId: randomUUID() };
+  if (kind === "revoked")
+    await f.db.query("UPDATE chatgpt_connections SET revoked_at=now()");
+  if (kind === "blocker")
+    await f.db.exec(
+      "CREATE TABLE unexpected_child(id uuid,profile_id uuid REFERENCES organizations(id) ON DELETE CASCADE)",
+    );
+  if (kind === "blocker")
+    await f.db.query("INSERT INTO unexpected_child VALUES($1,$2)", [
+      randomUUID(),
+      duplicateId,
+    ]);
+  await expect(
+    service.applyChatAuthorized(principal, { requestKey: "chat" }, input),
+  ).rejects.toThrow();
+  expect((await f.db.query("SELECT id FROM organizations")).rows).toHaveLength(
+    2,
+  );
+});
+it("rolls back chat authorization and data on merge failure", async () => {
+  const input = await chatInput();
+  const failing = new ProfileMergeService(f.db, async (tx, primary, ids) => {
+    await coreMerge(tx, primary, ids);
+    throw Error("failure");
+  });
+  await expect(
+    failing.applyChatAuthorized(f.principal, { requestKey: "chat" }, input),
+  ).rejects.toThrow("failure");
+  expect((await f.db.query("SELECT id FROM organizations")).rows).toHaveLength(
+    2,
+  );
+  expect(
+    (await f.db.query<{consumed_at:string|null}>("SELECT consumed_at FROM chatgpt_update_proposals"))
+      .rows[0].consumed_at,
+  ).toBeNull();
+  await service.applyChatAuthorized(f.principal, { requestKey: "chat" }, input);
 });

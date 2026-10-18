@@ -97,6 +97,7 @@ describe("GoogleWorkspaceReadClient thread detail", () => {
         {
           id: "m1",
           internalDateMs: 1000,
+          labelIds: ["INBOX"],
           from: "fair@example.org",
           to: "zone@example.com",
           cc: "",
@@ -109,6 +110,7 @@ describe("GoogleWorkspaceReadClient thread detail", () => {
         {
           id: "m2",
           internalDateMs: 2000,
+          labelIds: ["SENT"],
           from: "zone@example.com",
           to: "fair@example.org",
           cc: "",
