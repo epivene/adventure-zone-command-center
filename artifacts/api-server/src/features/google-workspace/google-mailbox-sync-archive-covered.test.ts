@@ -9,7 +9,8 @@ it("finishes only bounded, fully saved, unambiguous archive work and retains all
   try {
     await db.exec(readFileSync(new URL("../../../../../lib/db/migrations/20261016_google_mailbox_sync.sql", import.meta.url), "utf8"));
     const conn = "da54625d-b6f1-4486-8299-e1d85d78422e", profile = "20943487-43ec-4a11-8c67-36efefbf4efb";
-    await db.exec(`CREATE TABLE google_workspace_validation_mappings(connection_id uuid,thread_id text,organization_id uuid);
+    await db.exec(`CREATE TABLE audit_entries(entity_type text,entity_id uuid,action text,"before" jsonb,"after" jsonb);
+      CREATE TABLE google_workspace_validation_mappings(connection_id uuid,thread_id text,organization_id uuid);
       CREATE TABLE google_workspace_profile_email_threads(id text,connection_id uuid,organization_id uuid,archive_state text);
       CREATE TABLE google_workspace_profile_email_thread_sources(connection_id uuid,gmail_thread_id text,conversation_id text);
       CREATE TABLE google_workspace_profile_email_messages(connection_id uuid,conversation_id text,gmail_message_id text);`);
