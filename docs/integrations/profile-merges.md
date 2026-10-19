@@ -82,6 +82,10 @@ A fresh backup and reviewed recovery method remain prerequisites for the agent.
   removed without overwriting the survivor's backups. These retained rows remain
   part of the merge fingerprint and locks; no remote Drive operation is performed
   by the merge.
+- Deadline attention reviews follow their notification and follow-up associations
+  to the survivor. Review IDs, source snapshots, decisions, dates and batch keys
+  stay unchanged. The merge preservation audit retains the complete original
+  reviews, including their former profile IDs, alongside the resulting rows.
 - Original operation receipts, approvals and immutable audit evidence remain
   historical records. The new receipt identifies removed IDs and the live profile.
 - Different complete cities/regions block connector merges. There is no connector
