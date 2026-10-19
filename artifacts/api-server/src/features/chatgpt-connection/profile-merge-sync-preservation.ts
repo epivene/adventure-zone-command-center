@@ -1,6 +1,9 @@
 import { ConnectionError, type SqlQuery } from "./contracts";
 
 const references: Record<string, string> = {
+  // Reparent only the live association. The before/after audit below retains
+  // the original append-only review snapshot and its source organization ID.
+  deadline_attention_reviews: "organization_id",
   deadline_notifications: "organization_id",
   google_sync_snapshots: "profile_id",
   google_sync_history: "profile_id",
@@ -81,3 +84,4 @@ export async function preserveSyncMergeReferences(
   );
   return new Set(selected);
 }
+
