@@ -169,3 +169,61 @@ it("rejects wrong-year drafts and booking-linked follow-ups on the same profile"
     ).links,
   ).toHaveLength(1);
 });
+
+it("releases an explicitly authorized preview and preserves card contents on retry", async () => {
+  const a = (await s.claim(f.principal, input())).value.activity;
+  const preview = await s.previewBulkRelease(f.principal, {cards: [{id: a.id, revision: a.revision}], requestKey: "preview"});
+  expect((await s.read(f.principal, a.id)).assignedTo).toEqual(a.assignedTo);
+  const apply = {
+    previewId: preview.operationId, expectedContentHash: preview.value.contentHash,
+    authorization: {source: "current_owner_message" as const, instruction: "Release this batch for me", confirmedRelease: true as const},
+    requestKey: "apply",
+  };
+  const result = await s.applyBulkRelease(f.principal, apply);
+  expect(result.value.released).toBe(1);
+  expect(result.value.before[0]).toEqual(a);
+  expect(result.value.after[0]).toMatchObject({
+    assignedTo: null, nextAction: a.nextAction, status: a.status,
+    links: a.links, progress: a.progress, dueAt: a.dueAt,
+  });
+  expect((await s.applyBulkRelease(f.principal, apply)).operationId).toBe(result.operationId);
+  await expect(s.applyBulkRelease(f.principal, {...apply, expectedContentHash: "0".repeat(64)}))
+    .rejects.toMatchObject({code: "CONNECTION_REQUEST_CONFLICT"});
+});
+it("requires explicit authorization and rejects stale or wrong-hash previews", async () => {
+  const a = (await s.claim(f.principal, input())).value.activity;
+  const preview = await s.previewBulkRelease(f.principal, {cards: [{id:a.id,revision:1}], requestKey:"preview"});
+  const apply = {
+    previewId: preview.operationId, expectedContentHash: preview.value.contentHash,
+    authorization: {source: "current_owner_message" as const, instruction: "Release this batch", confirmedRelease: true as const},
+    requestKey:"apply",
+  };
+  await expect(s.applyBulkRelease(f.principal, {...apply, authorization: undefined} as any)).rejects.toThrow();
+  await expect(s.applyBulkRelease(f.principal, {...apply, expectedContentHash:"0".repeat(64)}))
+    .rejects.toMatchObject({code:"WORK_RELEASE_PREVIEW_INVALID"});
+  await s.ownerUpdate(a.id, 1, {nextAction:"Owner correction"});
+  await expect(s.applyBulkRelease(f.principal, apply)).rejects.toMatchObject({code:"WORK_REVISION_CONFLICT"});
+  expect((await s.read(f.principal,a.id)).assignedTo).toEqual(a.assignedTo);
+});
+it("excludes owner assignments and rejects missing scope", async () => {
+  const a = (await s.claim(f.principal,input())).value.activity;
+  await expect(s.previewBulkRelease({...f.principal,scopes:["crm:read"]},
+    {cards:[{id:a.id,revision:1}],requestKey:"no-scope"})).rejects.toMatchObject({status:403});
+  await s.reassign(a.id,1,{kind:"owner",id:"owner"});
+  await expect(s.previewBulkRelease(f.principal,
+    {cards:[{id:a.id,revision:2}],requestKey:"owner"})).rejects.toMatchObject({code:"WORK_NOT_CONNECTION_ASSIGNED"});
+});
+it("rejects expired previews without changing assignments", async () => {
+  const a = (await s.claim(f.principal,input())).value.activity;
+  const preview = await s.previewBulkRelease(f.principal,{cards:[{id:a.id,revision:1}],requestKey:"preview"});
+  await f.db.query(
+    "UPDATE chatgpt_operations SET receipt=jsonb_set(receipt,'{value,expiresAt}',to_jsonb('2000-01-01T00:00:00Z'::text)) WHERE id=$1",
+    [preview.operationId],
+  );
+  await expect(s.applyBulkRelease(f.principal,{
+    previewId:preview.operationId,expectedContentHash:preview.value.contentHash,
+    authorization:{source:"current_owner_message",instruction:"Release this batch",confirmedRelease:true},
+    requestKey:"expired",
+  })).rejects.toMatchObject({code:"WORK_RELEASE_PREVIEW_INVALID"});
+  expect((await s.read(f.principal,a.id)).assignedTo).toEqual(a.assignedTo);
+});
