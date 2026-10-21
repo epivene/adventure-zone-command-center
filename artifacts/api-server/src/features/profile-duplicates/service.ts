@@ -15,6 +15,11 @@ const historical = new Set([
   "chatgpt_update_proposals",
   "profile_merge_journal",
   "profile_duplicate_dismissals",
+  // Backup jobs/files retain their original source identity. Reparenting them
+  // collides with survivor backups and can redirect an active worker lease.
+  // The backup worker already handles archived sources independently.
+  "google_drive_backup_jobs",
+  "google_drive_backup_mappings",
 ]);
 const namedReferences = [
   "organization_id",
