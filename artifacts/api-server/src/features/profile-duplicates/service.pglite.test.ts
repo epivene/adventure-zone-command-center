@@ -210,7 +210,7 @@ describe("reversible profile duplicates", () => {
 });
 it("matches distinctive subtitles and separates generic fairs", () => {
   const match = scorePair(
-    { id: a, name: "Wyoming’s Big Show", region: "WY" },
+    { id: a, name: "Wyoming's Big Show", region: "WY" },
     {
       id: b,
       name: "Sweetwater County Fair - Wyoming's Big Show",
@@ -262,4 +262,98 @@ it("matches distinctive subtitles and separates generic fairs", () => {
       },
     )?.confidence,
   ).toBe("Medium");
+});
+
+async function seedBackupIdentities(includeSurvivor = true) {
+  await db.exec(`
+  CREATE TABLE google_drive_backup_jobs(
+   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),entity_kind text NOT NULL,entity_id uuid NOT NULL,
+   status text NOT NULL DEFAULT 'queued',request_generation bigint NOT NULL DEFAULT 1,
+   claimed_generation bigint,locked_by text,run_id uuid,UNIQUE(entity_kind,entity_id));
+  CREATE TABLE google_drive_backup_mappings(
+   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),entity_kind text NOT NULL,entity_id uuid NOT NULL,
+   drive_file_id text NOT NULL UNIQUE,source_removed_at timestamptz,source_version text,
+   UNIQUE(entity_kind,entity_id));
+ `);
+  for (const id of includeSurvivor ? [a, b] : [b]) {
+    for (const kind of ["profile_summary", "follow_up_summary"]) {
+      await db.query(
+        "INSERT INTO google_drive_backup_jobs(entity_kind,entity_id,status,request_generation,claimed_generation,locked_by) VALUES($1,$2,'processing',7,6,'backup-worker')",
+        [kind, id],
+      );
+      await db.query(
+        "INSERT INTO google_drive_backup_mappings(entity_kind,entity_id,drive_file_id,source_version) VALUES($1,$2,$3,'saved-version')",
+        [kind, id, kind + "-" + id],
+      );
+    }
+  }
+}
+async function backupIdentities() {
+  return {
+    jobs: (
+      await db.query(
+        "SELECT * FROM google_drive_backup_jobs ORDER BY entity_kind,entity_id",
+      )
+    ).rows,
+    mappings: (
+      await db.query(
+        "SELECT * FROM google_drive_backup_mappings ORDER BY entity_kind,entity_id",
+      )
+    ).rows,
+  };
+}
+it("merges profiles with colliding backup identities while preserving all backup files and leases through undo", async () => {
+  await seedBackupIdentities();
+  const backups = await backupIdentities(),
+    before = await service.preview([a, b]);
+  const result = await merge();
+  expect(await backupIdentities()).toEqual(backups);
+  expect(
+    (await db.query("SELECT organization_id FROM bookings")).rows[0]
+      .organization_id,
+  ).toBe(a);
+  await service.undo(result.id);
+  expect(await backupIdentities()).toEqual(backups);
+  expect((await service.preview([a, b])).fingerprint).toBe(before.fingerprint);
+});
+it("retains source-only backup identities instead of renaming them to the survivor", async () => {
+  await seedBackupIdentities(false);
+  const backups = await backupIdentities();
+  await merge();
+  expect(await backupIdentities()).toEqual(backups);
+});
+it("allows independent backup worker progress between preview, merge and undo", async () => {
+  await seedBackupIdentities();
+  const preview = await service.preview([a, b]);
+  await db.query(
+    "UPDATE google_drive_backup_jobs SET request_generation=8,locked_by='new-worker'",
+  );
+  await db.query(
+    "UPDATE google_drive_backup_mappings SET source_version='worker-version'",
+  );
+  const result = await service.merge({
+    survivorId: a,
+    sourceId: b,
+    fingerprint: preview.fingerprint,
+    choices: { name: b, contacts: b },
+    confirmed: true,
+  });
+  await db.query(
+    "UPDATE google_drive_backup_jobs SET status='succeeded',locked_by=null",
+  );
+  await db.query(
+    "UPDATE google_drive_backup_mappings SET source_removed_at=now() WHERE entity_id=$1",
+    [b],
+  );
+  const progressed = await backupIdentities();
+  await service.undo(result.id);
+  expect(await backupIdentities()).toEqual(progressed);
+  expect(
+    (
+      await db.query(
+        "SELECT consolidated_into_id FROM organizations WHERE id=$1",
+        [b],
+      )
+    ).rows[0].consolidated_into_id,
+  ).toBeNull();
 });
