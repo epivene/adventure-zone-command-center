@@ -9,6 +9,7 @@ import {
   type WorkPage,
   type Actor,
 } from "./client";
+import { BulkReleaseWork } from "./BulkReleaseWork";
 import { WorkActivityCard } from "./WorkActivityCard";
 export function WorkQueue({ profileId }: { profileId?: string }) {
   const [items, setItems] = useState<WorkActivity[]>([]),
@@ -22,6 +23,7 @@ export function WorkQueue({ profileId }: { profileId?: string }) {
     [loading, setLoading] = useState(true),
     [tick, setTick] = useState(0),
     [creating, setCreating] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const generation = useRef(0);
   const previousQuery = useRef("");
   const editingIds = useRef(new Set<string>());
@@ -110,6 +112,13 @@ export function WorkQueue({ profileId }: { profileId?: string }) {
   }
   return (
     <section className="grid min-w-0 gap-3" aria-label="Shared booking work">
+      <BulkReleaseWork
+        query={query().toString()}
+        canStart={() => editingIds.current.size === 0 && !creating}
+        onBusy={setBulkBusy}
+        onChanged={() => setTick(t => t + 1)}
+      />
+      <fieldset disabled={bulkBusy} className="grid min-w-0 gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold">Shared booking work</h2>
@@ -235,6 +244,7 @@ export function WorkQueue({ profileId }: { profileId?: string }) {
           Load more work
         </button>
       ) : null}
+      </fieldset>
     </section>
   );
 }

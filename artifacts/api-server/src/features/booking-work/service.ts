@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   activeConnection,
+  inputHash,
   requireConnectionScope,
   ConnectionError,
   transaction,
@@ -34,6 +35,23 @@ type Key = z.infer<typeof workKeySchema>;
 export const recoverWorkSchema = workKeySchema.extend({
   previousConnectionId: z.string().uuid(),
 });
+
+export const previewBulkReleaseSchema = z.object({
+  cards: z.array(z.object({ id: z.string().uuid(), revision: z.number().int().positive() }).strict()).min(1).max(50)
+    .refine(cards => new Set(cards.map(c => c.id)).size === cards.length, "Duplicate cards"),
+  requestKey: z.string().trim().min(1).max(200),
+}).strict();
+export const applyBulkReleaseSchema = z.object({
+  previewId: z.string().uuid(),
+  expectedContentHash: z.string().length(64),
+  authorization: z.object({
+    source: z.literal("current_owner_message"),
+    instruction: z.string().trim().min(1).max(4000),
+    confirmedRelease: z.literal(true),
+  }).strict(),
+  requestKey: z.string().trim().min(1).max(200),
+}).strict();
+
 export class BookingWorkService {
   constructor(private db: ConnectionDatabase) {}
   async list(p: ConnectionPrincipal, f: WorkFilter) {
@@ -247,6 +265,66 @@ export class BookingWorkService {
       });
     });
   }
+
+  async previewBulkRelease(p: ConnectionPrincipal, raw: z.infer<typeof previewBulkReleaseSchema>) {
+    requireConnectionScope(p, "crm:read");
+    requireConnectionScope(p, "crm:update");
+    const { requestKey, ...input } = previewBulkReleaseSchema.parse(raw);
+    return new OperationStore(this.db).perform(p, "preview_booking_work_bulk_release", { requestKey }, input, async tx => {
+      const cards: WorkActivity[] = [];
+      for (const key of [...input.cards].sort((a,b) => a.id.localeCompare(b.id))) {
+        const a = await this.current(tx, key);
+        await this.releaseOwnerCheck(tx, p, a);
+        cards.push(a);
+      }
+      const saved = await receipt(tx, cards[0].id, "/settings/booking-work", "preview", {
+        cards, contentHash: inputHash(cards), expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+      });
+      return saved;
+    });
+  }
+  private async releaseOwnerCheck(tx: SqlQuery, p: ConnectionPrincipal, a: WorkActivity) {
+    if (a.assignedTo?.kind !== "connection")
+      throw new ConnectionError("WORK_NOT_CONNECTION_ASSIGNED", 409);
+    const old = (await tx.query(
+      "SELECT id FROM chatgpt_connections WHERE id=$1 AND owner_id=$2",
+      [a.assignedTo.id, p.ownerId],
+    )).rows[0];
+    if (!old) throw new ConnectionError("WORK_OWNER_HANDOFF_REQUIRED", 409);
+  }
+  async applyBulkRelease(p: ConnectionPrincipal, raw: z.infer<typeof applyBulkReleaseSchema>) {
+    requireConnectionScope(p, "crm:update");
+    const { requestKey, ...input } = applyBulkReleaseSchema.parse(raw);
+    return new OperationStore(this.db).perform(p, "apply_chat_authorized_booking_work_bulk_release", { requestKey }, input, async tx => {
+      // A stored preview is bound to the requesting connection and operation.
+      const row = (await tx.query(
+        "SELECT receipt FROM chatgpt_operations WHERE id=$1 AND connection_id=$2 AND operation='preview_booking_work_bulk_release'",
+        [input.previewId, p.connectionId],
+      )).rows[0];
+      const preview = row?.receipt?.value as {
+        cards: WorkActivity[]; contentHash: string; expiresAt: string;
+      } | undefined;
+      if (!preview || !Number.isFinite(Date.parse(preview.expiresAt)) ||
+          Date.parse(preview.expiresAt) < Date.now() || preview.contentHash !== input.expectedContentHash)
+        throw new ConnectionError("WORK_RELEASE_PREVIEW_INVALID", 409);
+      const before: WorkActivity[] = [];
+      for (const key of preview.cards) {
+        const a = await this.current(tx, key);
+        await this.releaseOwnerCheck(tx, p, a);
+        before.push(a);
+      }
+      if (inputHash(before) !== preview.contentHash)
+        throw new ConnectionError("WORK_RELEASE_PREVIEW_CHANGED", 409);
+      const after: WorkActivity[] = [];
+      for (const a of before)
+        after.push(await new BookingWorkRepository(tx).patch(a.id, a.revision, {}, null));
+      return receipt(tx, input.previewId, "/settings/booking-work", "released", {
+        previewId: input.previewId, authorization: input.authorization,
+        released: after.length, before, after,
+      });
+    });
+  }
+
   async ownerCreate(raw: CreateWork) {
     const i = createWorkSchema.parse(raw);
     return transaction(this.db, async (tx) => {
