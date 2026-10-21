@@ -10,7 +10,7 @@ export const normalize = (s?: string | null) =>
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .replace(/[’']/g, "")
+    .replace(/['']/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 export function nameTokens(p: MatchProfile) {
@@ -43,36 +43,59 @@ export function nameTokens(p: MatchProfile) {
     ),
   ];
 }
-function dice(a: string, b: string) {
-  if (a === b) return 1;
-  if (a.length < 3 || b.length < 3) return 0;
-  const parts = (s: string) =>
-    Array.from({ length: s.length - 1 }, (_, i) => s.slice(i, i + 2));
-  const remaining = parts(b);
-  let common = 0;
-  for (const p of parts(a)) {
-    const i = remaining.indexOf(p);
-    if (i >= 0) {
-      common++;
-      remaining.splice(i, 1);
-    }
+const eventKind = (name: string) =>
+  /\b(car show|craft|harvest|spring|summer|fall|winter|winterfest|swim|open|youth|january|february|march|april|may|june|july|august|september|october|november|december)\b/i
+    .exec(name)?.[1]
+    ?.toLowerCase();
+function prepare(profile: MatchProfile) {
+  const tokens = nameTokens(profile),
+    name = tokens.join(" ");
+  const bigrams = new Map<string, number>();
+  for (let i = 0; i < name.length - 1; i++) {
+    const part = name.slice(i, i + 2);
+    bigrams.set(part, (bigrams.get(part) ?? 0) + 1);
   }
-  return (2 * common) / (a.length + b.length - 2);
+  return {
+    profile,
+    tokens,
+    name,
+    bigrams,
+    aliases: profile.name
+      .split(/\s[---]\s/)
+      .map((name) => nameTokens({ ...profile, name }).join(" "))
+      .filter(Boolean),
+    city: normalize(profile.city),
+    region: normalize(profile.region),
+    year: profile.name.match(/\b(?:19|20)\d{2}\b/)?.[0],
+    kind: eventKind(profile.name),
+  };
+}
+type PreparedProfile = ReturnType<typeof prepare>;
+function dice(a: PreparedProfile, b: PreparedProfile) {
+  if (a.name === b.name) return 1;
+  if (a.name.length < 3 || b.name.length < 3) return 0;
+  let common = 0;
+  for (const [part, count] of a.bigrams)
+    common += Math.min(count, b.bigrams.get(part) ?? 0);
+  return (2 * common) / (a.name.length + b.name.length - 2);
 }
 export function scorePair(left: MatchProfile, right: MatchProfile) {
-  const a = nameTokens(left),
-    b = nameTokens(right);
+  return scorePrepared(prepare(left), prepare(right));
+}
+function scorePrepared(
+  preparedLeft: PreparedProfile,
+  preparedRight: PreparedProfile,
+) {
+  const left = preparedLeft.profile,
+    right = preparedRight.profile;
+  const a = preparedLeft.tokens,
+    b = preparedRight.tokens;
   if (!a.length || !b.length) return null;
   const common = a.filter((w) => b.includes(w)).length;
   const overlap = common / Math.min(a.length, b.length);
   const exact = a.join(" ") === b.join(" ");
-  const aliases = (p: MatchProfile) =>
-    p.name
-      .split(/\s[-–—]\s/)
-      .map((name) => nameTokens({ ...p, name }).join(" "))
-      .filter(Boolean);
-  const aliasMatch = aliases(left).some((alias) =>
-    aliases(right).includes(alias),
+  const aliasMatch = preparedLeft.aliases.some((alias) =>
+    preparedRight.aliases.includes(alias),
   );
   // Containment catches a distinctive subtitle, e.g. Wyoming's Big Show.
   const similarity = Math.max(
@@ -86,27 +109,22 @@ export function scorePair(left: MatchProfile, right: MatchProfile) {
             .every((w) => w === "rodeo")))
       ? 0.94
       : 0,
-    dice(a.join(" "), b.join(" ")) * 0.92,
+    dice(preparedLeft, preparedRight) * 0.92,
   );
   if (!exact && similarity < 0.64) return null;
-  const city = normalize(left.city),
-    otherCity = normalize(right.city);
-  const region = normalize(left.region),
-    otherRegion = normalize(right.region);
+  const city = preparedLeft.city,
+    otherCity = preparedRight.city;
+  const region = preparedLeft.region,
+    otherRegion = preparedRight.region;
   const cityMatch = !!city && city === otherCity,
     regionMatch = !!region && region === otherRegion;
-  const year = (name: string) => name.match(/\b(?:19|20)\d{2}\b/)?.[0];
   const yearConflict =
-    !!year(left.name) &&
-    !!year(right.name) &&
-    year(left.name) !== year(right.name);
-  const eventKind = (name: string) =>
-    /\b(car show|craft|harvest|spring|summer|fall|winter|winterfest|swim|open|youth|january|february|march|april|may|june|july|august|september|october|november|december)\b/i
-      .exec(name)?.[1]
-      ?.toLowerCase();
+    !!preparedLeft.year &&
+    !!preparedRight.year &&
+    preparedLeft.year !== preparedRight.year;
   const kindConflict =
-    eventKind(left.name) !== eventKind(right.name) &&
-    !!(eventKind(left.name) || eventKind(right.name));
+    preparedLeft.kind !== preparedRight.kind &&
+    !!(preparedLeft.kind || preparedRight.kind);
   const conflict =
     (!!city && !!otherCity && !cityMatch) ||
     (!!region && !!otherRegion && !regionMatch);
@@ -136,22 +154,53 @@ export function scorePair(left: MatchProfile, right: MatchProfile) {
     ],
   };
 }
-export function findPairs(
-  profiles: MatchProfile[],
-  dismissed = new Set<string>(),
-) {
-  const pairs: NonNullable<ReturnType<typeof scorePair>>[] = [];
-  const sorted = [...profiles].sort((a, b) => a.id.localeCompare(b.id));
-  for (let i = 0; i < sorted.length; i++)
-    for (let j = i + 1; j < sorted.length; j++) {
-      if (dismissed.has(`${sorted[i].id}:${sorted[j].id}`)) continue;
-      const pair = scorePair(sorted[i], sorted[j]);
-      if (pair) pairs.push(pair);
-    }
-  return pairs.sort(
+type Pair = NonNullable<ReturnType<typeof scorePair>>;
+const sortPairs = (pairs: Pair[]) =>
+  pairs.sort(
     (a, b) =>
       b.score - a.score ||
       a.left.id.localeCompare(b.left.id) ||
       a.right.id.localeCompare(b.right.id),
   );
+const prepareAll = (profiles: MatchProfile[]) =>
+  [...profiles].sort((a, b) => a.id.localeCompare(b.id)).map(prepare);
+
+export function findPairs(
+  profiles: MatchProfile[],
+  dismissed = new Set<string>(),
+) {
+  const sorted = prepareAll(profiles),
+    pairs: Pair[] = [];
+  for (let i = 0; i < sorted.length; i++)
+    for (let j = i + 1; j < sorted.length; j++) {
+      if (dismissed.has(sorted[i].profile.id + ":" + sorted[j].profile.id))
+        continue;
+      const pair = scorePrepared(sorted[i], sorted[j]);
+      if (pair) pairs.push(pair);
+    }
+  return sortPairs(pairs);
+}
+
+// The API must keep serving health checks and other requests during a full scan.
+// Prepare each name once, preserve exhaustive comparisons, and yield in time slices.
+export async function findPairsAsync(
+  profiles: MatchProfile[],
+  dismissed = new Set<string>(),
+) {
+  const sorted = prepareAll(profiles),
+    pairs: Pair[] = [];
+  let comparisons = 0,
+    lastYield = Date.now();
+  for (let i = 0; i < sorted.length; i++)
+    for (let j = i + 1; j < sorted.length; j++) {
+      if ((++comparisons & 127) === 0 && Date.now() - lastYield >= 8) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        lastYield = Date.now();
+      }
+      if (dismissed.has(sorted[i].profile.id + ":" + sorted[j].profile.id))
+        continue;
+      const pair = scorePrepared(sorted[i], sorted[j]);
+      if (pair) pairs.push(pair);
+    }
+  return sortPairs(pairs);
 }

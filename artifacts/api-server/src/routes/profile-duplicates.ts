@@ -32,16 +32,27 @@ export function createProfileDuplicatesRouter(
           return;
         }
         req.log?.error({ err: e }, "Profile duplicate review failed");
-        res
-          .status(500)
-          .json({
-            error: "Duplicate review failed. No partial merge was saved.",
-          });
+        res.status(500).json({
+          error: "Duplicate review failed. No partial merge was saved.",
+        });
       }
     };
   router.get(
     "/profile-duplicates",
-    run(() => service.scan()),
+    run(async (req) => {
+      const started = Date.now();
+      req.log?.info("Profile duplicate scan started");
+      const result = await service.scan();
+      req.log?.info(
+        {
+          scanned: result.scanned,
+          suggestions: result.pairs.length,
+          durationMs: Date.now() - started,
+        },
+        "Profile duplicate scan completed",
+      );
+      return result;
+    }),
   );
   router.get(
     "/profile-duplicates/history",
