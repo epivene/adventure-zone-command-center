@@ -6,7 +6,7 @@ import {
   type ConnectionDatabase,
   type SqlQuery,
 } from "../chatgpt-connection/contracts";
-import { findPairs, scorePair, type MatchProfile } from "./matching";
+import { findPairsAsync, scorePair, type MatchProfile } from "./matching";
 
 const q = (s: string) => '"' + s.replaceAll('"', '""') + '"';
 const historical = new Set([
@@ -216,7 +216,10 @@ export class ProfileDuplicatesService {
         )
       ).rows.map((r) => `${r.left_id}:${r.right_id}`),
     );
-    return { scanned: profiles.length, pairs: findPairs(profiles, dismissed) };
+    return {
+      scanned: profiles.length,
+      pairs: await findPairsAsync(profiles, dismissed),
+    };
   }
   async check(input: MatchProfile) {
     const profiles = (

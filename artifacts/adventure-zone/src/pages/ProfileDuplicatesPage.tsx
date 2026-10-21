@@ -59,14 +59,33 @@ export default function ProfileDuplicatesPage() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [historyError, setHistoryError] = useState("");
   async function refresh() {
-    const [data, merges] = await Promise.all([
-      apiGet<{ pairs: Pair[]; scanned: number }>("/profile-duplicates"),
-      apiGet<any[]>("/profile-duplicates/history"),
+    setHistoryError("");
+    // History availability must not discard a successful read-only scan.
+    await Promise.all([
+      apiGet<{ pairs: Pair[]; scanned: number }>("/profile-duplicates")
+        .then((data) => {
+          setPairs(data.pairs);
+          setScanned(data.scanned);
+        })
+        .catch((e: unknown) => {
+          throw new Error(
+            "Duplicate scan could not be loaded: " +
+              (e instanceof Error ? e.message : "Connection failed") +
+              ". Use Scan again to retry.",
+          );
+        }),
+      apiGet<any[]>("/profile-duplicates/history")
+        .then(setHistory)
+        .catch((e: unknown) => {
+          setHistoryError(
+            "Merge history could not be loaded: " +
+              (e instanceof Error ? e.message : "Connection failed") +
+              ". Use Scan again to retry.",
+          );
+        }),
     ]);
-    setPairs(data.pairs);
-    setScanned(data.scanned);
-    setHistory(merges);
   }
   async function perform(work: () => Promise<void>) {
     setBusy(true);
@@ -156,7 +175,7 @@ export default function ProfileDuplicatesPage() {
           </select>
         </label>
         <span>
-          {scanned} profiles scanned · {visible.length} suggestions
+          {scanned} profiles scanned � {visible.length} suggestions
         </span>
         <button
           className="button-secondary"
@@ -171,8 +190,8 @@ export default function ProfileDuplicatesPage() {
           Scan again
         </button>
       </div>
-      {busy && <p role="status">Working…</p>}
-      {!busy && !visible.length && (
+      {busy && <p role="status">Working.</p>}
+      {!busy && !error && !visible.length && (
         <p>
           No suggestions in this filter. Skipped pairs return on the next scan.
         </p>
@@ -188,10 +207,10 @@ export default function ProfileDuplicatesPage() {
                 {p.left.name} / {p.right.name}
               </h2>
               <p>
-                {p.confidence} · {p.score}/100
+                {p.confidence} � {p.score}/100
               </p>
               <p className="text-sm text-muted-foreground">
-                {p.reasons.join(" · ")}
+                {p.reasons.join(" � ")}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -418,6 +437,11 @@ export default function ProfileDuplicatesPage() {
       )}
       <section className="rounded-xl border border-border bg-card p-4">
         <h2 className="text-xl font-bold">Merge history and undo</h2>
+        {historyError ? (
+          <p role="alert" className="mt-2 text-destructive">
+            {historyError}
+          </p>
+        ) : null}
         <p className="mt-2 text-sm">
           Original snapshots are kept without a time limit. Undo never
           overwrites newer work silently.
@@ -425,7 +449,7 @@ export default function ProfileDuplicatesPage() {
         {history.map((h) => (
           <details className="mt-3 rounded border border-border p-3" key={h.id}>
             <summary className="cursor-pointer">
-              {new Date(h.created_at).toLocaleString()} ·{" "}
+              {new Date(h.created_at).toLocaleString()} �{" "}
               {h.undone_at ? "Undone" : "Merged"}
             </summary>
             <p className="my-2">
