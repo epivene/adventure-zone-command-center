@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 
 import { apiGet } from "@/lib/auth-token";
@@ -72,37 +72,73 @@ export function CallerFinder({
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const selectedExactId = useRef<string | null>(null);
+  const mounted = useRef(true);
+  const queryRef = useRef(query);
+  const onSelectRef = useRef(onSelect);
+  const searchState = useRef({
+    inFlight: false,
+    queuedQuery: null as string | null,
+  });
+
+  queryRef.current = query;
+  onSelectRef.current = onSelect;
 
   useEffect(() => {
-    let current = true;
-    const timer = window.setTimeout(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      searchState.current.queuedQuery = null;
+    };
+  }, []);
+
+  const runLatestSearch = useCallback(async (nextQuery: string) => {
+    const state = searchState.current;
+    state.queuedQuery = nextQuery;
+    if (state.inFlight) return;
+
+    state.inFlight = true;
+    while (state.queuedQuery !== null && mounted.current) {
+      const requestedQuery = state.queuedQuery;
+      state.queuedQuery = null;
       setIsLoading(true);
       setError("");
-      void apiGet<CallerFinderResult>(finderPath(query.trim()))
-        .then((nextResult) => {
-          if (!current) return;
-          setResult(nextResult);
-          if (
-            nextResult.exact.kind === "one" &&
-            selectedExactId.current !== nextResult.exact.contactId
-          ) {
-            selectedExactId.current = nextResult.exact.contactId;
-            onSelect(nextResult.exact.contactId);
-          }
-        })
-        .catch(() => {
-          if (current) setError("Caller search is unavailable. Try again.");
-        })
-        .finally(() => {
-          if (current) setIsLoading(false);
-        });
+
+      try {
+        const nextResult = await apiGet<CallerFinderResult>(
+          finderPath(requestedQuery),
+        );
+        if (!mounted.current || queryRef.current.trim() !== requestedQuery) {
+          continue;
+        }
+        setResult(nextResult);
+        if (
+          nextResult.exact.kind === "one" &&
+          selectedExactId.current !== nextResult.exact.contactId
+        ) {
+          selectedExactId.current = nextResult.exact.contactId;
+          onSelectRef.current(nextResult.exact.contactId);
+        }
+      } catch {
+        if (mounted.current && queryRef.current.trim() === requestedQuery) {
+          setError("Caller search is unavailable. Try again.");
+        }
+      }
+    }
+
+    state.inFlight = false;
+    if (mounted.current) setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    searchState.current.queuedQuery = null;
+    const timer = window.setTimeout(() => {
+      void runLatestSearch(query.trim());
     }, 250);
 
     return () => {
-      current = false;
       window.clearTimeout(timer);
     };
-  }, [query, onSelect]);
+  }, [query, runLatestSearch]);
 
   const createQuery = new URLSearchParams({ mode: "add" });
   if (query.trim()) {

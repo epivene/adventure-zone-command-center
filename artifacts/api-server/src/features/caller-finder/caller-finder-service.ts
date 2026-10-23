@@ -53,6 +53,16 @@ function folded(value: string | null | undefined) {
   return value?.trim().toLocaleLowerCase("en-US") ?? "";
 }
 
+function looksLikeEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function timestampMillis(value: Date | string | null | undefined) {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+}
+
 function areaCode(normalizedPhone: string | null) {
   return normalizedPhone?.startsWith("+1") && normalizedPhone.length === 12
     ? normalizedPhone.slice(2, 5)
@@ -189,7 +199,7 @@ export class CallerFinderService {
       }),
       this.repository.findCallerExactMetadata({
         normalizedPhone,
-        normalizedEmail: query ? folded(query) : null,
+        normalizedEmail: looksLikeEmail(query) ? folded(query) : null,
       }),
     ]);
 
@@ -206,8 +216,8 @@ export class CallerFinderService {
       .filter((suggestion): suggestion is CallerSuggestion => suggestion !== null)
       .toSorted((left, right) =>
         right.score - left.score ||
-        (right.lastContactedAt?.getTime() ?? Number.NEGATIVE_INFINITY) -
-          (left.lastContactedAt?.getTime() ?? Number.NEGATIVE_INFINITY) ||
+        timestampMillis(right.lastContactedAt as Date | string | null) -
+          timestampMillis(left.lastContactedAt as Date | string | null) ||
         left.contactId.localeCompare(right.contactId),
       )
       .slice(0, 8);

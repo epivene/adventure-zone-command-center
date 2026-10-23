@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ContactList } from "@/components/contacts/contact-list";
 import { apiGet } from "@/lib/auth-token";
@@ -22,21 +22,72 @@ export function ContactDirectoryView({
   const [contacts, setContacts] = useState<ContactListPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mounted = useRef(true);
+  const desiredPath = useRef("");
+  const requestState = useRef({
+    inFlight: false,
+    activePath: null as string | null,
+    queuedPath: null as string | null,
+  });
 
   useEffect(() => {
-    let active = true;
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      requestState.current.queuedPath = null;
+    };
+  }, []);
+
+  const loadLatest = useCallback(async (nextPath: string) => {
+    const state = requestState.current;
+    if (state.inFlight && state.activePath === nextPath) {
+      state.queuedPath = null;
+      return;
+    }
+    state.queuedPath = nextPath;
+    if (state.inFlight) return;
+
+    state.inFlight = true;
+    while (state.queuedPath !== null && mounted.current) {
+      const requestedPath = state.queuedPath;
+      state.queuedPath = null;
+      state.activePath = requestedPath;
+      try {
+        const data = await apiGet<ContactListPage>(requestedPath);
+        if (mounted.current && desiredPath.current === requestedPath) {
+          setContacts(data);
+        }
+      } catch (cause) {
+        if (mounted.current && desiredPath.current === requestedPath) {
+          setError(
+            cause instanceof Error ? cause.message : "Failed to load contacts",
+          );
+        }
+      }
+    }
+
+    state.activePath = null;
+    state.inFlight = false;
+    if (mounted.current) setLoading(false);
+  }, []);
+
+  useEffect(() => {
     const qs = new URLSearchParams();
     if (query.search) qs.set("q", query.search);
     if (query.page > 1) qs.set("page", String(query.page));
+    const path = `/contacts?${qs.toString()}`;
+    desiredPath.current = path;
     setLoading(true);
     setError(null);
-    apiGet<ContactListPage>(`/contacts?${qs.toString()}`)
-      .then((data) => { if (active) setContacts(data); })
-      .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Failed to load contacts"); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [query.search, query.page]);
+    void loadLatest(path);
+  }, [loadLatest, query.search, query.page]);
 
-  if (!contacts) return loading ? <p className="text-slate-500">Loading contacts…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : null;
+  if (!contacts) {
+    return loading
+      ? <p className="text-slate-500">Loading contacts…</p>
+      : error
+        ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div>
+        : null;
+  }
   return <>{error ? <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : null}<ContactList contacts={contacts} loading={loading} query={query} basePath={basePath} fixedParams={fixedParams} /></>;
 }
