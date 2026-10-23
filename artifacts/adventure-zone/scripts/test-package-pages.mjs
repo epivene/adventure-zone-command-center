@@ -17,6 +17,31 @@ function mount(path = '/', tag = 'adventure-zone-site') {
   return { dom, w, element, root: element.shadowRoot };
 }
 
+test('foam party promo is featured inside Epic Packages before the package cards', () => {
+  const { dom, root } = mount();
+  try {
+    const packages = root.querySelector('#packages');
+    const foamParty = packages.querySelector('#foam-party');
+    const packageGrid = packages.querySelector('.package-grid');
+    assert.ok(foamParty, 'foam party promo is rendered inside Epic Packages');
+    assert.ok(foamParty.compareDocumentPosition(packageGrid) & 4, 'foam party promo precedes the package cards');
+    assert.equal(root.querySelector('.how #foam-party'), null);
+  } finally { dom.window.close(); }
+});
+
+test('foam party promo uses the approved artwork and links to contact', () => {
+  const { dom, root } = mount();
+  try {
+    const foamParty = root.querySelector('#foam-party');
+    const link = foamParty.querySelector('a');
+    const image = foamParty.querySelector('img');
+    assert.equal(link.getAttribute('href'), '#contact');
+    assert.equal(image.src, 'https://static.wixstatic.com/media/0e6e2c_edfe6538ed2442a3809e6ee2f100ef55~mv2.png');
+    assert.match(image.alt, /Foam Party add-on.*Only \$3,500/i);
+    assert.doesNotMatch(foamParty.textContent, /Pricing increases|Only one Foam Party booking/i);
+  } finally { dom.window.close(); }
+});
+
 test('package link opens matching details and booking selects that package', () => {
   const { dom, w, root } = mount();
   try {
