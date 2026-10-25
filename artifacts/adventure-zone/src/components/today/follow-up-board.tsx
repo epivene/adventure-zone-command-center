@@ -37,12 +37,14 @@ type Page = {
 };
 const buckets: { id: Bucket; label: string }[] = [
   { id: "needsNextStep", label: "Needs a next step" },
-  { id: "overdue", label: "Overdue" },
   { id: "today", label: "Due today" },
+  { id: "overdue", label: "Overdue" },
   { id: "upcoming", label: "Coming up" },
 ];
 const button =
   "min-h-11 rounded-md border border-border px-3 py-2 text-sm font-semibold disabled:opacity-50 hover:bg-muted";
+const cardButton =
+  "min-h-9 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 hover:bg-muted";
 const field =
   "w-full rounded-md border border-border bg-background p-2 text-foreground";
 const afterDays = (days: number) =>
@@ -197,7 +199,12 @@ export function FollowUpBoard({
   return (
     <section className="grid gap-4" aria-label="Follow-up work queue">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-bold">Work queue</h2>
+        <div>
+          <h2 className="text-2xl font-bold">Work queue</h2>
+          <p className="text-xs text-muted-foreground">
+            All times Mountain Time
+          </p>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <label htmlFor="work-horizon">Coming up</label>
           <select
@@ -230,21 +237,6 @@ export function FollowUpBoard({
           </button>
         </div>
       </div>
-      {counts && counts.needsNextStep > 0 ? (
-        <div
-          role="alert"
-          aria-label="Missing next steps"
-          className="rounded-xl border-2 border-destructive bg-card p-4 text-lg font-bold"
-        >
-          <a href="#work-needsNextStep">
-            {counts.needsNextStep} records need a next step
-          </a>
-          <p className="mt-1 text-sm font-normal">
-            These active records have no scheduled action. Choose a next step
-            below.
-          </p>
-        </div>
-      ) : null}
       {error ? (
         <p
           role="alert"
@@ -255,24 +247,58 @@ export function FollowUpBoard({
       ) : null}
       {notice ? <p role="status">{notice}</p> : null}
       {loading ? <p role="status">Loading follow-ups…</p> : null}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         {buckets.map((bucket) => {
           const page = pages[bucket.id];
+          const emptyToday = bucket.id === "today" && page?.total === 0;
           return (
             <section
               key={bucket.id}
               id={`work-${bucket.id}`}
               aria-label={bucket.label}
-              className={`min-w-0 rounded-xl border bg-card p-3 ${bucket.id === "needsNextStep" ? "border-2 border-destructive" : "border-border"}`}
+              className={`min-w-0 rounded-xl border bg-card ${bucket.id === "needsNextStep" ? "lg:col-span-2 border-2 border-destructive p-4" : bucket.id === "today" ? "lg:col-span-2 border-border p-3" : "border-border p-3"}`}
             >
-              <h3 className="mb-3 text-lg font-bold">
-                {bucket.label}{" "}
-                <span className="text-sm">({page?.total ?? "…"})</span>
-              </h3>
-              <ul className="grid gap-3">
+              <div
+                className={`flex flex-wrap items-center justify-between gap-2 ${emptyToday ? "" : "mb-3"}`}
+              >
+                <h3 className="text-lg font-bold">
+                  {bucket.label}{" "}
+                  <span className="text-sm">({page?.total ?? "…"})</span>
+                </h3>
+                {emptyToday ? (
+                  <p className="text-xs text-muted-foreground">
+                    All clear for today
+                  </p>
+                ) : null}
+              </div>
+              {bucket.id === "needsNextStep" ? (
+                <div
+                  role={
+                    counts && counts.needsNextStep > 0 ? "alert" : undefined
+                  }
+                  aria-label="Missing next steps"
+                  className="mb-3 text-sm"
+                >
+                  {counts && counts.needsNextStep > 0 ? (
+                    <>
+                      <strong>
+                        {counts.needsNextStep} records need a next step.
+                      </strong>{" "}
+                      Choose an action so nothing gets missed.
+                    </>
+                  ) : counts ? (
+                    "Every active record has a next step."
+                  ) : (
+                    "Checking for missing next steps…"
+                  )}
+                </div>
+              ) : null}
+              <ul
+                className={`grid gap-2 ${bucket.id === "needsNextStep" || bucket.id === "today" ? "md:grid-cols-2" : ""}`}
+              >
                 {page?.items.map((item) => (
                   <li
-                    className="grid gap-2 rounded-lg border border-border p-3"
+                    className="min-w-0 grid content-start gap-1.5 rounded-lg border border-border bg-background p-3"
                     key={`${item.source}:${item.id}`}
                   >
                     {item.organizationId ? (
@@ -300,10 +326,10 @@ export function FollowUpBoard({
                         No next action scheduled
                       </strong>
                     )}
-                    <div className="grid gap-2">
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       {item.source === "followup" ? (
                         <button
-                          className={button}
+                          className={cardButton}
                           disabled={busy}
                           aria-label={`Snooze ${item.name} 7 days`}
                           onClick={() =>
@@ -313,48 +339,40 @@ export function FollowUpBoard({
                             })
                           }
                         >
-                          Snooze 7 days
+                          Snooze 7d
                         </button>
                       ) : null}
                       <button
-                        className={button}
+                        className={cardButton}
                         disabled={busy}
                         aria-label={`Complete ${item.name}`}
                         onClick={() => choose(item)}
                       >
                         {item.source === "followup"
-                          ? "Done + next step"
-                          : "Set next step / close"}
+                          ? "Done + next"
+                          : "Set next step"}
                       </button>
                       {item.organizationId ? (
-                        <>
-                          <button
-                            className={button}
-                            disabled={busy}
-                            aria-label={`Draft with COM for ${item.name}`}
-                            onClick={() =>
-                              setDraftProfile({
-                                id: item.organizationId!,
-                                name: item.name,
-                                eventYear: item.eventYear,
-                              })
-                            }
-                          >
-                            Draft with COM
-                          </button>
-                          <Link
-                            className={button}
-                            href={`/profiles/${item.organizationId}`}
-                          >
-                            Open notes &amp; email
-                          </Link>
-                        </>
+                        <button
+                          className={cardButton}
+                          disabled={busy}
+                          aria-label={`Draft with COM for ${item.name}`}
+                          onClick={() =>
+                            setDraftProfile({
+                              id: item.organizationId!,
+                              name: item.name,
+                              eventYear: item.eventYear,
+                            })
+                          }
+                        >
+                          Draft with COM
+                        </button>
                       ) : null}
                     </div>
                   </li>
                 ))}
               </ul>
-              {page && !page.items.length ? (
+              {page && !page.items.length && !emptyToday ? (
                 <p className="text-sm text-muted-foreground">
                   {page.total
                     ? "No items on this page. Use Previous to return."

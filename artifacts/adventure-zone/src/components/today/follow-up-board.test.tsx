@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -86,6 +87,54 @@ describe("FollowUpBoard", () => {
     expect(screen.getByRole("heading", { name: /Overdue/ })).toBeVisible();
     expect(screen.getByRole("heading", { name: /Due today/ })).toBeVisible();
     expect(screen.getByRole("heading", { name: /Coming up/ })).toBeVisible();
+  });
+  it("minimizes an empty Due today section and keeps priority sections first", async () => {
+    pages();
+    const original = vi.mocked(apiGet).getMockImplementation()!;
+    vi.mocked(apiGet).mockImplementation(
+      async (path) =>
+        ({
+          ...((await original(path)) as object),
+          items: [],
+          total: 0,
+          counts: { needsNextStep: 0, overdue: 0, today: 0, upcoming: 0 },
+        }) as never,
+    );
+    render(<FollowUpBoard />);
+    expect(await screen.findByText("All clear for today")).toBeVisible();
+    const today = screen.getByRole("region", { name: "Due today" });
+    expect(
+      within(today).queryByText("Nothing in this bucket."),
+    ).not.toBeInTheDocument();
+    const headings = screen.getAllByRole("heading", { level: 3 });
+    expect(headings.map((heading) => heading.textContent)).toEqual([
+      "Needs a next step (0)",
+      "Due today (0)",
+      "Overdue (0)",
+      "Coming up (0)",
+    ]);
+  });
+  it("keeps Mountain Time and switches the Coming up horizon", async () => {
+    pages();
+    render(<FollowUpBoard />);
+    expect(await screen.findByText(/Oct 24, 2026, 10:00 AM MT/)).toBeVisible();
+    expect(screen.getByText("All times Mountain Time")).toBeVisible();
+    fireEvent.change(screen.getByRole("combobox", { name: "Coming up" }), {
+      target: { value: "3" },
+    });
+    await waitFor(() =>
+      expect(apiGet).toHaveBeenCalledWith(
+        "/work-queue?bucket=upcoming&days=3&offset=0&limit=25",
+      ),
+    );
+    fireEvent.change(screen.getByRole("combobox", { name: "Coming up" }), {
+      target: { value: "7" },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Coming up" })).toHaveValue(
+        "7",
+      ),
+    );
   });
   it("snoozes using the displayed revision", async () => {
     pages();
