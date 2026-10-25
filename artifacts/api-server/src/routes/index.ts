@@ -78,6 +78,11 @@ import contractsRouter from "./contracts-runtime";
 import invoicesRouter from "./invoices-runtime";
 import leadIntakeRouter from "./lead-intake";
 import followUpsRouter from "./follow-ups";
+import { createFollowUpWorkflowRouter } from "./follow-up-workflow";
+import { FollowUpWorkflow } from "../features/follow-ups/workflow-service";
+import { workflowDatabase } from "../features/follow-ups/workflow-database";
+import { readComDraftContext,previewComDraft } from "../features/follow-ups/com-draft-context";
+import { executionPolicy } from "../lib/execution-policy";
 import opportunityEmailLiveRuntimeRouter from "./opportunity-email-live-runtime";
 import authRouter from "./auth";
 import developmentSampleLoginsRouter from "./development-sample-logins";
@@ -170,6 +175,7 @@ import businessDocumentsRouter from "./business-documents";
 import businessDocumentImportsRouter from "./business-document-imports";
 
 const router: IRouter = Router();
+router.use(executionPolicy());
 let leakedFixtureCleanup: Promise<void> | null = null;
 
 const computerCallingConfig = () => readComputerCallingConfig(process.env);
@@ -393,8 +399,10 @@ router.use(aiSuggestionsRouter);
 router.use(paperNotesRouter);
 router.use(contractsRouter);
 router.use(invoicesRouter);
+router.use(createFollowUpWorkflowRouter(new FollowUpWorkflow(workflowDatabase(pool)), requireOwnerMiddleware, input=>readComDraftContext(pool,input),input=>previewComDraft(pool,input)));
 router.use("/follow-ups", followUpsRouter);
 
 export default router;
+
 
 

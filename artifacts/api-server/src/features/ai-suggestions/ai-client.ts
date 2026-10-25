@@ -7,6 +7,7 @@
  *   3. OpenAI key               (OPENAI_API_KEY)
  */
 
+import { internalAiEnabled } from "../../lib/execution-policy";
 export const NOT_CONFIGURED_ERROR = "NO_AI_PROVIDER_CONFIGURED";
 
 export function imageTokenBudget(value?: number) {
@@ -61,6 +62,11 @@ function anthropicClient(providerName: string, anthropic: AnthropicClient, model
 }
 
 export async function createAiClient(): Promise<AiCompletionClient> {
+  if(!internalAiEnabled()) {
+    const disabled=async():Promise<string>=>{throw Object.assign(new Error("Internal AI is disabled. Use Draft with COM."),{code:"INTERNAL_AI_DISABLED"});};
+    // Constructing the send/schedule runtime must remain possible without AI.
+    return {providerName:"Disabled",complete:disabled,completeImage:disabled};
+  }
   if (
     process.env.REPL_ID &&
     process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL &&
@@ -121,3 +127,4 @@ async function createAnthropicSdkClient(input: { apiKey: string; baseURL?: strin
   const { default: Anthropic } = await import(moduleName) as { default: AnthropicConstructor };
   return new Anthropic(input);
 }
+

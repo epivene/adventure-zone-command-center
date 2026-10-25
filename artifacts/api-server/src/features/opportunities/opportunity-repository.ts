@@ -4,6 +4,7 @@ import type { db as database } from "@/db/client";
 import {
   bookingOpportunities,
   bookingOpportunityQueueOverrides,
+  activities,
 } from "@/db/schema";
 import type {
   CreateOpportunityInput,
@@ -125,14 +126,14 @@ export class OpportunityRepository {
       values.territoryExceptionApproved = patch.territoryExceptionApproved;
     }
 
-    const [row] = await this.database
-      .update(bookingOpportunities)
-      .set(values)
-      .where(eq(bookingOpportunities.id, id))
-      .returning();
-
-    if (!row) throw new Error(`Booking opportunity not found: ${id}`);
-    return toOpportunityRecord(row);
+    return this.database.transaction(async transaction=>{
+      const [before]=await transaction.select().from(bookingOpportunities).where(eq(bookingOpportunities.id,id)).limit(1).for("update");
+      if(!before)throw new Error(`Booking opportunity not found: ${id}`);
+      const [row]=await transaction.update(bookingOpportunities).set(values).where(eq(bookingOpportunities.id,id)).returning();
+      if(!row)throw new Error(`Booking opportunity not found: ${id}`);
+      if(before.status!==row.status)await transaction.insert(activities).values({organizationId:row.organizationId,contactId:row.contactId,bookingId:row.bookingId,kind:"note",body:`${row.eventYear} opportunity status changed from ${before.status} to ${row.status}.`,occurredAt:now,timelineSortAt:now});
+      return toOpportunityRecord(row);
+    });
   }
 
   async getQueueOverride(
@@ -189,3 +190,4 @@ export class OpportunityRepository {
     return toQueueOverride(row);
   }
 }
+

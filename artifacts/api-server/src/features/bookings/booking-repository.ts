@@ -6,6 +6,8 @@ import { err, ok, type Result } from "@/lib/result";
 import type { db as database } from "@/db/client";
 import {
   auditEntries,
+  activities,
+  bookingOpportunities,
   bookingContacts,
   bookingPackageSelections,
   bookingResourceAssignments,
@@ -28,6 +30,7 @@ import type {
 } from "@/features/bookings/booking-types";
 import type { BookingEditInput } from "@/features/bookings/booking-input";
 import { bookingEditPreservesFollowUpPlan } from "@/features/bookings/booking-edit-policy";
+import { finalFollowUpDecision } from "./final-follow-up-decision";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import type { BookingSpecialRequest } from "@/features/packages/package-repository";
 import type { ResourceWarning } from "@/features/resources/resource-types";
@@ -149,6 +152,7 @@ export type BookingPackageResourceEditorModel = {
 };
 
 export interface BookingTransaction {
+  recordFollowUpCompletion?(input:{bookingId:string;outcome:string;nextAction:{kind:string;dueAt:Date}|null;completedAt:Date;noFurtherActionReason?:string}):Promise<void>;
   findFollowUpWithBookingForUpdate(
     followUpId: string,
   ): Promise<{ followUp: FollowUp; booking: Booking } | null>;
@@ -292,7 +296,17 @@ class DrizzleBookingTransaction implements BookingTransaction {
       .returning();
 
     if (!booking) throw new Error("Booking is missing.");
+    const status=input.status==="confirmed"?"booked":input.status==="declined"?"declined":input.status==="cancelled"?"cancelled":null;
+    if(status)await this.database.update(bookingOpportunities).set({status,updatedAt:new Date()}).where(eq(bookingOpportunities.bookingId,input.bookingId));
     return toBooking(booking);
+  }
+
+  async recordFollowUpCompletion(input:{bookingId:string;outcome:string;nextAction:{kind:string;dueAt:Date}|null;completedAt:Date;noFurtherActionReason?:string}) {
+    const [booking]=await this.database.select({organizationId:bookings.organizationId,contactId:bookings.primaryContactId}).from(bookings).where(eq(bookings.id,input.bookingId));
+    if(!booking)return;
+    const linked=await this.database.update(bookingOpportunities).set({nextActionKind:input.nextAction?.kind??null,nextActionDueAt:input.nextAction?.dueAt??null,updatedAt:input.completedAt}).where(eq(bookingOpportunities.bookingId,input.bookingId)).returning({id:bookingOpportunities.id});
+    await this.database.insert(activities).values({...booking,bookingId:input.bookingId,kind:"note",subject:input.noFurtherActionReason?`Next step: booking:${input.bookingId}`:"Follow-up completed",status:input.noFurtherActionReason?"no_further_action":null,body:`Follow-up completed: ${input.outcome}. ${input.nextAction?`Next action: ${input.nextAction.kind}, due ${input.nextAction.dueAt.toISOString()}.`:input.noFurtherActionReason?`No further action: ${input.noFurtherActionReason}.`:"Review the next action in Today."}`,occurredAt:input.completedAt,timelineSortAt:input.completedAt});
+    if(input.noFurtherActionReason)for(const opportunity of linked)await this.database.insert(activities).values({...booking,bookingId:input.bookingId,kind:"note",subject:`Next step: opportunity:${opportunity.id}`,status:"no_further_action",body:`No further action: ${input.noFurtherActionReason}.`,occurredAt:input.completedAt,timelineSortAt:input.completedAt});
   }
 
   async createAuditEntry(input: AuditEntry): Promise<void> {
@@ -645,6 +659,9 @@ export class DrizzleBookingRepository implements BookingRepository {
         .for("update");
       if (!before) return null;
 
+      const decision=finalFollowUpDecision(before.status,input.status,input,now);
+      if(decision?.kind==="schedule")await transaction.insert(followUps).values({organizationId:before.organizationId,contactId:before.primaryContactId,bookingId,kind:decision.action,dueAt:decision.dueAt});
+
       const openFollowUps = await transaction
         .select({
           dueAt: followUps.dueAt,
@@ -670,10 +687,17 @@ export class DrizzleBookingRepository implements BookingRepository {
 
       const [updated] = await transaction
         .update(bookings)
-        .set({ ...input, updatedAt: new Date() })
+        .set((({finalNextActionKind,finalNextActionDueAt,finalNoFurtherActionReason,...values})=>({...values,updatedAt:now}))(input))
         .where(eq(bookings.id, bookingId))
         .returning();
       if (!updated) return null;
+
+      if(before.status!==updated.status)await transaction.insert(activities).values({organizationId:updated.organizationId,contactId:updated.primaryContactId,bookingId,kind:"note",subject:decision?.kind==="none"?`Next step: booking:${bookingId}`:"Booking status changed",status:decision?.kind==="none"?"no_further_action":null,body:`Status changed from ${before.status} to ${updated.status}. ${decision?.kind==="none"?`No further action: ${decision.reason}.`:decision?.kind==="schedule"?`Next action: ${decision.action}, due ${decision.dueAt.toISOString()}.`:"Review the next action in Today."}`,occurredAt:now,timelineSortAt:now});
+      if(decision){
+        const opportunityStatus=updated.status==="confirmed"?"booked":updated.status==="declined"?"declined":updated.status==="cancelled"?"cancelled":null;
+        const linked=await transaction.update(bookingOpportunities).set({...(opportunityStatus?{status:opportunityStatus}:{}),nextActionKind:decision.kind==="schedule"?decision.action:null,nextActionDueAt:decision.kind==="schedule"?decision.dueAt:null,updatedAt:now}).where(eq(bookingOpportunities.bookingId,bookingId)).returning({id:bookingOpportunities.id});
+        if(decision.kind==="none")for(const opportunity of linked)await transaction.insert(activities).values({organizationId:updated.organizationId,contactId:updated.primaryContactId,bookingId,kind:"note",subject:`Next step: opportunity:${opportunity.id}`,status:"no_further_action",body:`No further action: ${decision.reason}.`,occurredAt:now,timelineSortAt:now});
+      }
 
       await recordAuditEntry(transaction, {
         entityType: "booking",
@@ -687,3 +711,4 @@ export class DrizzleBookingRepository implements BookingRepository {
     }, {source:"booking-details",bookingIds:[bookingId]});
   }
 }
+

@@ -58,6 +58,7 @@ export class OpportunityEmailWorkflowCoordinator {
     private readonly deps: {
       opportunities: OpportunityStore;
       activity: OpportunityEmailActivity;
+      confirmedFollowUp?: { record(input:{opportunityId:string;draftId:string;sentAt:Date;messageId:string;threadId:string|null}):Promise<void> };
     },
   ) {}
 
@@ -107,6 +108,7 @@ export class OpportunityEmailWorkflowCoordinator {
     messageId: string;
     threadId: string | null;
   }): Promise<void> {
+    if(this.deps.confirmedFollowUp) {await this.deps.confirmedFollowUp.record(input);return;}
     const opportunity = await this.deps.opportunities.get(input.opportunityId);
     if (opportunity?.status === "ready_to_contact") {
       await this.deps.opportunities.update(input.opportunityId, {
@@ -130,3 +132,4 @@ export class OpportunityEmailWorkflowCoordinator {
     await this.deps.activity.recordFailure(input);
   }
 }
+

@@ -59,7 +59,9 @@ export class DrizzleFollowUpRepository implements FollowUpRepository {
           return ok(toFollowUpRecord(prior));
         }
       }
-      if (input.bookingId && !options?.preserveExisting) {
+      // Replacing every open reminder must be an explicit caller decision.
+      // Creating a new action otherwise preserves independent booking work.
+      if (input.bookingId && options?.preserveExisting === false) {
         await transaction
           .update(followUps)
           .set({
@@ -179,3 +181,4 @@ export class DrizzleFollowUpRepository implements FollowUpRepository {
     });
   }
 }
+

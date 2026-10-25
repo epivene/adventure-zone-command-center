@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { imageTokenBudget } from "./ai-client";
+import { imageTokenBudget, createAiClient } from "./ai-client";
+afterEach(()=>vi.unstubAllEnvs());
+it("constructs a disabled client without breaking the non-AI email runtime",async()=>{
+ vi.stubEnv("INTERNAL_AI_ENABLED","");
+ const client=await createAiClient();
+ expect(client.providerName).toBe("Disabled");
+ await expect(client.complete("Anything")).rejects.toMatchObject({code:"INTERNAL_AI_DISABLED"});
+});
 
 describe("imageTokenBudget", () => {
   it("keeps the existing 1200-token default", () => {
@@ -17,3 +24,4 @@ describe("imageTokenBudget", () => {
     expect(imageTokenBudget(10_000)).toBe(4096);
   });
 });
+

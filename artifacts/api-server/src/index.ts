@@ -16,6 +16,10 @@ import { db, pool } from "@workspace/db";
 import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
 import { ensureFestivalEditionSchema } from "@workspace/db/migrations";
 import { runRequiredSchemaStartup } from "./db/required-schema-startup";
+import { ensureFollowUpWorkflowSchema } from "./db/follow-up-workflow-schema";
+import { reconcileSentEmailFollowUps } from "./features/follow-ups/sent-email-follow-up";
+import { workflowDatabase } from "./features/follow-ups/workflow-database";
+import { internalAiEnabled, legacyActEnabled } from "./lib/execution-policy";
 import { recoverStaleDatabaseLockConvoys } from "./db/stale-lock-recovery";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
 import { cleanupKnownEmptyTestProfileClusters } from "./features/organizations/known-empty-test-profile-cluster-cleanup";
@@ -358,6 +362,7 @@ process.once("SIGTERM", () => {
 async function completeRequiredStartup(): Promise<void> {
   try {
     await runRequiredSchemaStartup();
+    await ensureFollowUpWorkflowSchema(pool);
     await runStartupStep("required festival edition schema", ensureFestivalEditionSchema);
     await runStartupStep(
       "development sample account seed",
@@ -415,7 +420,7 @@ async function runPostListenMaintenance() {
     );
   }
 
-  if (process.env.ASSISTANT_WORKSPACE_ENABLED === "true") {
+  if (internalAiEnabled() && process.env.ASSISTANT_WORKSPACE_ENABLED === "true") {
     await workspaceStartup.initialize(async () => {
       await runStartupStep("assistant workspace schema", () => ensureAssistantWorkspaceSchema(pool));
       await runStartupStep("assistant workspace approved rules", () => installApprovedWorkspaceRules(pool));
@@ -598,16 +603,23 @@ async function runPostListenMaintenance() {
 }
 
 async function startBackgroundWorkers() {
+  let reconcilingFollowUps=false;
+  const reconcileFollowUps=async()=>{if(reconcilingFollowUps||shutdownRequested)return;reconcilingFollowUps=true;try{await reconcileSentEmailFollowUps(workflowDatabase(pool));}catch(error){logger.warn({error},"Sent email follow-up bookkeeping will retry");}finally{reconcilingFollowUps=false;}};
+  const followUpTimer=setInterval(()=>void reconcileFollowUps(),60000);
+  followUpTimer.unref();
+  process.once("SIGTERM",()=>clearInterval(followUpTimer));
+  process.once("SIGINT",()=>clearInterval(followUpTimer));
+  void reconcileFollowUps();
   startAgentTaxCleanup();
   if (shutdownRequested) return;
-  leadScoutLoop.start();
-  scoutAlertLoop.start();
+  if(internalAiEnabled())leadScoutLoop.start();
+  if(internalAiEnabled())scoutAlertLoop.start();
   websiteInquiryAlertLoop.start();
-  assistantJobLoop.start();
-  paperNoteLoop.start();
+  if(internalAiEnabled())assistantJobLoop.start();
+  if(internalAiEnabled())paperNoteLoop.start();
   gmailProfileLinkSweepLoop.start();
   void import('./features/google-workspace/google-mailbox-sync-runtime').then(m=>m.mailboxSyncLoop.start());
-  if (readModelConfig(process.env).enabled) {
+  if (internalAiEnabled() && readModelConfig(process.env).enabled) {
     try {
       const stopAssistant = workspaceStartup.start(startWorkspaceRuntime);
       process.once("SIGTERM", stopAssistant);
@@ -622,7 +634,7 @@ async function startBackgroundWorkers() {
   voicemailRetentionLoop.start();
   marketingCampaignLoop.start();
   earlyBirdPromoLoop.start();
-  eventDateCoverageLoop.start();
+  if(internalAiEnabled())eventDateCoverageLoop.start();
   deadlineWorker.start();
 
   try {
@@ -646,6 +658,7 @@ async function startBackgroundWorkers() {
     );
   }
 
+  if(!legacyActEnabled())return;
   const liveActBackgroundWorkersEnabled = shouldStartActBackgroundWorkers();
 
   try {
@@ -675,6 +688,7 @@ async function startBackgroundWorkers() {
     );
   }
 }
+
 
 
 

@@ -6,6 +6,7 @@ import { WebsiteInquiryReviewService } from "../website-inquiries/website-inquir
 import { DrizzleWebsiteInquiryRepository } from "../website-inquiries/website-inquiry-repository";
 import { GmailDraftFilingService } from "./gmail-draft-filing-service";
 import { TodayReadService } from "./today-read-service";
+import { ConnectionFollowUpWorkflow } from "./follow-up-workflow";
 import { loadMasterTodayQueue } from "../today/master-work-queue-repository";
 import { createEmailAttentionService } from "../google-workspace/email-thread-attention-runtime";
 import { BookingWorkService } from "../booking-work/service";
@@ -163,6 +164,7 @@ export function mountChatGPTConnection(
         conventions: new ConnectionConventionService(db),
         inquiries: new WebsiteInquiryReads(db, new WebsiteInquiryReviewService({repository:new DrizzleWebsiteInquiryRepository(appDatabase)}), appOrigin),
         today: new TodayReadService(db,now=>loadMasterTodayQueue(appDatabase,now)),
+        followupWorkflow: new ConnectionFollowUpWorkflow(db),
         attention: createEmailAttentionService(db),
         work: new BookingWorkService(db),
         reads: new ConnectionReadService(db),
@@ -176,5 +178,6 @@ export function mountChatGPTConnection(
     }),
   );
 }
+
 
 

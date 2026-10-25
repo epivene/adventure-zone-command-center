@@ -100,6 +100,14 @@ function deps(existing: OpportunityEmailRecord | null = null, resolvedContext = 
 }
 
 describe("OpportunityEmailService", () => {
+  it("sends an existing draft and records confirmed delivery without calling a model",async()=>{
+    const dependencies=deps(record());
+    const result=await new OpportunityEmailService(dependencies).sendDraft({opportunityId:OPPORTUNITY_ID,draftId:DRAFT_ID,requestKey:"send-existing"});
+    expect(result.draft.state).toBe("sent");
+    expect(dependencies.gmailDraftProvider.sendDraft).toHaveBeenCalledTimes(1);
+    expect(dependencies.draftGenerator.generate).not.toHaveBeenCalled();
+    expect(dependencies.workflowSink.recordSent).toHaveBeenCalledWith(expect.objectContaining({opportunityId:OPPORTUNITY_ID,draftId:DRAFT_ID,messageId:"gmail-message-3"}));
+  });
   it("generates and creates a Gmail draft only when createDraft is explicitly called", async () => {
     const dependencies = deps();
     const service = new OpportunityEmailService(dependencies);
@@ -176,7 +184,7 @@ describe("OpportunityEmailService", () => {
       opportunityId: OPPORTUNITY_ID,
       draftId: DRAFT_ID,
       requestKey: "44444444-4444-4444-8444-444444444444",
-    })).rejects.toThrow(/sendable email/i);
+    })).rejects.toMatchObject({code:"OPPORTUNITY_EMAIL_RECIPIENT_NOT_SENDABLE"});
 
     expect(dependencies.gmailDraftProvider.sendDraft).not.toHaveBeenCalled();
   });
@@ -229,3 +237,4 @@ describe("OpportunityEmailService", () => {
     expect(dependencies.workflowSink.recordDraftUpdated).not.toHaveBeenCalled();
   });
 });
+

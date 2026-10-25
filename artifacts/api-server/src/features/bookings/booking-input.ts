@@ -78,6 +78,9 @@ export const bookingEditInputSchema = z
       .union([z.literal(""), z.null(), z.string().uuid()])
       .transform((value) => value || null),
     notes: nullableTrimmedString,
+    finalNextActionKind: nullableTrimmedString.optional(),
+    finalNextActionDueAt: optionalBusinessDateSchema.optional(),
+    finalNoFurtherActionReason: nullableTrimmedString.optional(),
   })
   .superRefine((input, context) => {
     if ((input.latitude === null) !== (input.longitude === null)) {
@@ -168,3 +171,4 @@ export type BookingFormInput = Omit<BookingFormOutput, "probability"> & {
 export type BookingEditInput = Omit<BookingEditOutput, "probability"> & {
   probability: Probability;
 };
+
