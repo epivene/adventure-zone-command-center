@@ -1,0 +1,44 @@
+name: Reliable follow-up queue
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/follow-ups/**"
+      - "artifacts/api-server/src/features/bookings/**"
+      - "artifacts/api-server/src/features/chatgpt-connection/**"
+      - "artifacts/api-server/src/features/opportunity-email/**"
+      - "artifacts/api-server/src/features/ai-suggestions/**"
+      - "artifacts/api-server/src/routes/**"
+      - "artifacts/api-server/src/lib/execution-policy*"
+      - "artifacts/api-server/src/db/follow-up-workflow-schema*"
+      - "artifacts/api-server/src/index.ts"
+      - "artifacts/adventure-zone/src/**"
+      - ".github/workflows/reliable-follow-up-queue.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgresql://test:test@127.0.0.1:5432/test
+      SESSION_SECRET: follow-up-workflow-test-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Follow-up API, connector, send and status coverage
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/follow-ups/workflow.pglite.test.ts src/features/follow-ups/com-draft-context.test.ts src/features/follow-ups/sent-email-follow-up.test.ts src/features/follow-ups/single-active-follow-up.pglite.test.ts src/features/follow-ups/follow-up-service.test.ts src/features/bookings/final-follow-up-decision.test.ts src/features/bookings/final-follow-up-decision.pglite.test.ts src/features/ai-suggestions/ai-client.test.ts src/features/opportunity-email/opportunity-email-workflow.test.ts src/features/opportunity-email/opportunity-email-service.test.ts src/routes/follow-up-workflow.test.ts src/lib/execution-policy.test.ts
+      - name: Today board
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/today/follow-up-board.test.tsx src/features/today/follow-up-time.test.ts src/components/opportunities/final-opportunity-decision.test.tsx
+      - name: Workspace typecheck
+        run: pnpm run typecheck
+      - name: API build
+        run: pnpm --filter @workspace/api-server run build
+      - name: Frontend build
+        run: pnpm --filter @workspace/adventure-zone run build

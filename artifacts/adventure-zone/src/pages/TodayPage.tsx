@@ -1,6 +1,7 @@
 import { UpcomingDeadlines } from "@/features/deadline-rules/reminders";
 import { MasterWorkQueue } from "@/components/today/master-work-queue";
 import { DailyWorkspace } from "@/components/today/daily-workspace";
+import { FollowUpBoard } from "@/components/today/follow-up-board";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { coerceMasterTodayQueue } from "@/features/today/master-work-types";
@@ -48,6 +49,17 @@ function coerceRenewals(items: any[]) {
 }
 
 export default function TodayPage({ leadsOnly = false }: { leadsOnly?: boolean }) {
+  const [showTools, setShowTools] = useState(false);
+  if (leadsOnly) return <LegacyTodayPage leadsOnly />;
+  return <div className="mx-auto grid max-w-6xl gap-5 pb-8">
+    <header><p className="text-xs font-bold uppercase text-primary">Command Center</p><h1 className="text-3xl font-bold">Today</h1><p className="text-sm text-muted-foreground">Follow-ups and next steps · Mountain time</p></header>
+    <FollowUpBoard />
+    <nav className="flex flex-wrap gap-4" aria-label="Daily destinations"><Link href="/profiles">Profiles</Link><Link href="/leads">Leads</Link><Link href="/schedule">Schedule</Link></nav>
+    <details className="rounded-xl border border-border p-4" onToggle={event=>setShowTools(event.currentTarget.open)}><summary className="cursor-pointer font-semibold">Conversations, calls &amp; booking tools</summary>{showTools?<div className="mt-4"><LegacyTodayPage /></div>:null}</details>
+  </div>;
+}
+
+function LegacyTodayPage({ leadsOnly = false }: { leadsOnly?: boolean }) {
   const [dashboard, setDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -222,7 +234,7 @@ export default function TodayPage({ leadsOnly = false }: { leadsOnly?: boolean }
 
       {nextStepError ? <p className="rounded-lg border border-border p-3 text-sm text-destructive" role="alert">{nextStepError}<Button variant="outline" size="sm" className="ml-3" onClick={() => void refreshToday().catch(() => {})}>Refresh</Button></p> : null}
       {undoBookingIds.length ? <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted p-3" role="status"><span>Cleared from Today.</span><Button variant="outline" size="sm" onClick={undoClear} disabled={nextStepBusy}>Undo</Button></div> : null}
-      <DailyWorkspace queue={coerceMasterTodayQueue(dashboard.masterQueue)} followUps={followUps} decisions={nextStepItems} travelLegs={dashboard.travelLegs ?? []} callingEnabled={callingConfig.assistedCallingEnabled} onChanged={refreshToday} onClear={clearNextSteps} onSnooze={snoozeNextSteps} busy={nextStepBusy} />
+      <details className="rounded-xl border border-border p-4"><summary className="cursor-pointer font-semibold">Conversations, calls &amp; booking work</summary><div className="mt-4"><DailyWorkspace queue={coerceMasterTodayQueue(dashboard.masterQueue)} followUps={followUps} decisions={nextStepItems} travelLegs={dashboard.travelLegs ?? []} callingEnabled={callingConfig.assistedCallingEnabled} onChanged={refreshToday} onClear={clearNextSteps} onSnooze={snoozeNextSteps} busy={nextStepBusy} /></div></details>
       <Button asChild variant="outline" className="w-fit"><Link href="/leads">Review leads and suggested legs</Link></Button>
       <MasterWorkQueue managementOnly queue={coerceMasterTodayQueue(dashboard.masterQueue)} onChanged={refreshToday}/>
       {documentReviewCount > 0 ? (
@@ -303,4 +315,5 @@ export default function TodayPage({ leadsOnly = false }: { leadsOnly?: boolean }
     </div>
   );
 }
+
 

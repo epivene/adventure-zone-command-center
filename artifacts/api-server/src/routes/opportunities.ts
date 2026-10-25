@@ -78,6 +78,9 @@ export function createOpportunitiesRouter(
       res.status(404).json({ ok: false, error: "Opportunity not found." });
       return;
     }
+    if(patch.data.status&&patch.data.status!==existing.status&&["booked","declined","not_pursuing","cancelled"].includes(patch.data.status)) {
+      res.status(400).json({ok:false,code:"FINAL_FOLLOW_UP_DECISION_REQUIRED",error:"Use the final follow-up decision to choose a next action or give a no-further-action reason."});return;
+    }
 
     if (patch.data.status === "interested") {
       const { status: _status, ...authoritativePatch } = patch.data;
@@ -105,6 +108,7 @@ export function createOpportunitiesRouter(
       res.status(404).json({ ok: false, error: "Opportunity not found." });
       return;
     }
+    if(parsed.data.status!==existing.status&&["booked","declined","not_pursuing","cancelled"].includes(parsed.data.status)) {res.status(400).json({ok:false,code:"FINAL_FOLLOW_UP_DECISION_REQUIRED",error:"A final follow-up decision is required."});return;}
     const opportunity = await repository.update(parsed.data.id, {
       status: parsed.data.status,
     });
@@ -122,3 +126,4 @@ export function createOpportunitiesRouter(
 }
 
 export default createOpportunitiesRouter();
+

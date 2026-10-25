@@ -1,5 +1,7 @@
 import { createProductionOutreachDispatch } from "../outreach-planner/production-outreach-dispatch";
 import { replayActualOutreach } from "../outreach-planner/outreach-events";
+import { recordSentEmailFollowUp } from "../follow-ups/sent-email-follow-up";
+import { workflowDatabase } from "../follow-ups/workflow-database";
 import { createOpportunityEmailRuntime } from "./opportunity-email-runtime";
 import type { ReadyToSendSource } from "./ready-to-send-service";
 
@@ -164,6 +166,7 @@ export async function createProductionOpportunityEmailRuntime() {
   const workflow = new OpportunityEmailWorkflowCoordinator({
     opportunities,
     activity,
+    confirmedFollowUp: {record:input=>recordSentEmailFollowUp(workflowDatabase(workspaceDb.pool),input)},
   });
   const emailService = new OpportunityEmailService({
     dispatchSafety: createProductionOutreachDispatch(db),
@@ -208,3 +211,4 @@ export function getProductionOpportunityEmailRuntime(): Promise<ProductionOpport
   );
   return productionRuntimePromise;
 }
+

@@ -350,9 +350,11 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
     res.json({ ok: true });
   } catch (err) {
     if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
+    if(err instanceof Error && "code" in err && err.code==="FINAL_FOLLOW_UP_DECISION_REQUIRED") {res.status(400).json({ok:false,error:err.message,code:err.code});return;}
     req.log.error({ err }, "Failed to update booking");
     res.status(500).json({ ok: false, error: "Could not update booking" });
   }
 });
 
 export default router;
+

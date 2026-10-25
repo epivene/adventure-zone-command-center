@@ -269,6 +269,7 @@ const defaultValues: BookingFormValues = {
 };
 
 export function BookingForm(props: BookingFormProps) {
+  const [finalDecision,setFinalDecision]=useState("");
   const { initialValues } = props;
   const [, navigate] = useLocation();
   const draftKey =
@@ -401,6 +402,7 @@ export function BookingForm(props: BookingFormProps) {
     if (serverSaveConfirmed) return;
     const formData = new FormData(event.currentTarget);
     const rawInput = Object.fromEntries(formData);
+    if(props.variant==="edit"&&values.status!==props.initialValues?.status&&["confirmed","declined","cancelled","completed"].includes(values.status)&&!finalDecision){setSubmissionError("Choose a final follow-up decision before saving.");return;}
     const result =
       props.variant === "edit"
         ? bookingEditInputSchema.safeParse(rawInput)
@@ -782,6 +784,7 @@ export function BookingForm(props: BookingFormProps) {
         </>
       ) : null}
 
+      {props.variant==="edit"&&values.status!==props.initialValues?.status&&["confirmed","declined","cancelled","completed"].includes(values.status)?<fieldset className="grid gap-3 rounded-lg border-2 border-primary p-4"><legend className="font-bold">Final follow-up decision</legend><select aria-label="Final follow-up decision" value={finalDecision} onChange={e=>setFinalDecision(e.target.value)}><option value="">Choose the next step</option><option value="schedule">Schedule a final follow-up</option><option value="none">No further action</option></select>{finalDecision==="schedule"?<><label>Final next action<input name="finalNextActionKind" placeholder="Check deposit, confirm arrival, or follow up next season"/></label><label>Final follow-up date<input name="finalNextActionDueAt" type="date"/></label></>:finalDecision==="none"?<label>No further action reason<textarea name="finalNoFurtherActionReason"/></label>:null}</fieldset>:null}
       <button disabled={isSubmitting || serverSaveConfirmed} type="submit">
         {serverSaveConfirmed
           ? "Saved"
@@ -794,3 +797,4 @@ export function BookingForm(props: BookingFormProps) {
     </form>
   );
 }
+

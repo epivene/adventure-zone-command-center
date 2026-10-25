@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 
 import { apiGet, apiPatch, apiPost } from "@/lib/auth-token";
+import {FinalOpportunityDecision} from "./final-opportunity-decision";
 
 type Opportunity = {
   id: string;
@@ -49,6 +50,7 @@ export function CurrentOpportunityCard({
   const [suggestedStatus, setSuggestedStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [finalDecision,setFinalDecision]=useState<{id:string;revision:string;status:string}|null>(null);
 
   async function load() {
     try {
@@ -75,6 +77,15 @@ export function CurrentOpportunityCard({
     );
     setOpportunity(response.opportunity);
     setSuggestedStatus(response.suggestedStatus ?? null);
+  }
+  async function chooseStatus(status:string){
+    if(!opportunity)return;
+    try {
+      if(status!==opportunity.status&&["booked","declined","not_pursuing","cancelled"].includes(status)){
+        const current=await apiGet<{id:string;revision:string}>(`/work-queue/opportunity/${opportunity.id}`);
+        setFinalDecision({...current,status});
+      }else await update({status});
+    }catch(cause){setError(cause instanceof Error?cause.message:"Could not change status.");}
   }
 
   async function applySuggestion() {
@@ -109,7 +120,7 @@ export function CurrentOpportunityCard({
         <div className="mt-4 grid gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-sm font-semibold">Status
-              <select className="rounded-lg border border-slate-300 bg-white px-3 py-2" value={opportunity.status} onChange={(event) => void update({ status: event.target.value })}>
+              <select className="rounded-lg border border-slate-300 bg-white px-3 py-2" value={opportunity.status} onChange={(event) => void chooseStatus(event.target.value)}>
                 {statusOptions.map((status) => <option key={status} value={status}>{label(status)}</option>)}
               </select>
             </label>
@@ -119,6 +130,7 @@ export function CurrentOpportunityCard({
               </select>
             </label>
           </div>
+          {finalDecision?<FinalOpportunityDecision {...finalDecision} year={year} onCancel={()=>setFinalDecision(null)} onSaved={async()=>{setFinalDecision(null);await load();}}/>:null}
           <div className="rounded-xl bg-white p-3 text-sm">
             <p className="font-bold">Next action</p>
             <p className="mt-1 text-slate-600">{opportunity.nextActionKind ? label(opportunity.nextActionKind) : "Not scheduled"}{opportunity.nextActionDueAt ? ` · ${new Date(opportunity.nextActionDueAt).toLocaleString()}` : ""}</p>
@@ -134,3 +146,4 @@ export function CurrentOpportunityCard({
     </section>
   );
 }
+

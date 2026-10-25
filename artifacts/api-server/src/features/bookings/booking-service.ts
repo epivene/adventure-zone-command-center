@@ -6,6 +6,7 @@ import {
 } from "@/features/bookings/booking-repository";
 import type { BookingStatus, Probability } from "@/features/bookings/booking-types";
 import { needsFollowUpPlan } from "@/features/follow-ups/follow-up-policy";
+import {finalFollowUpDecision} from "./final-follow-up-decision";
 import { err, ok, type Result } from "@/lib/result";
 
 export type { Booking, BookingRepository, BookingTransaction, FollowUp };
@@ -95,6 +96,9 @@ export class BookingService {
       }
 
       const resultingStatus = input.status ?? context.booking.status;
+      let finalDecision:ReturnType<typeof finalFollowUpDecision>=null;
+      try {finalDecision=finalFollowUpDecision(context.booking.status,resultingStatus,{finalNextActionKind:input.nextAction?.kind,finalNextActionDueAt:input.nextAction?.dueAt,finalNoFurtherActionReason:input.nextAction?undefined:input.outcome},now);}
+      catch{return err({code:"NEXT_ACTION_REQUIRED"});}
       if (
         needsFollowUpPlan(
           { status: resultingStatus },
@@ -153,7 +157,9 @@ export class BookingService {
         },
       });
 
+      await transaction.recordFollowUpCompletion?.({bookingId:context.booking.id,outcome:input.outcome,nextAction:input.nextAction,completedAt,noFurtherActionReason:finalDecision?.kind==="none"?finalDecision.reason:undefined});
       return ok({ ...completed, nextFollowUpId });
     }, input.status ? input.followUpId : undefined);
   }
 }
+

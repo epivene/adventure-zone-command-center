@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Bot, Check, ChevronDown, Ellipsis, Moon, Palette, Plus, Sun } from "lucide-react";
+import { Check, ChevronDown, Ellipsis, Moon, Palette, Plus, Sun } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import {
   DropdownMenu,
@@ -16,7 +16,6 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { readAppearance, saveAppearance, type Appearance } from "@/lib/appearance";
 import { saveBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
-import { useAssistantContext } from "@/features/assistant/assistant-context";
 import { useDocumentReviewCount } from "./use-document-review-count";
 import { ToolFinder, type ToolFinderItem } from "./tool-finder";
 
@@ -76,8 +75,6 @@ const adminToolsGroups: MenuGroup[] = [
     label: "Data & Imports",
     items: [
       { href: "/settings/paper-notes", label: "Paper notes" },
-      { href: "/settings/act-migration", label: "ACT! import" },
-      { href: "/settings/act-recovery", label: "ACT Recovery" },
       { href: "/imports/attendance-history", label: "Attendance history" },
     ],
   },
@@ -135,7 +132,6 @@ export function getAppMenuSearchItems(workspace: AdminWorkspace): ToolFinderItem
     { href: "/business-documents", label: "All documents", category: "Documents", keywords: ["files", "insurance", "COI"] },
     { href: "/invoices-contracts", label: "Contracts & Invoices", category: "Documents", keywords: ["invoice", "contract"] },
     { href: "/manager-communications", label: "Messages", category: "Communication", keywords: ["message", "communications"] },
-    { href: "/assistant/workspace", label: "Assistant workspace", category: "Tools", keywords: ["assistant", "help"] },
   ];
   const uniqueItems = new Map<string, ToolFinderItem>();
   for (const item of [...groupedItems, ...mobileBookingSearchItems, ...commonItems]) {
@@ -318,7 +314,6 @@ export function AppMenu({
   searchItems?: ToolFinderItem[];
 }) {
   const { signOut } = useAuth();
-  const { openAssistant } = useAssistantContext();
   const [location] = useLocation();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [appearance, setAppearance] = useState<Appearance>(() => readAppearance());
@@ -404,15 +399,6 @@ export function AppMenu({
 
           </div>
         ) : null}
-            <DropdownMenuItem asChild><Link href="/assistant/workspace" className="rounded-md px-2 py-2"><Bot className="h-4 w-4" />Assistant workspace</Link></DropdownMenuItem>
-              <DropdownMenuItem
-              aria-label="Older conversations and specialist tools"
-              className="rounded-md px-2 py-2"
-              onSelect={() => openAssistant()}
-            >
-              <Bot className="h-4 w-4" />
-              Older conversations & tools
-            </DropdownMenuItem>
         {mobile && workspace === "booking" ? (
           <div className="grid gap-0.5 py-1">
             {bookingMenuItems.map((item) => <MenuLink item={item} workspace={workspace} location={location} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} key={`${item.href}:${item.label}`} />)}
@@ -477,3 +463,4 @@ export function AppMenu({
     </DropdownMenu>
   );
 }
+

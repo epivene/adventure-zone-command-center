@@ -43,6 +43,7 @@ async function createDatabase() {
       booking_id uuid references bookings(id),
       organization_id uuid references organizations(id),
       contact_id uuid references contacts(id),
+      organization_location_id uuid,
       kind text not null,
       due_at timestamptz not null,
       completed_at timestamptz,
@@ -89,7 +90,7 @@ describe("single active follow-up", () => {
   const clients: PGlite[] = [];
   afterEach(async () => Promise.all(clients.splice(0).map((client) => client.close())));
 
-  it("replaces the previous open follow-up for the same booking and preserves it as history", async () => {
+  it("preserves separate open follow-ups for the same booking", async () => {
     const { client, repository } = await createDatabase();
     clients.push(client);
 
@@ -117,10 +118,12 @@ describe("single active follow-up", () => {
 
     expect(rows).toHaveLength(2);
     expect(rows.filter((row) => row.completed_at === null)).toEqual([
+      expect.objectContaining({ kind: "email" }),
       expect.objectContaining({ kind: "call" }),
     ]);
     expect(rows.find((row) => row.kind === "email")).toEqual(
-      expect.objectContaining({ outcome: "Replaced by newer follow-up" }),
+      expect.objectContaining({ outcome: null }),
     );
   });
 });
+
