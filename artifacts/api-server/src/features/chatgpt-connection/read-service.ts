@@ -78,6 +78,10 @@ export class ConnectionReadService {
     requireConnectionScope(p, "crm:read");
     await activeConnection(this.db, p);
   }
+  async batch(p: ConnectionPrincipal, input: unknown) {
+    const { BatchProfileContextService } = await import("./batch-profile-context");
+    return new BatchProfileContextService(this.db).read(p, input);
+  }
   async details(p: ConnectionPrincipal, input: { profileId: string }) {
     await this.authorize(p);
     return profileDetails(await profileRow(this.db, input.profileId));
@@ -146,15 +150,15 @@ export class ConnectionReadService {
       bookingIds = `SELECT id FROM bookings WHERE organization_id=$1`;
     let select: string;
     if (section === "history")
-      select = `SELECT a.id,a.kind,a.subject,a.body,a.occurred_at,a.date_is_import_fallback,a.timeline_sort_at AS sort_at FROM activities a WHERE a.deleted_at IS NULL AND (a.organization_id=$1 OR (a.organization_id IS NULL AND (a.booking_id IN (${bookingIds}) OR (a.booking_id IS NULL AND a.contact_id IN (${contactIds})))) OR EXISTS(SELECT 1 FROM activity_associations x WHERE x.activity_id=a.id AND (x.organization_id=$1 OR x.contact_id IN (${contactIds}) OR x.booking_id IN (${bookingIds}))))`;
+      select = `SELECT a.id,a.kind,a.subject,a.body,a.occurred_at,a.date_is_import_fallback,a.timeline_sort_at AS sort_at,a.updated_at AS revision_at FROM activities a WHERE a.deleted_at IS NULL AND (a.organization_id=$1 OR (a.organization_id IS NULL AND (a.booking_id IN (${bookingIds}) OR (a.booking_id IS NULL AND a.contact_id IN (${contactIds})))) OR EXISTS(SELECT 1 FROM activity_associations x WHERE x.activity_id=a.id AND (x.organization_id=$1 OR x.contact_id IN (${contactIds}) OR x.booking_id IN (${bookingIds}))))`;
     else if (section === "contacts")
-      select = `SELECT c.id,'contact' AS kind,c.first_name||' '||c.last_name AS subject,c.email,c.phone,oc.role,c.updated_at AS sort_at FROM contacts c JOIN organization_contacts oc ON oc.contact_id=c.id WHERE oc.organization_id=$1 AND oc.active=true`;
+      select = `SELECT c.id,'contact' AS kind,c.first_name||' '||c.last_name AS subject,c.email,c.phone,oc.role,c.updated_at AS sort_at,c.updated_at AS revision_at FROM contacts c JOIN organization_contacts oc ON oc.contact_id=c.id WHERE oc.organization_id=$1 AND oc.active=true`;
     else if (section === "dates")
-      select = `SELECT id,\'event_date\' AS kind,source_title AS subject,rationale AS body,status,starts_on::text,ends_on::text,active,source_url,source_kind,researched_at,verified_at,updated_at AS sort_at FROM event_date_facts WHERE organization_id=$1`;
+      select = `SELECT id,\'event_date\' AS kind,source_title AS subject,rationale AS body,status,starts_on::text,ends_on::text,active,source_url,source_kind,researched_at,verified_at,updated_at AS sort_at,updated_at AS revision_at FROM event_date_facts WHERE organization_id=$1`;
     else if (section === "bookings")
-      select = `SELECT id,'booking' AS kind,name AS subject,status,starts_at AS occurred_at,ends_at,updated_at AS sort_at FROM bookings WHERE organization_id=$1`;
+      select = `SELECT id,'booking' AS kind,name AS subject,status,starts_at AS occurred_at,ends_at,updated_at AS sort_at,updated_at AS revision_at FROM bookings WHERE organization_id=$1`;
     else
-      select = `SELECT d.id,'document' AS kind,d.display_name AS subject,d.lifecycle AS status,d.updated_at AS sort_at FROM business_documents d WHERE d.lifecycle<>'deleted' AND EXISTS(SELECT 1 FROM business_document_links l WHERE l.document_id=d.id AND (l.organization_id=$1 OR l.booking_id IN (${bookingIds})))`;
+      select = `SELECT d.id,'document' AS kind,d.display_name AS subject,d.lifecycle AS status,d.updated_at AS sort_at,d.updated_at AS revision_at FROM business_documents d WHERE d.lifecycle<>'deleted' AND EXISTS(SELECT 1 FROM business_document_links l WHERE l.document_id=d.id AND (l.organization_id=$1 OR l.booking_id IN (${bookingIds})))`;
     const rows = (
       await this.db.query(
         `SELECT r.*,sort_at::text AS cursor_at FROM (${select}) r WHERE ($2::timestamptz IS NULL OR (sort_at,id)<($2::timestamptz,$3::uuid)) ORDER BY sort_at DESC,id DESC LIMIT 11`,
@@ -172,6 +176,8 @@ export class ConnectionReadService {
         kind: row.kind,
         eventYear: row.starts_on ? Number(row.starts_on.slice(0, 4)) : occurredAt ? new Date(occurredAt).getUTCFullYear() : null,
         occurredAt,
+        recordedAt: iso(row.cursor_at),
+        revision: iso(row.revision_at),
         ...(section === "dates" ? {
           startsOn: row.starts_on, endsOn: row.ends_on, active: row.active,
           sourceUrl: clip(row.source_url, 2048), sourceKind: row.source_kind,
