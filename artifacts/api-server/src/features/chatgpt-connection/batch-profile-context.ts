@@ -16,7 +16,7 @@ export const batchProfileContextInput = z.object({
   sections: z.array(z.enum(sections)).min(1).max(sections.length)
     .refine(values => new Set(values).size === values.length, "Duplicate section").optional(),
   // Each section has its own cursor. A cursor from another profile/section/connection is invalid.
-  cursors: z.record(id, z.record(z.enum(sections), z.string().max(2000))).optional(),
+  cursors: z.record(id, z.partialRecord(z.enum(sections), z.string().max(2000))).optional(),
   expectedRevisions: z.record(id, z.string().max(100)).optional(),
 }).strict();
 
