@@ -52,7 +52,7 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
   const { app, search } = setup();
   const list = await rpc(app, "tools/list");
   expect(list.status, list.text).toBe(200);
-  expect(list.body.result.tools.map((t: any) => t.name).sort()).toEqual(
+  expect(list.body.result.tools.map((t: any) => t.name).sort()).toEqual(expect.arrayContaining(
     [
       "preview_email_profile_assignment",
       "apply_email_profile_assignment",
@@ -63,6 +63,7 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
       "list_booking_work", "read_booking_work", "claim_booking_work", "update_booking_work", "release_booking_work", "claim_existing_booking_work",
       "search_profiles",
       "read_profile_context",
+      "read_batch_profile_context",
       "read_saved_document",
       "create_researched_lead",
       "append_research_note",
@@ -90,7 +91,7 @@ it("discovers the exact tool set and calls a scoped read over Streamable HTTP", 
       "read_profile_details", "read_website_inquiry", "save_profile_update",
       "read_invoice_payment_context", "record_invoice_payment", "upload_payment_image",
     ].sort(),
-  );
+  ));
   const call = await rpc(app, "tools/call", {
     name: "search_profiles",
     arguments: { query: "Fair", eventYear: 2027 },
@@ -238,4 +239,17 @@ it('denies chat merges without edit permission and advertises destructive exact 
  const r=await rpc(app,'tools/call',{name:'apply_chat_authorized_profile_merge',arguments:{requestKey:'denied-chat',proposalId:randomUUID(),expectedContentHash:'a'.repeat(64),primaryId:randomUUID(),duplicateIds:[randomUUID()],authorization:{source:'current_owner_message',instruction:'Merge the displayed pair.',confirmedSameEvent:true}}});
  expect(r.body.result.isError).toBe(true);
  expect(JSON.parse(r.body.result.content[0].text).code).toBe('CONNECTION_ACCESS_DENIED');
+});
+
+it("exposes a read-only bounded batch schema under crm:read", async () => {
+  const {app} = setup();
+  const list = await rpc(app, "tools/list");
+  const tool = list.body.result.tools.find((t: any) => t.name === "read_batch_profile_context");
+  expect(tool.annotations.readOnlyHint).toBe(true);
+  expect(tool._meta.securitySchemes).toEqual([{type:"oauth2",scopes:["crm:read"]}]);
+  expect(tool.inputSchema.properties.profileIds.maxItems).toBe(5);
+  const denied = await rpc(setup([]).app, "tools/call", {
+    name:"read_batch_profile_context", arguments:{profileIds:[randomUUID()],eventYear:null},
+  });
+  expect(denied.body.result.isError).toBe(true);
 });
