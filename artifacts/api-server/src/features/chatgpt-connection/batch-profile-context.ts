@@ -8,7 +8,7 @@ import { profileDetails } from "./profile-fields";
 
 const id = z.string().uuid();
 const coreSections = ["history", "contacts", "bookings", "dates", "documents"] as const;
-const sections = [...coreSections, "followups", "drafts", "email_threads"] as const;
+const sections = [...coreSections, "holds", "followups", "drafts", "email_threads", "email_messages"] as const;
 type Section = typeof sections[number];
 export const batchProfileContextInput = z.object({
   profileIds: z.array(id).min(1).max(5).refine(ids => new Set(ids).size === ids.length, "Duplicate profile ID"),
@@ -21,6 +21,10 @@ export const batchProfileContextInput = z.object({
 }).strict();
 
 const metadataSql = {
+  holds: `SELECT h.id,h.booking_id,h.opportunity_id,h.leg_id,h.event_starts_on,
+    h.event_ends_on,h.starts_on,h.ends_on,h.state,h.expires_at,h.ended_at,
+    h.revision,h.created_at,h.created_at AS sort_at FROM outreach_holds h
+    WHERE h.booking_id IN (SELECT id FROM bookings WHERE organization_id=$1)`,
   followups: `SELECT id,kind,due_at,completed_at,outcome,next_follow_up_id,contact_id,
     created_at,updated_at,updated_at AS sort_at FROM follow_ups
     WHERE organization_id=$1 OR (organization_id IS NULL AND booking_id IN
@@ -34,6 +38,13 @@ const metadataSql = {
   email_threads: `SELECT id,subject,archive_state,last_synced_at,last_gmail_error_code,
     created_at,updated_at,updated_at AS sort_at
     FROM google_workspace_profile_email_threads WHERE organization_id=$1`,
+  email_messages: `SELECT m.id,m.conversation_id,m.gmail_message_id,m.gmail_thread_id,
+    m.subject,m.direction,m.from_value,m.to_value,m.internal_date_ms,
+    left(m.body_text,500) AS snippet,m.created_at,m.updated_at,
+    coalesce(to_timestamp(m.internal_date_ms/1000.0),m.created_at) AS sort_at
+    FROM google_workspace_profile_email_messages m
+    WHERE m.conversation_id IN
+      (SELECT id FROM google_workspace_profile_email_threads WHERE organization_id=$1)`,
 } as const;
 
 function decode(cursor: string | undefined, scope: string) {
@@ -106,7 +117,10 @@ export class BatchProfileContextService {
             } catch (error) {
               errors[section] = error instanceof ConnectionError
                 ? {code: error.code, message: error.message}
-                : {code: "CONNECTION_SECTION_UNAVAILABLE", message: "Section read failed."};
+                : (error as {status?: number}).status === 429
+                  ? {code: "CONNECTION_RATE_LIMITED", message: "Read limit reached; retry this section later.",
+                    retryAfter: (error as {retryAfter?: string}).retryAfter ?? null}
+                  : {code: "CONNECTION_SECTION_UNAVAILABLE", message: "Section read failed."};
             }
           }
           results[index] = {profileId, profile, sections: found, ...(Object.keys(errors).length ? {errors} : {})};
