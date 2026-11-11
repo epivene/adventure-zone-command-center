@@ -809,7 +809,7 @@
     .package-page-header .logo { max-width: 240px; }
     .package-page .contact { padding: 20px; }
     @media (max-width: 767px) {
-      :host { width: 100% !important; max-width: 100% !important; min-width: 0; margin-left: 0 !important; }
+      :host { position: relative; left: var(--az-mobile-left, 0px); width: var(--az-mobile-width, 100%) !important; max-width: var(--az-mobile-width, 100%) !important; min-width: 0; margin-left: 0 !important; }
       .az-site { width: 100%; max-width: none; margin: 0; }
     }
 
@@ -1237,6 +1237,7 @@
       this.shadowRoot.innerHTML = `<style>${styles}</style>${pageMarkup()}`;
       this.isWixPreviewFrame = /CustomElementPreviewIframe/i.test(window.location.pathname);
       this.shadowRoot.querySelector(".az-site").classList.toggle("wix-preview-frame", this.isWixPreviewFrame);
+      this.updateMobileBounds();
       this.abortController = new AbortController();
       this.bindInteractions();
       this.startBounceEntrance();
@@ -1454,6 +1455,7 @@
     emitResize() {
       const shell = this.shadowRoot?.querySelector(".az-site");
       if (!shell) return;
+      this.updateMobileBounds();
       const height = Math.ceil(shell.getBoundingClientRect().height);
       this.style.height = `${height}px`;
       this.dispatchEvent(new CustomEvent("adventure-zone-resize", {
@@ -1547,6 +1549,24 @@
       const target = this.shadowRoot.getElementById(id);
       if (!target) return;
       target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    updateMobileBounds() {
+      // Wix Classic can retain a 980px parent and center it on small screens.
+      // Measure the unshifted host rather than assuming the parent is responsive.
+      if (this.isWixPreviewFrame || !window.matchMedia("(max-width: 767px)").matches) {
+        this.style.removeProperty("--az-mobile-width");
+        this.style.removeProperty("--az-mobile-left");
+        return;
+      }
+      const width = document.documentElement.clientWidth;
+      if (!width) return;
+      const previousLeft = parseFloat(this.style.getPropertyValue("--az-mobile-left")) || 0;
+      const naturalLeft = this.getBoundingClientRect().left + window.scrollX - previousLeft;
+      const left = `${-naturalLeft}px`;
+      const size = `${width}px`;
+      if (this.style.getPropertyValue("--az-mobile-width") !== size) this.style.setProperty("--az-mobile-width", size);
+      if (this.style.getPropertyValue("--az-mobile-left") !== left) this.style.setProperty("--az-mobile-left", left);
     }
 
     updateResizeLayout() {
