@@ -81,7 +81,7 @@ it("bounds concurrent profile work and isolates rate-limited sections without re
   const db = {query: async (sql:string, params?:unknown[]) => {
     active++; peak = Math.max(peak, active);
     try {
-      if (sql.includes("FROM follow_ups")) { limited++; throw Object.assign(new Error("limited"), {status:429}); }
+      if (sql.includes("FROM follow_ups")) { limited++; throw Object.assign(new Error("limited"), {status:429,retryAfter:"2"}); }
       return await original(sql,params);
     } finally { active--; }
   }};
@@ -89,5 +89,6 @@ it("bounds concurrent profile work and isolates rate-limited sections without re
     {profileIds:[f.profileId,other],eventYear:null,sections:["followups"]});
   expect(peak).toBeLessThanOrEqual(2);
   expect(limited).toBe(2);
-  expect(result.results.every(x => x.errors?.followups)).toBe(true);
+  expect(result.results.every(x => (x.errors?.followups as {code:string;retryAfter:string})?.code === "CONNECTION_RATE_LIMITED" &&
+    (x.errors?.followups as {retryAfter:string}).retryAfter === "2")).toBe(true);
 });
