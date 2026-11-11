@@ -21,7 +21,7 @@ import { sourceSchema } from "./lead-note-service";
 import { draftContentSchema } from "../assistant-workspace/draft-content";
 import type { ConnectionPrincipal, ConnectionScope } from "./contracts";
 import type { ConnectionReadService } from "./read-service";
-import { BatchProfileContextService, batchProfileContextInput } from "./batch-profile-context";
+import { batchProfileContextInput } from "./batch-profile-context";
 import type { LeadNoteService } from "./lead-note-service";
 import { saveProfileInput, type ProfileUpdateService } from "./profile-update-service";
 import { profileValueShape } from "./profile-fields";
@@ -104,7 +104,7 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       name: "read_batch_profile_context", scope: "crm:read", readOnly: true,
       description: "Read up to five exact profile IDs with independently paginated drafting sections. Includes saved profile/contact/history/booking/date/document context plus follow-up, app draft and explicitly linked email-thread metadata. Use per-profile/section cursors, inspect individual errors and expectedRevisions, and consult live Gmail before outreach. No inferred email association, paid AI, write or send.",
       schema: batchProfileContextInput,
-      call: a => new BatchProfileContextService((s.reads as any).db).read(p, a),
+      call: a => s.reads.batch(p, a),
     },
     {
       name: "read_profile_details", scope: "crm:read", readOnly: true,
