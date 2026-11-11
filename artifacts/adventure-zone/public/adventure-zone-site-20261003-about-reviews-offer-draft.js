@@ -809,7 +809,7 @@
     .package-page-header .logo { max-width: 240px; }
     .package-page .contact { padding: 20px; }
     @media (max-width: 767px) {
-      :host { width: 100vw !important; max-width: none !important; margin-left: calc((100% - 100vw) / 2) !important; }
+      :host { width: 100% !important; max-width: 100% !important; min-width: 0; margin-left: 0 !important; }
       .az-site { width: 100%; max-width: none; margin: 0; }
     }
 
