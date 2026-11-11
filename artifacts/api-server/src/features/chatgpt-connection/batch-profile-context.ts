@@ -66,10 +66,12 @@ export class BatchProfileContextService {
     const scope = inputHash(["batch-profile-context", p.ownerId, p.connectionId, profileId, section, revision]);
     const after = decode(cursor, scope);
     try {
+      const params: unknown[] = [profileId, after?.at ?? null, after?.id ?? null];
+      if (section === "drafts") params.push(p.ownerId, p.connectionId);
       const rows = (await this.db.query(`SELECT r.* FROM (${metadataSql[section]}) r
         WHERE ($2::timestamptz IS NULL OR (r.sort_at,r.id)<($2::timestamptz,$3::uuid))
         ORDER BY r.sort_at DESC,r.id DESC LIMIT 11`,
-        [profileId, after?.at ?? null, after?.id ?? null, p.ownerId, p.connectionId])).rows;
+        params)).rows;
       const items = rows.slice(0, 10).map(({sort_at, ...row}) => row);
       const last = rows[9];
       return { availability: "available" as const, items, truncated: rows.length > 10,
