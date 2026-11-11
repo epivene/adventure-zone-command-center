@@ -158,7 +158,7 @@ export class ConnectionReadService {
     else if (section === "bookings")
       select = `SELECT id,'booking' AS kind,name AS subject,status,starts_at AS occurred_at,ends_at,updated_at AS sort_at,updated_at AS revision_at FROM bookings WHERE organization_id=$1`;
     else
-      select = `SELECT d.id,'document' AS kind,d.display_name AS subject,d.lifecycle AS status,d.updated_at AS sort_at,d.updated_at AS revision_at FROM business_documents d WHERE d.lifecycle<>'deleted' AND EXISTS(SELECT 1 FROM business_document_links l WHERE l.document_id=d.id AND (l.organization_id=$1 OR l.booking_id IN (${bookingIds})))`;
+      select = `SELECT d.id,'document' AS kind,d.display_name AS subject,d.lifecycle AS status,d.current_version_id,d.updated_at AS sort_at,d.updated_at AS revision_at FROM business_documents d WHERE d.lifecycle<>'deleted' AND EXISTS(SELECT 1 FROM business_document_links l WHERE l.document_id=d.id AND (l.organization_id=$1 OR l.booking_id IN (${bookingIds})))`;
     const rows = (
       await this.db.query(
         `SELECT r.*,sort_at::text AS cursor_at FROM (${select}) r WHERE ($2::timestamptz IS NULL OR (sort_at,id)<($2::timestamptz,$3::uuid)) ORDER BY sort_at DESC,id DESC LIMIT 11`,
@@ -184,6 +184,7 @@ export class ConnectionReadService {
           researchedAt: iso(row.researched_at), verifiedAt: iso(row.verified_at),
         } : {}),
         ...(section === "bookings" ? { endsAt: iso(row.ends_at) } : {}),
+        ...(section === "documents" ? { versionId: row.current_version_id } : {}),
         status: clip(row.status),
         text: text.slice(0, 1500),
         excerpt: text.length > 1500,
