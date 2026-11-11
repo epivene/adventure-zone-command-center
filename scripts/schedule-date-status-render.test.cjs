@@ -37,3 +37,22 @@ test('boss schedule shows saved dates with profile navigation but no owner repai
 test('date checks disappear when every displayed event has dates without review work',()=>{
  assert.equal(renderToStaticMarkup(React.createElement(ScheduleDateIssues,{events:[{id:'ready',startsAt:new Date('2026-08-06T17:00:00Z')}]})),'');
 });
+test('a selected season separates older date clues without losing their repair links',()=>{
+ const current={...saved,id:'current',name:'Current setup review',dateProvenance:{...provenance,rawPublic:{start:'2027-07-21T06:00:00Z',end:'2027-07-26T05:59:59Z'}}};
+ const old={...saved,id:'old',name:'Historical mixed-year review',dateProvenance:{...provenance,rawPublic:{start:'2009-08-05',end:'2009-08-05'},rawReservation:{start:'2026-08-03',end:'2026-08-10'}}};
+ const html=renderToStaticMarkup(React.createElement(ScheduleDateIssues,{season:'2027',events:[old,current]}));
+ assert.match(html,/Date checks \(1\)/);
+ assert.match(html,/Other-season date reviews \(1\)/);
+ assert.ok(html.indexOf('Current setup review')<html.indexOf('Other-season date reviews'));
+ assert.ok(html.indexOf('Historical mixed-year review')>html.indexOf('Other-season date reviews'));
+ assert.match(html,/event-date-coverage\?bookingId=old/);
+ assert.doesNotMatch(html,/bookingId=old&amp;season=2027/);
+});
+test('unknown and cross-year reviews remain in the current season queue',()=>{
+ const cross={...saved,id:'cross',name:'Cross-year access',dateProvenance:{...provenance,rawPublic:{start:'2026-12-31',end:'2027-01-02'}}};
+ const sentinel={...saved,id:'sentinel',name:'Open-ended import',dateProvenance:{...provenance,rawPublic:{start:'2026-01-01',end:'9999-12-31'}}};
+ const html=renderToStaticMarkup(React.createElement(ScheduleDateIssues,{season:'2027',events:[cross,sentinel,{id:'unknown',name:'Unknown season',startsAt:null}]}));
+ assert.match(html,/Date checks \(3\)/);
+ assert.doesNotMatch(html,/Other-season date reviews/);
+ assert.match(html,/Unknown season/); assert.match(html,/Open-ended import/);
+});

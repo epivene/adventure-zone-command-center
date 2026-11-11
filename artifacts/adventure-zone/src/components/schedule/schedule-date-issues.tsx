@@ -7,6 +7,29 @@ type DateReviewEvent = {
   dateProvenance?: ScheduleDateProvenance;
 };
 
+/** Group date clues for display only; never promote them to a verified season. */
+function savedDatesOutsideSeason(event: DateReviewEvent, season?: string): boolean {
+  if (!season || !/^\d{4}$/.test(season)) return false;
+  // An explicit season in a booking name is still a reason to review it here,
+  // even when its imported dates disagree.
+  if (new RegExp(`\\b${season}\\b`).test(event.name ?? event.displaySubject ?? "")) return false;
+  const raw = event.dateProvenance;
+  const values = [event.startsAt, raw?.rawPublic.start, raw?.rawPublic.end,
+    raw?.rawReservation.start, raw?.rawReservation.end];
+  const years: number[] = [];
+  for (const value of values) {
+    if (!value) continue;
+    const date = value instanceof Date ? value : new Date(value);
+    if (!Number.isFinite(date.getTime())) continue;
+    // A sentinel end means the season is unknown, not a completed old window.
+    if (date.getUTCFullYear() >= 2100) return false;
+    const timeZone = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? "UTC" : "America/Denver";
+    years.push(Number(new Intl.DateTimeFormat("en-US", { year: "numeric", timeZone }).format(date)));
+  }
+  return years.length > 0 && (Math.max(...years) < Number(season) || Math.min(...years) > Number(season));
+}
+
 export function ScheduleDateNotice({ event, readOnly = false }: { event: DateReviewEvent; readOnly?: boolean }) {
   const status = scheduleDateStatus(event);
   if (status.kind === "ready") return null;
@@ -23,16 +46,21 @@ export function ScheduleDateIssues({ events, profileBasePath = "/profiles", seas
 }) {
   const issues = events.filter(event => scheduleDateStatus(event).kind !== "ready");
   if (!issues.length) return null;
-  const reviewCount = issues.filter(event => scheduleDateStatus(event).kind === "review").length;
-  const missingCount = issues.length - reviewCount;
-  return <details className="rounded-xl border border-amber-200 bg-white text-sm">
+  const currentIssues = issues.filter(event => !savedDatesOutsideSeason(event, season));
+  const otherIssues = issues.filter(event => savedDatesOutsideSeason(event, season));
+  function renderIssues(rows: DateReviewEvent[], otherSeasons = false) {
+    if (!rows.length) return null;
+    const reviewCount = rows.filter(event => scheduleDateStatus(event).kind === "review").length;
+    const missingCount = rows.length - reviewCount;
+    return <details className="rounded-xl border border-amber-200 bg-white text-sm">
     <summary className="min-h-11 cursor-pointer px-4 py-3 font-semibold text-amber-900">
-      Date checks ({issues.length}){reviewCount ? ` · ${reviewCount} need review` : ""}{missingCount ? ` · ${missingCount} missing dates` : ""}
+      {otherSeasons ? `Other-season date reviews (${rows.length})` : `Date checks (${rows.length})`}{reviewCount ? ` · ${reviewCount} need review` : ""}{missingCount ? ` · ${missingCount} missing dates` : ""}
     </summary>
     <div className="grid gap-3 border-t border-amber-100 p-4">
-      {issues.map(event => {
+      {otherSeasons ? <p className="text-slate-600">These saved date clues are outside {season}. They remain available for review; this grouping does not verify dates or change bookings.</p> : null}
+      {rows.map(event => {
         const query = new URLSearchParams({ bookingId: event.id });
-        if (season) query.set("season", season);
+        if (season && !otherSeasons) query.set("season", season);
         const href = event.organizationId ? `${profileBasePath}/${encodeURIComponent(event.organizationId)}?${query}`
           : readOnly ? null : `/bookings/${encodeURIComponent(event.id)}`;
         const name = event.name ?? event.displaySubject ?? "Event";
@@ -43,4 +71,6 @@ export function ScheduleDateIssues({ events, profileBasePath = "/profiles", seas
       })}
     </div>
   </details>;
+  }
+  return <div className="grid gap-3">{renderIssues(currentIssues)}{renderIssues(otherIssues, true)}</div>;
 }
