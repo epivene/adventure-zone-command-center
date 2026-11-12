@@ -1,4 +1,5 @@
 import { ContactCreateService } from "./contact-create-service";
+import { EventDateCorrectionService } from "./event-date-correction";
 import { ConnectionInvoicePayments } from "./invoice-payment-tools";
 import { ConnectionConventionService } from "./convention-tools";
 import { WebsiteInquiryReads } from "./website-inquiry-reads";
@@ -159,6 +160,7 @@ export function mountChatGPTConnection(
         });
       },
       services: {
+        eventDates: new EventDateCorrectionService(db),
         invoicePayments: new ConnectionInvoicePayments(db),
         contacts: new ContactCreateService(db),
         conventions: new ConnectionConventionService(db),
@@ -178,6 +180,7 @@ export function mountChatGPTConnection(
     }),
   );
 }
+
 
 
 
