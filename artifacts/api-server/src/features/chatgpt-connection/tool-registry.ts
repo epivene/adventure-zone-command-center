@@ -1,4 +1,5 @@
 import { createProfileContactInput, type ContactCreateService } from "./contact-create-service";
+import { eventDateCorrectionTools, type EventDateCorrectionService } from "./event-date-correction";
 import { invoicePaymentTools, type ConnectionInvoicePayments } from "./invoice-payment-tools";
 import { conventionTools, type ConnectionConventionService } from "./convention-tools";
 import { inquiryProcessInput, inquiryProcessApplyInput } from "./website-inquiry-processing";
@@ -29,6 +30,7 @@ import { appRecordsInput, appRecordInput } from "./profile-record-reads";
 import { closeFollowupSchema, type DraftFollowupService } from "./draft-followup-service";
 import type { OperationStore } from "./operation-store";
 export type ConnectionServices = {
+  eventDates?: EventDateCorrectionService;
   invoicePayments?: ConnectionInvoicePayments;
   contacts?: ContactCreateService;
   conventions?: ConnectionConventionService;
@@ -370,6 +372,7 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
       schema: mappingRepairApplyInput.extend({ requestKey }).strict(),
       call: ({requestKey,...a}) => s.draftFiling!.mappingRepair.apply(p,{requestKey},a) },
   );
+  tools.push(...eventDateCorrectionTools(s.eventDates, p));
   tools.push(...emailAttentionTools(s.attention, p));
   tools.push(...bookingWorkTools(s.work, p));
   tools.push(
@@ -400,6 +403,7 @@ export function connectionTools(s: ConnectionServices, p: ConnectionPrincipal) {
   tools.push(...invoicePaymentTools(s.invoicePayments,p));
   return tools;
 }
+
 
 
 
