@@ -218,12 +218,13 @@ export default function EventProfilePage() {
 
         {profileId ? <ProfileDeadlines key={profileId} profileId={profileId} /> : null}
         <FestivalProfileWorkspace key={profileId} profile={data} ratingSummary={data.wrapUpRatingSummary} profileEmails={profileEmails}
-          onFollowUp={() => setFollowUpOpen(true)} onBack={goBack} originLabel={profileOrigin} onNoteSaved={loadProfile}
+          onFollowUp={() => setFollowUpOpen(true)} onBack={goBack} originLabel={profileOrigin} onNoteSaved={loadProfile} onDatesChanged={loadProfile}
           calendarAction={profileId ? <ProfileCalendarAction key={profileId} profileId={profileId} bookings={data.bookings ?? []} /> : null}
           toolsOpen={profileEditing || Boolean(profileSection) || action === "call" || researchOpen}
           legacyTools={
           <SimpleFullProfile
             compact
+            showDateReview={false}
             profileEmails={profileEmails}
             profile={data}
             onSectionChange={setProfileSection}
@@ -335,4 +336,5 @@ export default function EventProfilePage() {
     </ProfilePageFrame>
   );
 }
+
 

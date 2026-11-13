@@ -13,6 +13,7 @@ export type CoverageFact = {
   id: string; startsOn: string; endsOn: string | null; status: "confirmed" | "expected" | "needs_review";
   active: boolean; rationale: string; sourceUrl: string | null; sourceTitle: string;
   sourceRecordType: string | null; sourceRecordId: string | null;
+  supersededById?: string | null;
 };
 
 export const eventDateCoverageKeys = {
@@ -31,3 +32,4 @@ export const startCoverageRun = (input: { organizationIds?: string[]; batchSize?
 export const getCoverageRun = (runId: string) => apiGet<CoverageRun>(`/event-date-coverage/runs/${encodeURIComponent(runId)}`);
 export const retryCoverageItem = (itemId: string) => apiPost(`/event-date-coverage/items/${encodeURIComponent(itemId)}/retry`, {});
 export const reviewCoverageFact = (factId: string, decision: "approve_confirmed" | "approve_expected" | "dismiss") => apiPost(`/event-date-coverage/facts/${encodeURIComponent(factId)}/review`, { decision });
+

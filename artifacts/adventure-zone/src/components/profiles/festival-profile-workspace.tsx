@@ -14,6 +14,7 @@ import { FestivalEditionEditor } from "./festival-edition-editor";
 import { editionGroups } from "./festival-edition-fields";
 import { FestivalCrewLocation } from "./festival-crew-location";
 import { ProfileLatestNote } from "./profile-latest-note";
+import { ProfileEventDateReview } from "./profile-event-date-review";
 import { ProfileLatestEmail } from "./profile-latest-email";
 import type { ProfileGoogleEmailState } from "@/components/google-workspace/use-profile-google-email";
 
@@ -26,10 +27,11 @@ function Detail({ label, value, url }: { label: string; value?: string | null; u
     <p className="mt-1 whitespace-pre-line break-words text-sm leading-6">{value ? url ? <a href={value} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-4">Open {label.toLowerCase()}</a> : value : <span className="text-muted-foreground">Not added yet</span>}</p></div>;
 }
 
-export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, onBack, originLabel, legacyTools, toolsOpen = false, onNoteSaved, children, profileEmails, calendarAction }: {
+export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, onBack, originLabel, legacyTools, toolsOpen = false, onNoteSaved, onDatesChanged, children, profileEmails, calendarAction }: {
   profile: EventProfile; ratingSummary?: { average: number | null; count: number };
   onFollowUp(): void; onBack(): void; originLabel: string; legacyTools: ReactNode; toolsOpen?: boolean;
   onNoteSaved?(): Promise<void> | void;
+  onDatesChanged?(): Promise<void> | void;
   children?: ReactNode;
   calendarAction?: ReactNode;
   profileEmails?: ProfileGoogleEmailState;
@@ -112,6 +114,7 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
                 <div className="flex flex-wrap gap-2"><Button disabled={stopEditing} variant="outline" size="sm" onClick={() => { setSavedNotice(false); setEditor({ edition: edition ?? null, year }); }}>{edition ? "Edit event details" : "Add event details"}</Button><Button disabled={stopEditing} variant="ghost" size="sm" onClick={() => setEditor({ edition: null, year: Math.max(new Date().getFullYear(), ...editions.map(item => item.year)) + 1 })}>Add another year</Button></div>
                 <Accordion type="multiple">{editionGroups.map(group => <AccordionItem value={group.title} key={group.title}><AccordionTrigger>{group.title}</AccordionTrigger><AccordionContent><div className="grid gap-4 sm:grid-cols-2">{group.fields.map(field => <Detail key={field.key} label={field.label} value={field.type === "date" && detail[field.key] ? calendarLabel(detail[field.key]) : detail[field.key]} url={field.type === "url"} />)}</div></AccordionContent></AccordionItem>)}</Accordion>
               </>}
+            <ProfileEventDateReview profileId={profile.id} onApplied={onDatesChanged} bookingTakesPriority={profile.effectiveEventDate?.displayStatus === "booked"} />
           </CardContent>
         </Card>
       </div>
@@ -138,3 +141,4 @@ export function FestivalProfileWorkspace({ profile, ratingSummary, onFollowUp, o
     </details>
   </section>;
 }
+
