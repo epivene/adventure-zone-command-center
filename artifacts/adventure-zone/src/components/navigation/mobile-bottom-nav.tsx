@@ -1,10 +1,10 @@
 import { bookingNavigation } from "@/features/navigation/booking-navigation";
 import { Link, useLocation } from "wouter";
-import { FolderOpen, Bot, ArrowLeft, CalendarDays, ContactRound, House, Inbox, LayoutGrid, MailQuestion, MapPinned, Megaphone, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
+import { FolderOpen, CalendarDays, ContactRound, House, Inbox, LayoutGrid, MailQuestion, MapPinned, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import { AppMenu } from "./app-menu";
 import type { ToolFinderItem } from "./tool-finder";
-import { readBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
+import { type AdminWorkspace } from "@/lib/admin-workspace";
 
 type MobileItem = { href: string; label: string; icon: LucideIcon };
 
@@ -19,14 +19,6 @@ function itemsForWorkspace(workspace: AdminWorkspace): MobileItem[] {
       { href: "/operations/legs", label: "Legs", icon: MapPinned },
       { href: "/manager-communications", label: "Comms", icon: MessageSquare },
       { href: "/manager-crew", label: "Crew", icon: UsersRound },
-    ];
-  }
-  if (workspace === "marketing") {
-    const bookingReturnPath = readBookingReturnPath();
-    return [
-      { href: "/command", label: "Panel", icon: LayoutGrid },
-      { href: "/marketing", label: "Marketing", icon: Megaphone },
-      ...(bookingReturnPath ? [{ href: bookingReturnPath, label: "Booking", icon: ArrowLeft }] : []),
     ];
   }
   return [{ href: "/command", label: "Panel", icon: LayoutGrid }];

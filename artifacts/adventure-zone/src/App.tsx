@@ -2,7 +2,6 @@ import BookingWorkPage from "./pages/BookingWorkPage";
 import ProfileDuplicatesPage from "./pages/ProfileDuplicatesPage";
 import { RemindersProvider, RemindersPage } from "@/features/deadline-rules/reminders";
 import { WorkspaceSessionProvider } from "@/features/assistant-workspace/WorkspaceSessionProvider";
-import AssistantOfflinePage from "@/pages/AssistantOfflinePage";
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
 import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
 import { ADMIN_AFTERMATH_PATH, ADMIN_WRAP_UP_PATH } from "@/lib/admin-aftermath-route";
@@ -18,7 +17,6 @@ import { Toaster } from "@workspace/avz-crm/components/ui/toaster";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { AssistantContextProvider } from "@/features/assistant/assistant-context";
 import {
-  canonicalActMigrationPath,
   canonicalCallLogPath,
   canonicalCallsPath,
   canonicalProfilePath,
@@ -57,7 +55,6 @@ const ManagerShell = lazy(() => import("@/components/manager/manager-shell").the
 const AppShell = lazy(() => import("@/components/navigation/app-shell").then(({ AppShell }) => ({ default: AppShell })));
 
 const AdminCommandPanelPage = lazy(() => import("@/pages/AdminCommandPanelPage"));
-const MarketingHomePage = lazy(() => import("@/pages/MarketingHomePage"));
 const DesignStudioPage = lazy(() => import("@/pages/DesignStudioPage"));
 const DesignStudioEditorPage = lazy(() => import("@/pages/DesignStudioEditorPage"));
 const TodayPage = lazy(() => import("@/pages/TodayPage"));
@@ -106,8 +103,6 @@ const BossInvoicesContractsPage = lazy(() => import("@/pages/BossInvoicesContrac
 const BusinessDocumentImportPage = lazy(() => import("@/pages/BusinessDocumentImportPage"));
 const EmailsPage = lazy(() => import("@/pages/EmailsPage"));
 const EmailReviewPage = lazy(() => import("@/pages/EmailReviewPage"));
-const ActMigrationPage = lazy(() => import("@/pages/ActMigrationPage"));
-const ActRecoveryPage = lazy(() => import("@/pages/ActRecoveryPage"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
 const BossSignInPage = lazy(() => import("@/pages/BossSignInPage"));
@@ -193,13 +188,12 @@ function SignInPage() {
         {error ? <p className="mt-3 text-sm font-medium text-destructive" role="alert">{error}</p> : null}
         <Button className="mt-4 w-full" disabled={submitting || password.length === 0} type="submit">{submitting ? "Signing in…" : "Sign in"}</Button>
       </form>
-      <Link href="/assistant/offline" className="mt-4 inline-flex min-h-12 items-center text-sm text-teal-800 underline">Open saved offline workspace</Link>
     </AuthScreen>
   );
 }
 
 function Landing() {
-  return <><CommandTerminalLanding /><div className="p-4 text-center"><Link href="/assistant/offline" className="inline-flex min-h-12 items-center text-sm text-teal-800 underline">Open saved offline workspace</Link></div></>;
+  return <CommandTerminalLanding />;
 }
 
 function LoadingScreen() {
@@ -242,11 +236,6 @@ function ProfilesRedirect() {
   return <Redirect to={canonicalProfilesPath(search ? `?${search}` : "")} />;
 }
 
-function ActMigrationRedirect() {
-  const search = useSearch();
-  return <Redirect to={canonicalActMigrationPath(search ? `?${search}` : "")} />;
-}
-
 function SettingsStub() {
   const tools = [
     ["Shared booking work", "/settings/booking-work", "Review assignments and release or hand off existing work without losing progress."],
@@ -258,8 +247,6 @@ function SettingsStub() {
     ["Attendance history", "/imports/attendance-history", "Review historical attendance records before attaching them to profiles."],
     ["Email templates", "/settings/communication-templates", "Maintain reviewed communication templates and placeholder wording."],
     ["Paper notes", "/settings/paper-notes", "Review imported paper booking notes."],
-    ["ACT import", "/settings/act-migration", "Migration and source import tools."],
-    ["ACT recovery", "/settings/act-recovery", "Recover and repair archived ACT records."],
     ["Call scripts", "/settings/call-scripts", "Manage guided calling copy and branches."],
     ["Packages & resources", "/settings/packages-resources", "Maintain shared package and resource defaults."],
     ["Contracts & signing", "/settings/contracts", "Maintain future-draft signer and insurance recipient defaults."],
@@ -270,7 +257,7 @@ function SettingsStub() {
       <header>
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">Administrator maintenance</p>
         <h1 className="mt-1 text-3xl font-bold text-foreground">Admin Tools</h1>
-        <p className="mt-2 text-muted-foreground">Imports, recovery, shared setup, and system-level tools stay here instead of cluttering Booking, Marketing, or Operations.</p>
+        <p className="mt-2 text-muted-foreground">Connections, shared setup, and occasional system maintenance.</p>
       </header>
       <div className="grid gap-3 sm:grid-cols-2">
         {tools.map(([label, href, description]) => (
@@ -282,7 +269,7 @@ function SettingsStub() {
       </div>
       <section className="rounded-xl border border-dashed border-border bg-card p-4">
         <h2 className="font-bold text-foreground">Google Workspace</h2>
-        <p className="mt-1 text-sm text-muted-foreground">The approved Gmail/Calendar connection, sync, backfill, and review controls plug into Admin Tools as that implementation lands. Booking and Marketing consume the same shared synced data.</p>
+        <p className="mt-1 text-sm text-muted-foreground">The approved Gmail/Calendar connection, sync, backfill, and review controls plug into Admin Tools as that implementation lands. Booking uses the shared synced data.</p>
       </section>
     </div>
   );
@@ -377,10 +364,9 @@ function AdminProtectedApp() {
     <AssistantContextProvider><WorkspaceSessionProvider>
       <RemindersProvider><AppShell>
         <Switch>
-          <Route path="/assistant/workspace/:conversationId">{() => null}</Route>
-          <Route path="/assistant/workspace">{() => null}</Route>
+          <Route path="/assistant/workspace/:conversationId"><Redirect to="/settings/chatgpt-connection" /></Route>
+          <Route path="/assistant/workspace"><Redirect to="/settings/chatgpt-connection" /></Route>
           <Route path="/command" component={AdminCommandPanelPage} />
-          <Route path="/marketing" component={MarketingHomePage} />
           <Route path="/design-studio/email-templates" component={SettingsCommunicationTemplatesPage} />
           <Route path="/design-studio/:id" component={DesignStudioEditorPage} />
           <Route path="/design-studio" component={DesignStudioPage} />
@@ -442,10 +428,7 @@ function AdminProtectedApp() {
           <Route path="/settings/event-date-coverage" component={EventDateCoveragePage} />
           <Route path="/settings/google-workspace/backup"><DriveBackupPage /></Route>
           <Route path="/settings/google-workspace"><SettingsGoogleWorkspacePage /></Route>
-          <Route path="/settings/act-migration" component={ActMigrationPage} />
-          <Route path="/settings/act-recovery" component={ActRecoveryPage} />
           <Route path="/settings" component={SettingsStub} />
-          <Route path="/act-migration"><ActMigrationRedirect /></Route>
           <Route path="/quick-add"><CallsRedirect addMode /></Route>
           <Route path="/office-coordinator" component={OfficeCoordinatorAdminPage} />
           <Route path="/boss-access" component={BossAccessPage} />
@@ -466,7 +449,7 @@ function AppRoutes() {
   return (
     <Suspense fallback={<LoadingScreen />}>
       <Switch>
-        <Route path="/assistant/offline" component={AssistantOfflinePage} />
+        <Route path="/assistant/offline"><Redirect to="/" /></Route>
         <Route path="/" component={HomeRoute} />
         <Route path="/sign-in" component={SignInPage} />
         <Route path="/office/sign-in"><OfficeAuthProvider><OfficeSignInPage /></OfficeAuthProvider></Route>

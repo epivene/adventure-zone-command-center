@@ -1,5 +1,5 @@
-import { Check, ChevronDown, House, LayoutGrid, Megaphone, MapPinned, Settings2 } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Check, ChevronDown, House, LayoutGrid, MapPinned, Settings2 } from "lucide-react";
+import { Link } from "wouter";
 import { cn } from "@workspace/avz-crm/lib/utils";
 
 import {
@@ -9,11 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/avz-crm/components/ui/dropdown-menu";
-import {
-  clearBookingReturnPath,
-  saveBookingReturnPath,
-  type AdminWorkspace,
-} from "@/lib/admin-workspace";
+import type { AdminWorkspace } from "@/lib/admin-workspace";
 
 const workspaceLabel: Record<AdminWorkspace, string> = {
   command: "Command Panel",
@@ -26,12 +22,10 @@ const workspaceLabel: Record<AdminWorkspace, string> = {
 const workspaceItems = [
   { workspace: "command" as const, href: "/command", label: "Command Panel", icon: LayoutGrid },
   { workspace: "booking" as const, href: "/today", label: "Booking", icon: House },
-  { workspace: "marketing" as const, href: "/marketing", label: "Marketing", icon: Megaphone },
   { workspace: "operations" as const, href: "/operations/legs", label: "Legs & Operations", icon: MapPinned },
 ];
 
 export function WorkspaceSwitcher({ workspace }: { workspace: AdminWorkspace }) {
-  const [location] = useLocation();
 
   return (
     <DropdownMenu>
@@ -63,11 +57,6 @@ export function WorkspaceSwitcher({ workspace }: { workspace: AdminWorkspace }) 
             >
               <Link
                 href={item.href}
-                onClick={() => {
-                  if (item.workspace !== "marketing") return;
-                  if (workspace === "booking") saveBookingReturnPath(location);
-                  else if (workspace === "command") clearBookingReturnPath();
-                }}
               >
                 <Icon className="mr-2 h-4 w-4 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>

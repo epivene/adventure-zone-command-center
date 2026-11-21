@@ -14,8 +14,6 @@ const adminRoutes = [
   "/manager-crew",
   "/manager-issues",
   "/settings/packages-resources",
-  "/settings/act-migration",
-  "/settings/act-recovery",
   "/quick-add",
 ];
 

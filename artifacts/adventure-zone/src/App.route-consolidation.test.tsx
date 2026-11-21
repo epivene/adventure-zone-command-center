@@ -9,7 +9,7 @@ describe("legacy route consolidation", () => {
     expect(source).toContain('<Route path="/calls/log" component={MobileCallLogPage} />');
     expect(source).toContain('<Route path="/schedule" component={SchedulePage} />');
     expect(source).toContain('<Route path="/profiles" component={OrganizationsPage} />');
-    expect(source).toContain('<Route path="/settings/act-migration" component={ActMigrationPage} />');
+    expect(source).not.toContain("ActMigrationPage");
   });
 
   it("redirects legacy aliases instead of mounting their old pages", () => {
@@ -21,7 +21,6 @@ describe("legacy route consolidation", () => {
       "/routes",
       "/organizations",
       "/event-profiles/:id",
-      "/act-migration",
     ]) {
       expect(source).toContain(`path="${legacyPath}"`);
     }

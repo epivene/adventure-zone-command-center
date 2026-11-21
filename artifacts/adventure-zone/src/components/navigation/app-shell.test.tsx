@@ -83,8 +83,6 @@ describe("workspace-aware Admin shell", () => {
     expect(menuSource).toContain("DropdownMenuSubContent");
     for (const href of [
       "/settings/paper-notes",
-      "/settings/act-migration",
-      "/settings/act-recovery",
       "/settings/packages-resources",
     ]) expect(menuSource).toContain(`href: "${href}"`);
   });
@@ -100,32 +98,27 @@ describe("workspace-aware Admin shell", () => {
     expect(mobileSource).toContain("env(safe-area-inset-bottom)");
   });
 
-  it("restores a saved Booking destination from Marketing", () => {
-    expect(shellSource).toContain("readBookingReturnPath");
-    expect(shellSource).toContain('label: "Back to Booking"');
-    expect(mobileSource).toContain('label: "Booking", icon: ArrowLeft');
+  it("does not expose Marketing in primary or mobile navigation", () => {
+    expect(shellSource).not.toContain('href: "/marketing"');
+    expect(mobileSource).not.toContain('href: "/marketing"');
+    expect(switcherSource).not.toContain('href: "/marketing"');
   });
 
-  it("keeps Messages and Assistant in the desktop overflow with accessible state", () => {
+  it("keeps Messages in the desktop overflow with accessible state", () => {
     expect(shellSource).toContain("<AppMenu workspace={workspace} unreadMessages={unreadMessages} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} />");
     expect(menuSource).toContain('href="/manager-communications"');
     expect(menuSource).toContain("unreadMessages > 0");
     expect(menuSource).toContain('aria-label={unreadMessages ? `Messages, ${unreadMessages} unread` : "Messages"}');
-    expect(menuSource).toContain("openAssistant");
-    expect(menuSource).toContain("Assistant workspace");
-    expect(menuSource).toContain("Older conversations & tools");
     expect(shellSource).not.toContain('<AssistantLauncher placement="toolbar" />');
     expect(launcherSource).toContain('placement?: "toolbar" | "floating"');
-    expect(launcherSource).toContain('aria-label="Open Assistant"');
+    expect(launcherSource).toContain('aria-label="ChatGPT connection"');
   });
 
-  it("keeps the shared assistant drawer and hides mobile navigation on full profiles", () => {
+  it("removes the assistant drawer and keeps immersive profile navigation", () => {
     expect(shellSource).toContain("immersiveProfile");
     expect(shellSource).toContain('location.startsWith("/profiles/")');
     expect(shellSource).toContain('location.startsWith("/event-profiles/")');
-    expect(shellSource).toContain("const { isOpen } = useAssistantContext()");
-    expect(shellSource).toContain("if (isOpen) setAssistantRequested(true)");
-    expect(shellSource).toContain("<AssistantDrawer />");
+    expect(shellSource).not.toContain("<AssistantDrawer />");
     expect(shellSource).toContain('{!immersiveProfile ? <div className="print:hidden"><MobileBottomNav');
   });
 });

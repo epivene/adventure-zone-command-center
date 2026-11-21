@@ -632,7 +632,7 @@ async function startBackgroundWorkers() {
   googleDocumentLoop.start();
   googleDriveBackupLoop?.start();
   voicemailRetentionLoop.start();
-  marketingCampaignLoop.start();
+  // Marketing campaigns are retired; do not send queued campaigns.
   earlyBirdPromoLoop.start();
   if(internalAiEnabled())eventDateCoverageLoop.start();
   deadlineWorker.start();

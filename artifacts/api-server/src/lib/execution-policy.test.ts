@@ -14,6 +14,7 @@ describe("lean execution policy", () => {
   it.each([
     "/assistant/workspace/runs",
     "/assistant/commands",
+    "/ai-suggestions/analyze",
     "/migration/act/start",
     "/migration/act-replacement/runs",
     "/act-recovery/runs",
@@ -23,23 +24,29 @@ describe("lean execution policy", () => {
   it.each([
     "/follow-ups/id/snooze",
     "/com/draft-context",
+    "/public/website-inquiries",
+    "/website-inquiries",
+    "/event-profiles",
+    "/business-documents",
+    "/contacts",
+    "/today",
     "/chatgpt/mcp",
     "/opportunities/id/draft/send",
     "/opportunities/id/draft/schedule",
   ])("preserves normal API traffic at %s", async (path) =>
     expect((await request(app()).post(path)).status).toBe(200),
   );
-  it("retains read-only Act history", async () =>
+  it("disables read-only Act tooling without removing imported CRM history", async () =>
     expect(
       (await request(app()).get("/migration/act-replacement/runs/latest"))
         .status,
-    ).toBe(200));
-  it("permits explicit opt-in", async () =>
+    ).toBe(410));
+  it("ignores stale opt-in flags", async () =>
     expect(
       (
         await request(app({ INTERNAL_AI_ENABLED: "true" })).post(
           "/assistant/workspace/runs",
         )
       ).status,
-    ).toBe(200));
+    ).toBe(410));
 });
