@@ -1,8 +1,7 @@
 import type { RequestHandler } from "express";
-export const internalAiEnabled = (env: NodeJS.ProcessEnv = process.env) =>
-  env.INTERNAL_AI_ENABLED === "true";
-export const legacyActEnabled = (env: NodeJS.ProcessEnv = process.env) =>
-  env.LEGACY_ACT_MIGRATION_ENABLED === "true";
+// Retired systems cannot be re-enabled by stale deployment environment flags.
+export const internalAiEnabled = (_env: NodeJS.ProcessEnv = process.env) => false;
+export const legacyActEnabled = (_env: NodeJS.ProcessEnv = process.env) => false;
 export function executionPolicy(
   environment = () => process.env,
 ): RequestHandler {
@@ -23,7 +22,6 @@ export function executionPolicy(
     }
     if (
       !legacyActEnabled(env) &&
-      !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
       /^\/(migration\/act(?:-replacement)?(?:\/|$)|act-recovery(?:\/|$))/.test(
         path,
       )

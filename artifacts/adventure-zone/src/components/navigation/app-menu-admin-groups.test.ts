@@ -8,22 +8,15 @@ describe("Admin Tools menu organization", () => {
     for (const label of ["Data & Imports", "Business Setup", "Connections", "System"]) {
       expect(source).toContain(`label: "${label}"`);
     }
-    expect(source).toContain('label="Admin Tools"');
+    expect(source).toContain('label="Administration"');
     expect(source).toContain("nestedGroups");
     expect(source).toContain("<DropdownMenuSub>");
     expect(source).toContain("<DropdownMenuSubContent");
   });
 
-  it("keeps ACT recovery reachable from Data & Imports", () => {
-    const dataImportsStart = source.indexOf('label: "Data & Imports"');
-    const actImport = source.indexOf('{ href: "/settings/act-migration", label: "ACT! import" }', dataImportsStart);
-    const actRecovery = source.indexOf('{ href: "/settings/act-recovery", label: "ACT Recovery" }', dataImportsStart);
-    const attendanceHistory = source.indexOf('{ href: "/imports/attendance-history", label: "Attendance history" }', dataImportsStart);
-
-    expect(dataImportsStart).toBeGreaterThan(-1);
-    expect(actImport).toBeGreaterThan(dataImportsStart);
-    expect(actRecovery).toBeGreaterThan(actImport);
-    expect(attendanceHistory).toBeGreaterThan(actRecovery);
+  it("removes ACT tools while retaining attendance imports", () => {
+    expect(source).not.toMatch(/act-migration|act-recovery/);
+    expect(source).toContain('href: "/imports/attendance-history"');
   });
 
   it("keeps appearance separate from the admin tool groups", () => {

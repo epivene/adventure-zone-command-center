@@ -2,31 +2,27 @@ import { ReminderBell } from "@/features/deadline-rules/reminders";
 import { bookingNavigation } from "@/features/navigation/booking-navigation";
 import { Link, useLocation } from "wouter";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { FolderOpen, Bot, ArrowLeft, CalendarDays, House, Inbox, MailQuestion, MapPinned, ClipboardList, Megaphone, MessageSquare, Palette, UsersRound, type LucideIcon } from "lucide-react";
+import { FolderOpen, CalendarDays, House, Inbox, MailQuestion, MapPinned, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import { AddMenu, AppMenu, getAppMenuSearchItems } from "./app-menu";
 import { MobileBottomNav } from "./mobile-bottom-nav";
 import { ToolFinder } from "./tool-finder";
 import { MessageBubbleLink } from "./message-bubble-link";
 import { WorkspaceSwitcher } from "./workspace-switcher";
-import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
-import { AssistantNavigationContextSync } from "@/components/assistant/assistant-navigation-context-sync";
-import { useAssistantContext } from "@/features/assistant/assistant-context";
 import { rememberProfileOrigin } from "@/lib/profile-navigation";
 import type { OfficeCoordinatorAttentionData } from "@/components/today/office-coordinator-attention";
 import { apiGet } from "@/lib/auth-token";
-import { adminWorkspaceForPath, readBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
+import { adminWorkspaceForPath, type AdminWorkspace } from "@/lib/admin-workspace";
 import { IncomingCallingProvider } from "@/features/calls/incoming-calling-context";
 import { IncomingAvailabilityControl } from "@/components/calls/incoming-availability-control";
 import { IncomingCallPanel } from "@/components/calls/incoming-call-panel";
 
 type PrimaryNavigationItem = { href: string; label: string; icon: LucideIcon; keywords?: readonly string[] };
 
-const AssistantDrawer = lazy(() => import("@/components/assistant/assistant-drawer").then(({ AssistantDrawer }) => ({ default: AssistantDrawer })));
 const OfficeCoordinatorAttention = lazy(() => import("@/components/today/office-coordinator-attention").then(({ OfficeCoordinatorAttention }) => ({ default: OfficeCoordinatorAttention })));
 const OfficeUpdateHistory = lazy(() => import("@/components/office-admin/office-update-history").then(({ OfficeUpdateHistory }) => ({ default: OfficeUpdateHistory })));
 
-function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string | null): PrimaryNavigationItem[] {
+function primaryNavigation(workspace: AdminWorkspace): PrimaryNavigationItem[] {
   if (workspace === "booking") {
     const icons = { home: House, profiles: UsersRound, emails: Inbox, websiteInquiries: MailQuestion, schedule: CalendarDays, documents: FolderOpen };
     return bookingNavigation().map(item => ({ ...item, icon: icons[item.icon] }));
@@ -38,27 +34,17 @@ function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string 
       { href: "/manager-crew", label: "Crew", icon: UsersRound },
     ];
   }
-  if (workspace === "marketing") {
-    return [
-      { href: "/marketing", label: "Marketing Home", icon: Megaphone },
-      { href: "/design-studio", label: "Design Studio", icon: Palette },
-      ...(bookingReturnPath ? [{ href: bookingReturnPath, label: "Back to Booking", icon: ArrowLeft }] : []),
-    ];
-  }
   return [];
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { isOpen } = useAssistantContext();
   const [location] = useLocation();
   const workspace = adminWorkspaceForPath(location);
-  const bookingReturnPath = workspace === "marketing" ? readBookingReturnPath() : null;
-  const primaryItems = primaryNavigation(workspace, bookingReturnPath);
+  const primaryItems = primaryNavigation(workspace);
   const searchItems = [
     ...primaryItems.map(item => ({ href: item.href, label: item.label, category: "Workspace", keywords: item.keywords ? [...item.keywords] : undefined })),
     ...getAppMenuSearchItems(workspace),
   ];
-  const [assistantRequested, setAssistantRequested] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [websiteInquiryCount, setWebsiteInquiryCount] = useState(0);
   const [pendingEmailReviewCount, setPendingEmailReviewCount] = useState(0);
@@ -122,9 +108,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!immersiveProfile) rememberProfileOrigin(location);
   }, [immersiveProfile, location]);
 
-  useEffect(() => {
-    if (isOpen) setAssistantRequested(true);
-  }, [isOpen]);
 
   useEffect(() => {
     let active = true;
@@ -137,7 +120,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <IncomingCallingProvider><div className="min-h-[100dvh] bg-background text-foreground print:min-h-0">
-      <AssistantNavigationContextSync />
       {showWorkspaceNavigation ? (
         <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col bg-sidebar px-3 py-5 text-sidebar-foreground print:hidden md:flex">
           <div className="mb-6 flex items-center gap-3 px-2">
@@ -221,7 +203,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         {location.startsWith("/office-coordinator") ? <Suspense fallback={null}><OfficeUpdateHistory /></Suspense> : null}
       </main>
 
-      {assistantRequested ? <div className="print:hidden"><Suspense fallback={null}><AssistantDrawer /></Suspense></div> : null}
       {!immersiveProfile ? <div className="print:hidden"><MobileBottomNav workspace={workspace} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} searchItems={searchItems} /></div> : null}
       </div>
     </div></IncomingCallingProvider>

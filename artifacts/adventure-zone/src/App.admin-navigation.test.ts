@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 const appSource = readFileSync("src/App.tsx", "utf8");
 const menuSource = readFileSync("src/components/navigation/app-menu.tsx", "utf8");
-const actMigrationSource = readFileSync("src/pages/ActMigrationPage.tsx", "utf8");
 
 describe("admin navigation route contracts", () => {
   it("lands signed-in administrators on the Command Panel", () => {
@@ -13,8 +12,8 @@ describe("admin navigation route contracts", () => {
     expect(appSource).toContain('<Route path="/command" component={AdminCommandPanelPage} />');
   });
 
-  it("keeps the dedicated Marketing workspace and canonical Profiles routes", () => {
-    expect(appSource).toContain('<Route path="/marketing" component={MarketingHomePage} />');
+  it("removes Marketing while preserving canonical Profiles routes", () => {
+    expect(appSource).not.toContain("MarketingHomePage");
     expect(appSource).toContain('<Route path="/profiles" component={OrganizationsPage} />');
     expect(appSource).toContain('<Route path="/profiles/:profileId" component={EventProfilePage} />');
   });
@@ -29,20 +28,14 @@ describe("admin navigation route contracts", () => {
   it("keeps maintenance destinations inside compact Admin Tools groups", () => {
     expect(menuSource).toContain('label: "Data & Imports"');
     expect(menuSource).toContain('{ href: "/settings/paper-notes", label: "Paper notes" }');
-    expect(menuSource).toContain('{ href: "/settings/act-migration", label: "ACT! import" }');
-    expect(menuSource).toContain('{ href: "/settings/act-recovery", label: "ACT Recovery" }');
     expect(menuSource).toContain('{ href: "/settings/call-scripts", label: "Call scripts" }');
     expect(menuSource).toContain('{ href: "/settings/packages-resources", label: "Packages & resources" }');
   });
 
-  it("routes Paper notes and ACT maintenance through canonical settings URLs", () => {
+  it("keeps Paper notes while removing ACT maintenance routes", () => {
+    expect(appSource).not.toMatch(/ActMigrationPage|ActRecoveryPage|settings\/act-/);
     expect(appSource).toContain('<Route path="/settings/paper-notes" component={PaperNotesInboxPage} />');
     expect(appSource).toContain('<Route path="/settings/paper-notes/:batchId">');
-    expect(appSource).toContain('<Route path="/settings/act-migration" component={ActMigrationPage} />');
-    expect(appSource).toContain('<Route path="/settings/act-recovery" component={ActRecoveryPage} />');
-    expect(appSource).toContain('<Route path="/act-migration"><ActMigrationRedirect /></Route>');
-    expect(actMigrationSource).toContain('href="/settings/act-recovery"');
-    expect(actMigrationSource).toContain("Recover archived ACT data");
   });
 
   it("keeps old profile URLs only as compatibility redirects", () => {

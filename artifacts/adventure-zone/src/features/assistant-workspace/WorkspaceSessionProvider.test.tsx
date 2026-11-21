@@ -5,7 +5,7 @@ import { memoryLocation } from "wouter/memory-location";
 import {
   WorkspaceSessionProvider,
   useWorkspaceSession,
-} from "./WorkspaceSessionProvider";
+} from "./LegacyWorkspaceSessionProvider";
 import { workspaceApi } from "./api";
 import { spendingSummary } from "@/test/assistant-spending";
 vi.mock("./api", () => ({

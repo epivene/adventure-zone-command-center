@@ -38,12 +38,9 @@ describe("owner inquiry navigation menu", () => {
     expect(source).not.toContain('{ href: "/office-coordinator", label: "Office Coordinator" }');
   });
 
-  it("keeps the Marketing workspace focused on marketing work", () => {
-    const marketingBlock = source.match(/const marketingGroups:[\s\S]*?const adminToolsGroups/)?.[0] ?? "";
-    expect(marketingBlock).toContain('href: "/marketing"');
-    expect(marketingBlock).toContain('href: "/design-studio"');
-    expect(marketingBlock).not.toContain('href: "/profiles"');
-    expect(marketingBlock).not.toContain('href: "/office-coordinator"');
-    expect(marketingBlock).not.toContain('href: "/research-sources"');
+  it("does not expose retired Marketing or ACT tools in search", () => {
+    for (const workspace of ["command", "booking", "admin", "marketing"] as const) {
+      expect(getAppMenuSearchItems(workspace).map(item => item.href).join(" ")).not.toMatch(/marketing|act-migration|act-recovery/);
+    }
   });
 });

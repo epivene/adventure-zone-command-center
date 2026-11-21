@@ -53,16 +53,6 @@ const operationsGroups: MenuGroup[] = [
   },
 ];
 
-const marketingGroups: MenuGroup[] = [
-  {
-    label: "Marketing",
-    items: [
-      { href: "/marketing", label: "Marketing home" },
-      { href: "/design-studio", label: "Design Studio" },
-    ],
-  },
-];
-
 const adminToolsGroups: MenuGroup[] = [
   {
     label: "Review queues",
@@ -111,7 +101,6 @@ const appearanceOptions = [
 function groupsForWorkspace(workspace: AdminWorkspace): MenuGroup[] {
   if (workspace === "booking") return bookingToolsGroups;
   if (workspace === "operations") return operationsGroups;
-  if (workspace === "marketing") return marketingGroups;
   return [];
 }
 
