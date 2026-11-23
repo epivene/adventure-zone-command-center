@@ -240,7 +240,7 @@ export function ProfileDetailSheet({
                   </CardContent>
                 </Card>
               ) : null}
-              <ProfileAtAGlance profile={data} />
+              <ProfileAtAGlance profile={data} profileId={profileId} onDatesChanged={() => loadProfile(false)} />
               {!nextFollowUp ? (
                 <section className="rounded-md border border-[#8fc9bf] bg-[#eaf6f3] p-4">
                   <p className="font-bold text-[#0f5f5c]">
@@ -431,3 +431,4 @@ export function ProfileDetailSheet({
     </ResponsiveDetailSheet>
   );
 }
+

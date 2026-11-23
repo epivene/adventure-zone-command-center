@@ -17,3 +17,9 @@ This path only promotes an existing verified needs-review fact. It does not edit
 Deploy the API change, refresh the connector's tool catalog, and verify that both tools are exposed. Test the current owner's exact authorized correction through preview/apply and reread the active fact. A merged PR alone does not establish deployment or completed correction.
 
 The motivating Miles City correction is August 18–21 → August 25–28, 2027; site access is August 23–29. No production data is changed by deploying this code.
+
+## Owner profile controls
+
+The main event record and the side profile's At a glance section include **Review event dates**. Open it to compare the current active dates with saved needs-review corrections and their evidence. Choose **Use as confirmed** (or **Use as estimated**) and confirm the displayed replacement. This uses the existing owner-only date-review API and reuses the selected fact; it creates no duplicate date or event record.
+
+The control rereads the active fact before reporting success and refreshes the parent profile. A saved correction with a failed profile refresh is reported separately from a failed save. Bookings, site access, calendar events and follow-ups remain separate. When a booking supplies the displayed date, the control explains that reviewing event evidence will not edit that booking. Boss/read-only presentations do not expose the control. The main profile suppresses the duplicate control in its advanced legacy tools.

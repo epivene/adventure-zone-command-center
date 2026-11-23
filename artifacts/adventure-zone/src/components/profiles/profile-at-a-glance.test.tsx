@@ -24,6 +24,12 @@ const profile = (effectiveEventDate: any = null) => ({
 });
 
 describe("ProfileAtAGlance event dates", () => {
+  it("offers date review on the profile and hides it in a read-only presentation", () => {
+    const view = render(<ProfileAtAGlance profile={profile()} profileId="miles-city" />);
+    expect(screen.getByRole("button", {name:"Review event dates"})).toBeInTheDocument();
+    view.rerender(<ProfileAtAGlance profile={profile()} profileId="miles-city" allowDateManagement={false} />);
+    expect(screen.queryByRole("button", {name:"Review event dates"})).not.toBeInTheDocument();
+  });
   it.each(["booked", "confirmed", "expected"] as const)(
     "labels a %s effective date",
     (displayStatus) => {
@@ -132,3 +138,4 @@ describe("ProfileAtAGlance event dates", () => {
     expect(screen.getByText("Primary contact")).toBeInTheDocument();
   });
 });
+

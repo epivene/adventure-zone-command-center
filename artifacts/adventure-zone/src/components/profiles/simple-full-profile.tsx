@@ -143,6 +143,7 @@ export function SimpleFullProfile({
   editor,
   compact = false,
   profileEmails,
+  showDateReview = true,
 }: {
   profile: EventProfile & { place: EventProfile["place"] & { description?: string | null }; managerReviews?: ProfileManagerReview[] };
   onProfileSaved?: () => Promise<void> | void;
@@ -158,6 +159,7 @@ export function SimpleFullProfile({
   editor?: ReactNode;
   compact?: boolean;
   profileEmails?: ProfileGoogleEmailState;
+  showDateReview?: boolean;
 }) {
   const [internalEditing, setInternalEditing] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSection>(() =>
@@ -616,7 +618,7 @@ export function SimpleFullProfile({
       {compact ? <details><summary className="cursor-pointer text-sm font-semibold">Call brief</summary>
         <ProfileCallBrief profile={profile} emails={emailConversations} readOnly={boss} />
       </details> : <ProfileCallBrief profile={profile} emails={emailConversations} readOnly={boss} onEmails={() => setOpenSection("emails")} onHistory={() => setOpenSection("notes")} onDocuments={() => setOpenSection("documents")} onAddNote={openNoteComposer} />}
-      {!compact ? <details><summary className="cursor-pointer text-sm font-semibold">More profile facts</summary><ProfileAtAGlance profile={profile} allowDateManagement={!boss} /></details> : null}
+      {!compact ? <details><summary className="cursor-pointer text-sm font-semibold">More profile facts</summary><ProfileAtAGlance profile={profile} profileId={showDateReview ? profile.id : undefined} onDatesChanged={onProfileSaved} allowDateManagement={!boss} /></details> : null}
 
       <nav aria-label="Profile sections" className="flex flex-wrap gap-2 border-b pb-3">
         {([
@@ -641,7 +643,7 @@ export function SimpleFullProfile({
       <div id="profile-section-content" className="scroll-mt-4" />
       {!boss && (openSection === "documents" || recordsOpen) ? <ProfileDesignDocuments organizationId={profile.id} contactId={primaryContact?.id ?? null} bookingId={currentBooking?.id ?? null} documentYear={profileDocumentYear} /> : null}
 
-      {compact && openSection === null ? <ProfileAtAGlance profile={profile} allowDateManagement={!boss} /> : null}
+      {compact && openSection === null ? <ProfileAtAGlance profile={profile} profileId={showDateReview ? profile.id : undefined} onDatesChanged={onProfileSaved} allowDateManagement={!boss} /> : null}
       {openSection === null && !compact ? (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.85fr)]">
           <div className="grid gap-5">
@@ -971,3 +973,4 @@ export function SimpleFullProfile({
     </div>
   );
 }
+

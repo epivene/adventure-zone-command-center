@@ -1,4 +1,5 @@
 import { CalendarDays, Mail, Phone, StickyNote, UserRound } from "lucide-react";
+import { ProfileEventDateReview } from "./profile-event-date-review";
 
 type AtAGlanceProfile = {
   place: {
@@ -106,10 +107,14 @@ export function ProfileAtAGlance({
   profile,
   now = new Date(),
   allowDateManagement = true,
+  profileId,
+  onDatesChanged,
 }: {
   profile: AtAGlanceProfile;
   now?: Date;
   allowDateManagement?: boolean;
+  profileId?: string;
+  onDatesChanged?: () => Promise<void> | void;
 }) {
   const nextEvent = profile.effectiveEventDate ?? null;
   const nextEventLabel = nextEvent
@@ -251,6 +256,8 @@ export function ProfileAtAGlance({
         ) : null}
       </dl>
 
+      {allowDateManagement && profileId ? <ProfileEventDateReview profileId={profileId} onApplied={onDatesChanged} bookingTakesPriority={nextEvent?.displayStatus === "booked"} /> : null}
+
       {dealModel ? (
         <div
           className="mt-5 flex items-center gap-4 rounded-md bg-[#182225] px-4 py-4 text-white"
@@ -332,3 +339,4 @@ export function ProfileAtAGlance({
     </section>
   );
 }
+
