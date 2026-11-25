@@ -8,8 +8,9 @@ import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Card, CardContent } from "@workspace/avz-crm/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@workspace/avz-crm/components/ui/empty";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
-import { deletePay, describeError, exportPayCsv, formatCents, listPay, type PayItem, type PayResponse } from "@/features/agent-tax/client";
+import { deletePay, describeError, exportPayCsv, formatCents, listPay, unlinkRecordedIncome, type PayItem, type PayResponse } from "@/features/agent-tax/client";
 import { PayItemDialog } from "./PayItemDialog";
+import { LinkIncomeDialog } from "./LinkIncomeDialog";
 import { PaymentDialog } from "./PaymentDialog";
 
 const LIMIT = 25;
@@ -21,6 +22,9 @@ export function PayTab({ onLedgerChanged }: { onLedgerChanged: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [dialog, setDialog] = useState<{ item: PayItem | null; mode: "weekly" | "manual" } | null>(null);
+  const [linking,setLinking]=useState<PayItem|null>(null);
+  const [unlinking,setUnlinking]=useState<string|null>(null);
+  const [linkError,setLinkError]=useState<string|null>(null);
   const [paying, setPaying] = useState<PayItem | null>(null);
   const [deleting, setDeleting] = useState<PayItem | null>(null);
   const [delError, setDelError] = useState<string | null>(null);
@@ -45,13 +49,14 @@ export function PayTab({ onLedgerChanged }: { onLedgerChanged: () => void }) {
   return (
     <div className="grid gap-4">
       <p className="text-sm text-muted-foreground">
-        Track pay owed to you. Your default is $600.00 per week, added only when you add a week. Unpaid pay is not received income; recording a payment adds one income entry to Records. Totals cover all dates.
+        Track pay owed to you. Your default is $600.00 per week, added only when you add a week. Unpaid pay is not received income; recording a payment adds one income entry to Records. If you already entered the income in Records, use Apply recorded income on the week it paid. You can split a payment across weeks without recording income twice. Totals cover all dates.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => setDialog({ item: null, mode: "weekly" })}>Add earned week</Button>
         <Button variant="outline" onClick={() => setDialog({ item: null, mode: "manual" })}>Add manual entry</Button>
         <Button variant="outline" onClick={() => { setExportError(null); exportPayCsv().catch((e) => setExportError(describeError(e))); }}>Export CSV</Button>
       </div>
+      {linkError ? <p className="text-sm text-destructive" role="alert">{linkError}</p> : null}
       {exportError ? <p className="text-sm text-destructive" role="alert">{exportError}</p> : null}
       {s ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -91,11 +96,18 @@ export function PayTab({ onLedgerChanged }: { onLedgerChanged: () => void }) {
                   {it.notes ? <p className="whitespace-pre-wrap text-sm text-muted-foreground">{it.notes}</p> : null}
                   {it.payments.length ? (
                     <ul className="grid gap-1 text-sm text-muted-foreground">
-                      {it.payments.map((p) => <li key={p.id}>{formatCents(p.amountCents)} received {p.recordDate ?? ""} ({p.paymentMethod}). Edit or remove it in Records.</li>)}
+                      {it.payments.map((p) => <li key={p.id}>{formatCents(p.amountCents)} received {p.recordDate ?? ""} ({p.paymentMethod}). {p.linkedExisting ? <>
+                        Applied from “{p.title}”. <Button size="sm" variant="outline" disabled={!!unlinking} onClick={async()=>{
+                          setUnlinking(p.id);setLinkError(null);
+                          try{await unlinkRecordedIncome(it,p);reload();onLedgerChanged();}
+                          catch(e){setLinkError(describeError(e));reload();}finally{setUnlinking(null);}
+                        }}>Unlink from week</Button>
+                      </> : "Edit or remove it in Records."}</li>)}
                     </ul>
                   ) : null}
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" disabled={it.remainingCents <= 0} onClick={() => setPaying(it)}>Record payment</Button>
+                    <Button size="sm" variant="outline" disabled={it.remainingCents <= 0} onClick={() => setLinking(it)}>Apply recorded income</Button>
                     <Button size="sm" variant="outline" onClick={() => setDialog({ item: it, mode: it.kind })}>Edit</Button>
                     <Button size="sm" variant="outline" disabled={it.payments.length > 0} title={it.payments.length ? "Remove its payment income entries in Records first" : undefined} onClick={() => { setDelError(null); setDeleting(it); }}>Delete</Button>
                   </div>
@@ -112,6 +124,7 @@ export function PayTab({ onLedgerChanged }: { onLedgerChanged: () => void }) {
       ) : null}
 
       <PayItemDialog open={!!dialog} item={dialog?.item ?? null} mode={dialog?.mode ?? "weekly"} onClose={() => setDialog(null)} onSaved={reload} />
+      <LinkIncomeDialog item={linking} onClose={()=>setLinking(null)} onSaved={()=>{reload();onLedgerChanged();}} />
       <PaymentDialog item={paying} onClose={() => setPaying(null)} onSaved={() => { reload(); onLedgerChanged(); }} />
       <AlertDialog open={!!deleting} onOpenChange={(o) => { if (!o && !delBusy) setDeleting(null); }}>
         <AlertDialogContent>
