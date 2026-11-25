@@ -42,7 +42,7 @@ let pool:Pool;
 beforeAll(async()=>{
   pg=new PGlite();
   await pg.exec("CREATE TABLE bookings(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),name text NOT NULL,starts_at timestamptz)");
-  for(const name of ["20261016_agent_tax_records.sql","20261017_agent_pay_planning.sql"]) {
+  for(const name of ["20261016_agent_tax_records.sql","20261017_agent_pay_planning.sql","20261125_agent_pay_income_allocations.sql"]) {
     const sql=await readFile(new URL(`../../../../../lib/db/migrations/${name}`,import.meta.url),"utf8");
     await pg.exec(sql); await pg.exec(sql); // Additive migrations must be repeat-safe.
   }
@@ -50,7 +50,7 @@ beforeAll(async()=>{
   pool={query,connect:async()=>({query,release:()=>{}})} as unknown as Pool;
 },30_000);
 beforeEach(async()=>{
-  await pg.exec("TRUNCATE agent_tax_records,agent_pay_items,agent_tax_file_deletions,agent_tax_estimate_settings");
+  await pg.exec("TRUNCATE agent_pay_income_allocations,agent_tax_records,agent_pay_items,agent_tax_file_deletions,agent_tax_estimate_settings");
   storage=new MemoryStorage();service=new AgentTaxService(pool,storage,true);planning=new AgentTaxPlanningService(pool);
 });
 afterAll(async()=>{vi.unstubAllEnvs();await pg?.close();});
@@ -152,6 +152,75 @@ describe("earned pay and cash received",()=>{
     await planning.receive(item.id,{amountCents:60000,recordDate:"2026-01-02",paymentMethod:"bank",counterparty:null,notes:null,expectedRevision:item.revision,paymentRequestId:randomUUID()});
     expect((await service.list(2025,"",1,25)).summary.incomeCents).toBe(0);
     expect((await service.list(2026,"",1,25)).summary.incomeCents).toBe(60000);
+  });
+});
+
+describe("apply existing income to earned pay",()=>{
+  it("splits $1,200 across weeks, retries safely, and keeps one income record and receipt",async()=>{
+    const a=await planning.create(earned), b=await planning.create({...earned,earnedDate:"2026-10-05"});
+    let r=await service.create({...base,amountCents:120000,recordDate:"2026-11-17",title:"Pay"});
+    r=await service.upload(r.id,r.revision,"receipt.pdf","application/pdf",Buffer.from("%PDF-1.7 synthetic"));
+    const input={recordId:r.id,amountCents:60000,expectedRevision:a.revision,expectedRecordRevision:r.revision};
+    await planning.linkIncome(a.id,input);
+    await planning.linkIncome(a.id,input);
+    expect((await planning.incomeRecords(1,25)).records[0].availableCents).toBe(60000);
+    expect((await service.get(r.id)).hasPayAllocations).toBe(true);
+    await expect(planning.linkIncome(b.id,{...input,expectedRevision:b.revision})).rejects.toMatchObject({status:409});
+    await planning.linkIncome(b.id,{...input,expectedRevision:b.revision,expectedRecordRevision:(await service.get(r.id)).revision});
+    expect((await planning.list(1,25)).summary).toMatchObject({earnedCents:120000,paidCents:120000,remainingCents:0});
+    expect((await planning.incomeRecords(1,25)).records).toHaveLength(0);
+    expect((await service.list(2026,"",1,25))).toMatchObject({total:1,summary:{incomeCents:120000}});
+    expect((await service.get(r.id))).toMatchObject({amountCents:120000,recordDate:"2026-11-17",fileName:"receipt.pdf"});
+    expect(Buffer.from((await service.download(r.id)).bytes).toString()).toContain("synthetic");
+    expect(await planning.csv()).toContain('"0.00"');
+    const current=await service.get(r.id);
+    await expect(service.update(r.id,{...base,amountCents:1},current.revision)).rejects.toMatchObject({status:409});
+    await expect(planning.remove(a.id,(await planning.item(a.id)).revision)).rejects.toMatchObject({status:409});
+    await expect(planning.update(a.id,{...earned,amountCents:1},(await planning.item(a.id)).revision)).rejects.toMatchObject({status:400});
+    await service.remove(r.id,current.revision);
+    expect((await planning.list(1,25)).summary.remainingCents).toBe(120000);
+    expect((await planning.item(a.id)).revision).toBe(3);
+    expect((await planning.item(b.id)).revision).toBe(3);
+  });
+  it("combines split Venmo receipts and restores only the selected link without changing income",async()=>{
+    const a=await planning.create(earned);
+    for(const amountCents of [10000,10000,40000]) {
+      const r=await service.create({...base,amountCents});
+      await planning.linkIncome(a.id,{recordId:r.id,amountCents,expectedRevision:(await planning.item(a.id)).revision,expectedRecordRevision:r.revision});
+    }
+    const item=await planning.item(a.id),payment=item.payments[0];
+    expect(item.remainingCents).toBe(0);
+    await planning.unlinkIncome(a.id,{recordId:payment.id,expectedRevision:item.revision,expectedRecordRevision:payment.recordRevision});
+    expect((await planning.item(a.id)).remainingCents).toBe(payment.amountCents);
+    expect((await service.list(2026,"",1,25)).summary.incomeCents).toBe(60000);
+  });
+  it("rejects non-income, legacy linked income, over-allocation, stale weeks and overpayment atomically",async()=>{
+    const a=await planning.create(earned), b=await planning.create({...earned,earnedDate:"2026-10-05"});
+    const r=await service.create({...base,amountCents:10000});
+    const input={recordId:r.id,amountCents:10001,expectedRevision:a.revision,expectedRecordRevision:r.revision};
+    await expect(planning.linkIncome(a.id,input)).rejects.toMatchObject({status:400});
+    await expect(planning.linkIncome(a.id,{...input,amountCents:100,expectedRevision:99})).rejects.toMatchObject({status:409});
+    const expense=await service.create({...base,entryType:"expense"});
+    await expect(planning.linkIncome(a.id,{...input,recordId:expense.id,amountCents:100})).rejects.toMatchObject({status:400});
+    await planning.linkIncome(a.id,{...input,amountCents:10000});
+    await expect(planning.linkIncome(b.id,{...input,amountCents:1,expectedRecordRevision:(await service.get(r.id)).revision})).rejects.toMatchObject({status:400});
+    const large=await service.create({...base,amountCents:120000});
+    await expect(planning.linkIncome(a.id,{...input,recordId:large.id,amountCents:60000,expectedRevision:(await planning.item(a.id)).revision})).rejects.toMatchObject({status:400});
+    const direct=await planning.receive(a.id,{amountCents:50000,recordDate:"2026-11-20",paymentMethod:"bank",counterparty:null,notes:null,expectedRevision:(await planning.item(a.id)).revision,paymentRequestId:randomUUID()});
+    await expect(planning.linkIncome(b.id,{...input,recordId:direct.recordId,amountCents:1})).rejects.toMatchObject({status:400});
+    expect((await planning.item(a.id)).paidCents).toBe(60000);
+    expect((await planning.item(b.id)).paidCents).toBe(0);
+  });
+  it("paginates only unapplied income and keeps cross-year income in the received year",async()=>{
+    const item=await planning.create({...earned,earnedDate:"2025-12-29"});
+    const r=await service.create(base);
+    await service.create({...base,title:"Second"});
+    expect((await planning.incomeRecords(1,1)).hasMore).toBe(true);
+    expect((await planning.incomeRecords(2,1)).records).toHaveLength(1);
+    await planning.linkIncome(item.id,{recordId:r.id,amountCents:60000,expectedRevision:item.revision,expectedRecordRevision:r.revision});
+    expect((await service.list(2025,"",1,25)).summary.incomeCents).toBe(0);
+    expect((await service.list(2026,"",1,25)).summary.incomeCents).toBe(120000);
+    expect((await planning.incomeRecords(1,25)).records).toHaveLength(1);
   });
 });
 
@@ -298,7 +367,7 @@ describe("owner boundary and route validation",()=>{
     vi.stubEnv("SESSION_SECRET","synthetic-test-session-only");
     const noRead={list:vi.fn(),download:vi.fn(),accountantPackage:vi.fn()} as unknown as AgentTaxService;
     const app=express().use(express.json()).use("/api",createAgentTaxRouter(noRead,undefined,planning));
-    for(const path of ["/records","/pay","/pay/export","/export?year=2026","/package?year=2026","/bookings","/estimate/2026",`/records/${randomUUID()}/file`]) {
+    for(const path of ["/records","/pay","/pay/export","/pay/income-records","/export?year=2026","/package?year=2026","/bookings","/estimate/2026",`/records/${randomUUID()}/file`]) {
       for(const token of ["","office.synthetic","boss.synthetic","manager.synthetic"]) {
         const req=request(app).get(`/api/admin/agent-tax${path}`);
         if(token)req.set("Authorization",`Bearer ${token}`);
@@ -312,10 +381,32 @@ describe("owner boundary and route validation",()=>{
       ["post","/records"],["patch",`/records/${id}`],["delete",`/records/${id}`],
       ["put",`/records/${id}/file`],["delete",`/records/${id}/file`],
       ["post","/pay"],["patch",`/pay/${id}`],["delete",`/pay/${id}`],
-      ["post",`/pay/${id}/payments`],["put","/estimate/2026"],
+      ["post",`/pay/${id}/payments`],["post",`/pay/${id}/income-links`],["delete",`/pay/${id}/income-links`],["put","/estimate/2026"],
     ] as const) {
       expect((await request(app)[method](`/api/admin/agent-tax${path}`).send({})).status).toBe(401);
     }
+  });
+  it("exposes reconciliation only to owner, validates versions and preserves income on unlink",async()=>{
+    vi.stubEnv("SESSION_SECRET","synthetic-test-session-only");
+    const app=express().use(express.json()).use("/api",createAgentTaxRouter(service,undefined,planning));
+    const auth={Authorization:`Bearer ${issueToken()!.token}`};
+    const item=await planning.create(earned),r=await service.create(base);
+    const path=`/api/admin/agent-tax/pay/${item.id}/income-links`;
+    const body={recordId:r.id,amountCents:10000,expectedRevision:item.revision,expectedRecordRevision:r.revision};
+    for(const token of ["office.synthetic","boss.synthetic","manager.synthetic"]) {
+      expect((await request(app).post(path).set("Authorization",`Bearer ${token}`).send(body)).status).toBe(401);
+    }
+    expect((await request(app).post(path).set(auth).send({...body,amountCents:0.1})).status).toBe(400);
+    expect((await request(app).post(path).set(auth).send({...body,recordId:"not-uuid"})).status).toBe(400);
+    expect((await request(app).post(path).set(auth).send({...body,expectedRecordRevision:99})).status).toBe(409);
+    const linked=await request(app).post(path).set(auth).send(body);
+    expect(linked.status).toBe(200);expect(linked.headers["cache-control"]).toContain("no-store");
+    const available=await request(app).get("/api/admin/agent-tax/pay/income-records").set(auth);
+    expect(available.status).toBe(200);expect(available.body.records[0].availableCents).toBe(50000);
+    const payment=linked.body.item.payments[0];
+    expect((await request(app).delete(path).set(auth).send({recordId:r.id,expectedRevision:item.revision,expectedRecordRevision:payment.recordRevision})).status).toBe(409);
+    expect((await request(app).delete(path).set(auth).send({recordId:r.id,expectedRevision:linked.body.item.revision,expectedRecordRevision:payment.recordRevision})).status).toBe(200);
+    expect((await service.list(2026,"",1,25))).toMatchObject({total:1,summary:{incomeCents:60000}});
   });
   it("allows owner only, validates upload/id/amount/year, and marks responses no-store",async()=>{
     vi.stubEnv("SESSION_SECRET","synthetic-test-session-only");
