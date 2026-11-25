@@ -48,7 +48,7 @@ export function RecordFormDialog({ open, record, defaultYear, onClose, onSaved }
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }));
   const money = f.entryType !== "document";
   const hasFile = !!current?.fileName;
-  const payLinked = !!current?.payItemId;
+  const payLinked = !!(current?.payItemId || current?.hasPayAllocations);
 
   function pickFile(next: File | null) {
     setFileMsg(null); setConfirmReplace(false);
@@ -125,7 +125,7 @@ export function RecordFormDialog({ open, record, defaultYear, onClose, onSaved }
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{record ? "Edit entry" : "New entry"}</DialogTitle>
-          <DialogDescription>{payLinked ? "This income entry came from a pay payment. Amount, date, year, type and payment method are locked; to correct them, delete this entry with confirmation and record the payment again. " : ""}Private to the owner. Do not enter Social Security or account numbers. Nothing is saved until you press Save.</DialogDescription>
+          <DialogDescription>{payLinked ? "This income is applied to earned pay. Amount, date, year, type and payment method are locked. For income applied from Records, unlink it from each week in Pay owed to me before correcting these fields. For payments created under Pay owed to me, delete the income with confirmation and record it again. " : ""}Private to the owner. Do not enter Social Security or account numbers. Nothing is saved until you press Save.</DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={submit} noValidate>
           {formError ? (
