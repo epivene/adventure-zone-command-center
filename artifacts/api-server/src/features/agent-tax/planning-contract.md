@@ -47,6 +47,33 @@ amount/date, delete its income entry with confirmation and record it again.
 Deleting that income entry restores the pay balance automatically.
 Pay entries with payments cannot be deleted; earned amount cannot drop below paid.
 
+## Apply income already saved in Records
+
+Income entered directly in Records is not automatically assigned to earned weeks.
+Use **Apply recorded income** on an earned week to choose an existing income
+record and explicitly apply all or part of its available amount. A single payment
+can be applied across several weeks. Never infer which weeks it paid from its
+payer, title or receipt date. No income, dates or receipt bytes are created or changed.
+
+- GET `/pay/income-records?page=1&limit=25` (limit 1–100) ->
+  `{records:[{id,title,amountCents,availableCents,recordDate,counterparty,revision}],hasMore}`.
+  Lists unapplied income across all years, excluding legacy payment-linked records.
+- POST `/pay/:id/income-links` -> `{item}`; body
+  `{recordId,amountCents,expectedRevision,expectedRecordRevision}`.
+  Locks the existing income and earned week; validates both revisions, available
+  income and remaining pay. Exact retries are no-ops. Adds no received income.
+- DELETE `/pay/:id/income-links` -> `{item}`; body
+  `{recordId,expectedRevision,expectedRecordRevision}`. Removes only this allocation;
+  restores the week's balance while retaining the income and all other allocations.
+
+Linked payment rows include `linkedExisting:boolean` and `recordRevision:number`.
+Income records include `hasPayAllocations:boolean`. Treat these records as linked
+when protecting monetary/date fields. Deleting an income record restores all its
+allocated week balances atomically; existing owner confirmation still applies.
+Owner Admin authorization and private/no-store response rules apply throughout.
+Existing legacy payment links are retained and counted once alongside allocations.
+The additive migration does not guess or backfill links for existing records.
+
 ## Annual tax planning
 
 GET `/estimate/:year`, **only 2025 and 2026 supported**:
