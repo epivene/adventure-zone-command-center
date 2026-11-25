@@ -203,6 +203,7 @@ components:
             id: { type: string, format: uuid }
             bookingLabel: { type: [string, "null"] }
             payItemId: { type: [string, "null"], format: uuid }
+            hasPayAllocations: { type: boolean }
             fileName: { type: [string, "null"] }
             fileMime: { type: [string, "null"] }
             fileSize: { type: [integer, "null"] }
