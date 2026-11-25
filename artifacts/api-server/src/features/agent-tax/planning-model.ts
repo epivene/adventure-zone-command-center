@@ -39,4 +39,12 @@ export const payPaymentInput = z.object({
   expectedRevision: z.number().int().positive(),
   paymentRequestId: z.string().uuid(),
 }).strict();
+export const linkIncomeInput = z.object({
+  recordId: z.string().uuid(),
+  amountCents: money.refine(n => n > 0),
+  expectedRevision: z.number().int().positive(),
+  expectedRecordRevision: z.number().int().positive(),
+}).strict();
+export type LinkIncomeInput = z.infer<typeof linkIncomeInput>;
+export const unlinkIncomeInput = linkIncomeInput.pick({recordId:true, expectedRevision:true, expectedRecordRevision:true});
 export type PayPaymentInput = z.infer<typeof payPaymentInput>;
