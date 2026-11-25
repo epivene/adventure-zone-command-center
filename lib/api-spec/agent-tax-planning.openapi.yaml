@@ -38,6 +38,63 @@ paths:
           description: Explicitly recorded earned pay, never auto-accrued
           content:
             application/json: {schema: {$ref: "#/components/schemas/AgentPayMutation"}}
+  /admin/agent-tax/pay/income-records:
+    get:
+      operationId: listAgentPayAvailableIncome
+      description: Owner only; recorded income with unapplied amounts across all years. Does not infer a pay period.
+      parameters:
+        - {name: page, in: query, schema: {type: integer, default: 1, minimum: 1, maximum: 100000}}
+        - {name: limit, in: query, schema: {type: integer, default: 25, minimum: 1, maximum: 100}}
+      responses:
+        "200":
+          description: Paginated existing income, no new received income
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [records, hasMore]
+                properties:
+                  hasMore: {type: boolean}
+                  records:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, title, amountCents, availableCents, recordDate, counterparty, revision]
+                      properties:
+                        id: {type: string, format: uuid}
+                        title: {type: string}
+                        amountCents: {type: integer}
+                        availableCents: {type: integer}
+                        recordDate: {type: string, format: date}
+                        counterparty: {type: [string, "null"]}
+                        revision: {type: integer}
+  /admin/agent-tax/pay/{id}/income-links:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: linkAgentPayRecordedIncome
+      description: Owner only; apply existing income to this earned period with both revisions. Exact retries are no-ops; no income is created.
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: "#/components/schemas/AgentPayIncomeLink"}}
+      responses:
+        "200":
+          description: Updated earned-pay balance
+          content:
+            application/json: {schema: {$ref: "#/components/schemas/AgentPayMutation"}}
+    delete:
+      operationId: unlinkAgentPayRecordedIncome
+      description: Owner only; restores this period's balance without removing income or other allocations.
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {$ref: "#/components/schemas/AgentPayIncomeUnlink"}}
+      responses:
+        "200":
+          description: Updated earned-pay balance, income preserved
+          content:
+            application/json: {schema: {$ref: "#/components/schemas/AgentPayMutation"}}
   /admin/agent-tax/pay/{id}:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -141,10 +198,29 @@ components:
         - type: object
           required: [expectedRevision]
           properties: {expectedRevision: {type: integer, minimum: 1}}
+    AgentPayIncomeUnlink:
+      type: object
+      additionalProperties: false
+      required: [recordId, expectedRevision, expectedRecordRevision]
+      properties:
+        recordId: {type: string, format: uuid}
+        expectedRevision: {type: integer, minimum: 1}
+        expectedRecordRevision: {type: integer, minimum: 1}
+    AgentPayIncomeLink:
+      type: object
+      additionalProperties: false
+      required: [recordId, amountCents, expectedRevision, expectedRecordRevision]
+      properties:
+        recordId: {type: string, format: uuid}
+        amountCents: {type: integer, minimum: 1, maximum: 1000000000}
+        expectedRevision: {type: integer, minimum: 1}
+        expectedRecordRevision: {type: integer, minimum: 1}
     AgentPayPayment:
       type: object
       required: [id, title, amountCents, recordDate, paymentMethod]
       properties:
+        linkedExisting: {type: boolean}
+        recordRevision: {type: integer}
         id: {type: string, format: uuid}
         title: {type: string}
         amountCents: {type: integer}

@@ -15,6 +15,10 @@ paths:
     $ref: "./agent-tax-planning.openapi.yaml#/paths/~1admin~1agent-tax~1pay"
   /admin/agent-tax/pay/{id}:
     $ref: "./agent-tax-planning.openapi.yaml#/paths/~1admin~1agent-tax~1pay~1{id}"
+  /admin/agent-tax/pay/income-records:
+    $ref: "./agent-tax-planning.openapi.yaml#/paths/~1admin~1agent-tax~1pay~1income-records"
+  /admin/agent-tax/pay/{id}/income-links:
+    $ref: "./agent-tax-planning.openapi.yaml#/paths/~1admin~1agent-tax~1pay~1{id}~1income-links"
   /admin/agent-tax/pay/{id}/payments:
     $ref: "./agent-tax-planning.openapi.yaml#/paths/~1admin~1agent-tax~1pay~1{id}~1payments"
   /admin/agent-tax/pay/export:

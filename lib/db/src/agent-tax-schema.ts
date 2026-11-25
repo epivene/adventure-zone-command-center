@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, date, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { bookings } from "./schema";
 
 export const agentPayItems = pgTable("agent_pay_items", {
@@ -52,6 +52,17 @@ export const agentTaxRecords = pgTable("agent_tax_records", {
   check("agent_tax_money_date_check", sql`${t.entryType} = 'document' OR (${t.amountCents} IS NOT NULL AND ${t.recordDate} IS NOT NULL)`),
   check("agent_tax_date_year_check", sql`${t.recordDate} IS NULL OR EXTRACT(YEAR FROM ${t.recordDate}) = ${t.taxYear}`),
   check("agent_tax_attachment_check", sql`(${t.storageKey} IS NULL AND ${t.fileName} IS NULL AND ${t.fileMime} IS NULL AND ${t.fileSize} IS NULL) OR (${t.storageKey} IS NOT NULL AND ${t.fileName} IS NOT NULL AND ${t.fileMime} IS NOT NULL AND ${t.fileSize} > 0)`),
+]);
+
+export const agentPayIncomeAllocations = pgTable("agent_pay_income_allocations", {
+  recordId: uuid("record_id").notNull().references(() => agentTaxRecords.id, { onDelete: "cascade" }),
+  payItemId: uuid("pay_item_id").notNull().references(() => agentPayItems.id, { onDelete: "restrict" }),
+  amountCents: integer("amount_cents").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, t => [
+  primaryKey({ columns: [t.recordId, t.payItemId] }),
+  index("agent_pay_income_allocations_item").on(t.payItemId),
+  check("agent_pay_allocation_amount_check", sql`${t.amountCents} BETWEEN 1 AND 1000000000`),
 ]);
 
 export const agentTaxFileDeletions = pgTable("agent_tax_file_deletions", {

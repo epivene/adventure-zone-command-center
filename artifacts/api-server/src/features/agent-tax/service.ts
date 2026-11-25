@@ -5,7 +5,7 @@ import type { PrivateObjectStorage } from "@/lib/private-object-storage";
 import { csvCell, TaxError, type TaxEntryInput } from "./model";
 import { MAX_PACKAGE_RECORDS, receiptPath, writeAccountantPackage, type PackageRecord } from "./accountant-package";
 
-const selectSql = `SELECT r.*, r.record_date::text AS date_text, b.name AS booking_label
+const selectSql = `SELECT EXISTS(SELECT 1 FROM agent_pay_income_allocations a WHERE a.record_id=r.id) AS has_pay_allocations, r.*, r.record_date::text AS date_text, b.name AS booking_label
   FROM agent_tax_records r LEFT JOIN bookings b ON b.id=r.booking_id`;
 type Row = Record<string, any>;
 export function presentTaxRecord(row: Row) {
@@ -14,7 +14,7 @@ export function presentTaxRecord(row: Row) {
     amountCents: row.amount_cents === null ? null : Number(row.amount_cents),
     recordDate: row.date_text ?? null, taxYear: Number(row.tax_year), category: row.category,
     paymentMethod: row.payment_method, counterparty: row.counterparty, notes: row.notes,
-    bookingId: row.booking_id, bookingLabel: row.booking_label ?? null, payItemId: row.pay_item_id ?? null,
+    bookingId: row.booking_id, bookingLabel: row.booking_label ?? null, payItemId: row.pay_item_id ?? null, hasPayAllocations: !!row.has_pay_allocations,
     fileName: row.file_name, fileMime: row.file_mime, fileSize: row.file_size === null ? null : Number(row.file_size),
     revision: Number(row.revision), createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
@@ -64,9 +64,9 @@ export class AgentTaxService {
 
   async update(id: string, input: TaxEntryInput, revision: number) {
     const current=await this.get(id);
-    if(current.payItemId && (input.entryType!==current.entryType || input.amountCents!==current.amountCents ||
+    if((current.payItemId || current.hasPayAllocations) && (input.entryType!==current.entryType || input.amountCents!==current.amountCents ||
       input.recordDate!==current.recordDate || input.taxYear!==current.taxYear || input.paymentMethod!==current.paymentMethod)) {
-      throw new TaxError(409,"This is linked to received pay. To correct its amount/date, delete this income entry and record the payment again under Pay owed to me.");
+      throw new TaxError(409,"This income is applied to earned pay. Unlink its recorded-income allocations before correcting the amount/date. For a payment created under Pay owed to me, delete the income entry and record the payment again.");
     }
     const result = await this.pool.query(`UPDATE agent_tax_records SET title=$1,entry_type=$2,amount_cents=$3,
       record_date=$4,tax_year=$5,category=$6,payment_method=$7,counterparty=$8,notes=$9,booking_id=$10,
@@ -126,8 +126,12 @@ export class AgentTaxService {
 
   async remove(id: string, revision: number) {
     await this.fileMutation(id,revision,async (client,row) => {
+      const linked=await client.query("SELECT pay_item_id FROM agent_pay_income_allocations WHERE record_id=$1",[id]);
+      const ids=[...new Set([row.pay_item_id,...linked.rows.map(r=>r.pay_item_id)].filter(Boolean))].sort();
+      // Lock in a stable order before deleting; all balances and revisions change atomically.
+      if(ids.length) await client.query("SELECT id FROM agent_pay_items WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE",[ids]);
       await client.query("DELETE FROM agent_tax_records WHERE id=$1", [id]);
-      if(row.pay_item_id) await client.query("UPDATE agent_pay_items SET revision=revision+1,updated_at=now() WHERE id=$1",[row.pay_item_id]);
+      if(ids.length) await client.query("UPDATE agent_pay_items SET revision=revision+1,updated_at=now() WHERE id=ANY($1::uuid[])",[ids]);
     });
     return { ok: true };
   }
