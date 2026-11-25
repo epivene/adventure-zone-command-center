@@ -2,7 +2,7 @@ import type express from "express";
 import { z } from "zod";
 import { deleteTaxEntry } from "./model";
 import { AgentTaxPlanningService } from "./planning-service";
-import { estimateYear, payItemInput, payPaymentInput, saveEstimateSettings, updatePayItem } from "./planning-model";
+import { estimateYear, linkIncomeInput, unlinkIncomeInput, payItemInput, payPaymentInput, saveEstimateSettings, updatePayItem } from "./planning-model";
 type Run = (action:(req:express.Request,res:express.Response)=>Promise<void>)=>express.RequestHandler;
 export function registerTaxPlanningRoutes(router:express.Router,service:AgentTaxPlanningService,run:Run) {
   const root="/admin/agent-tax";
@@ -18,6 +18,23 @@ export function registerTaxPlanningRoutes(router:express.Router,service:AgentTax
     const p=z.object({page:z.coerce.number().int().min(1).max(100000).default(1),limit:z.coerce.number().int().min(1).max(100).default(25)}).safeParse(req.query);
     if(!p.success){res.status(400).json({error:"Invalid pay-list page."});return;}
     res.json(await service.list(p.data.page,p.data.limit));
+  }));
+  router.get(`${root}/pay/income-records`,run(async(req,res)=>{
+    const p=z.object({page:z.coerce.number().int().min(1).max(100000).default(1),limit:z.coerce.number().int().min(1).max(100).default(25)}).safeParse(req.query);
+    if(!p.success){res.status(400).json({error:"Invalid income-list page."});return;}
+    res.json(await service.incomeRecords(p.data.page,p.data.limit));
+  }));
+  router.post(`${root}/pay/:id/income-links`,run(async(req,res)=>{
+    const id=uuid(req,res);if(!id)return;
+    const p=linkIncomeInput.safeParse(req.body);
+    if(!p.success){res.status(400).json({error:"Choose recorded income, a positive amount and current versions."});return;}
+    res.json(await service.linkIncome(id,p.data));
+  }));
+  router.delete(`${root}/pay/:id/income-links`,run(async(req,res)=>{
+    const id=uuid(req,res);if(!id)return;
+    const p=unlinkIncomeInput.safeParse(req.body);
+    if(!p.success){res.status(400).json({error:"Choose the income link and current versions."});return;}
+    res.json(await service.unlinkIncome(id,p.data));
   }));
   router.post(`${root}/pay`,run(async(req,res)=>{
     const p=payItemInput.safeParse(req.body);
