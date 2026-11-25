@@ -9,9 +9,9 @@ export type EntryType = "income" | "expense" | "document";
 export type Category = "commission" | "travel" | "supplies" | "fees" | "tax_form" | "other";
 export type PaymentMethod = "venmo" | "cash" | "bank" | "check" | "card" | "other";
 
-export type TaxRecord = AgentTaxRecord;
+export type TaxRecord = AgentTaxRecord & { hasPayAllocations?: boolean };
 export type TaxRecordInput = AgentTaxInput;
-export type RecordsResponse = ListAgentTaxRecords200;
+export type RecordsResponse = Omit<ListAgentTaxRecords200,"records"> & {records:TaxRecord[]};
 
 export const CATEGORIES: Category[] = ["commission", "travel", "supplies", "fees", "tax_form", "other"];
 export const METHODS: PaymentMethod[] = ["venmo", "cash", "bank", "check", "card", "other"];
@@ -122,9 +122,15 @@ export function describeError(e: unknown): string {
 }
 
 // ---- Pay owed to me ----
-export type PayPayment = AgentPayPayment;
-export type PayItem = AgentPayItem;
-export type PayResponse = ListAgentPay200;
+export type PayPayment = AgentPayPayment & {linkedExisting?:boolean;recordRevision?:number};
+export type PayItem = Omit<AgentPayItem,"payments"> & {payments:PayPayment[]};
+export type PayResponse = Omit<ListAgentPay200,"items"> & {items:PayItem[]};
+export type AvailableIncome = {id:string;title:string;amountCents:number;availableCents:number;recordDate:string;counterparty:string|null;revision:number};
+export const listAvailableIncome = (page:number) => json<{records:AvailableIncome[];hasMore:boolean}>(`/pay/income-records?page=${page}&limit=25`);
+export const linkRecordedIncome = (id:string,record:AvailableIncome,amountCents:number,expectedRevision:number) =>
+  json<{item:PayItem}>(`/pay/${id}/income-links`,{method:"POST",body:JSON.stringify({recordId:record.id,amountCents,expectedRevision,expectedRecordRevision:record.revision})});
+export const unlinkRecordedIncome = (item:PayItem,payment:PayPayment) =>
+  json<{item:PayItem}>(`/pay/${item.id}/income-links`,{method:"DELETE",body:JSON.stringify({recordId:payment.id,expectedRevision:item.revision,expectedRecordRevision:payment.recordRevision})});
 export type PayInput = AgentPayInput;
 export const WEEKLY_TITLE = "Weekly booking-agent pay";
 export const WEEKLY_CENTS = 60000;
