@@ -1,10 +1,15 @@
 import type { Pool, PoolClient } from "pg";
 import { TaxError, csvCell } from "./model";
-import type { EstimateSettings, PayItemInput, PayPaymentInput } from "./planning-model";
+import type { EstimateSettings, PayItemInput, PayPaymentInput, LinkIncomeInput } from "./planning-model";
 import { calculateTax, taxSources, taxWarnings } from "./tax-calculator";
 
+// Keep legacy payments intact; allocations reference the original income record.
+const paymentsSelect = `SELECT id,title,amount_cents,record_date::text AS date_text,payment_method,pay_item_id,
+  revision AS record_revision,false AS linked_existing FROM agent_tax_records WHERE pay_item_id IS NOT NULL
+  UNION ALL SELECT r.id,r.title,a.amount_cents,r.record_date::text,r.payment_method,a.pay_item_id,
+  r.revision,true FROM agent_pay_income_allocations a JOIN agent_tax_records r ON r.id=a.record_id`;
 const itemSelect = `SELECT p.*,p.earned_date::text AS earned_text,p.due_date::text AS due_text,
-  COALESCE((SELECT sum(amount_cents) FROM agent_tax_records WHERE pay_item_id=p.id),0)::bigint AS paid_cents
+  COALESCE((SELECT sum(amount_cents) FROM (${paymentsSelect}) payments WHERE pay_item_id=p.id),0)::bigint AS paid_cents
   FROM agent_pay_items p`;
 type Row = Record<string,any>;
 function presentItem(row:Row,payments:Row[]) {
@@ -12,7 +17,7 @@ function presentItem(row:Row,payments:Row[]) {
     amountCents:Number(row.amount_cents),paidCents:Number(row.paid_cents),
     remainingCents:Number(row.amount_cents)-Number(row.paid_cents),notes:row.notes,revision:row.revision,
     createdAt:row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
-    payments:payments.map(p=>({id:p.id,title:p.title,amountCents:Number(p.amount_cents),recordDate:p.date_text,paymentMethod:p.payment_method}))};
+    payments:payments.map(p=>({id:p.id,title:p.title,amountCents:Number(p.amount_cents),recordDate:p.date_text,paymentMethod:p.payment_method,recordRevision:p.record_revision,linkedExisting:p.linked_existing}))};
 }
 export class AgentTaxPlanningService {
   constructor(private readonly pool:Pool) {}
@@ -38,7 +43,7 @@ export class AgentTaxPlanningService {
   async item(id:string) {
     const result=await this.pool.query(`${itemSelect} WHERE p.id=$1`,[id]);
     if (!result.rows[0]) throw new TaxError(404,"Pay entry not found.");
-    const payments=await this.pool.query("SELECT id,title,amount_cents,record_date::text AS date_text,payment_method FROM agent_tax_records WHERE pay_item_id=$1 ORDER BY record_date,id",[id]);
+    const payments=await this.pool.query(`SELECT * FROM (${paymentsSelect}) payments WHERE pay_item_id=$1 ORDER BY date_text,id`,[id]);
     return presentItem(result.rows[0],payments.rows);
   }
   async list(page:number,limit:number) {
@@ -51,7 +56,7 @@ export class AgentTaxPlanningService {
         FROM (${itemSelect}) AS owed`),
     ]);
     const ids=rows.rows.map(r=>r.id);
-    const payments=ids.length ? await this.pool.query("SELECT id,title,amount_cents,record_date::text AS date_text,payment_method,pay_item_id FROM agent_tax_records WHERE pay_item_id=ANY($1::uuid[]) ORDER BY record_date,id",[ids]) : {rows:[]};
+    const payments=ids.length ? await this.pool.query(`SELECT * FROM (${paymentsSelect}) payments WHERE pay_item_id=ANY($1::uuid[]) ORDER BY date_text,id`,[ids]) : {rows:[]};
     const total=totals.rows[0];
     return {items:rows.rows.map(r=>presentItem(r,payments.rows.filter(p=>p.pay_item_id===r.id))),total:count.rows[0].total,
       summary:{earnedCents:Number(total.earned),paidCents:Number(total.paid),remainingCents:Number(total.earned)-Number(total.paid),overdueCents:Number(total.overdue)}};
@@ -67,7 +72,7 @@ export class AgentTaxPlanningService {
   async update(id:string,input:PayItemInput,revision:number) {
     await this.transaction(async client=>{
       await this.lock(client,id,revision);
-      const paid=await client.query("SELECT COALESCE(sum(amount_cents),0)::bigint AS paid FROM agent_tax_records WHERE pay_item_id=$1",[id]);
+      const paid=await client.query(`SELECT COALESCE(sum(amount_cents),0)::bigint AS paid FROM (${paymentsSelect}) payments WHERE pay_item_id=$1`,[id]);
       if (input.amountCents<Number(paid.rows[0].paid)) throw new TaxError(400,"Earned pay cannot be less than payments already received. Correct payment entries first.");
       await client.query(`UPDATE agent_pay_items SET title=$1,kind=$2,earned_date=$3,due_date=$4,amount_cents=$5,notes=$6,
         revision=revision+1,updated_at=now() WHERE id=$7`,[input.title,input.kind,input.earnedDate,input.dueDate,input.amountCents,input.notes,id]);
@@ -77,7 +82,7 @@ export class AgentTaxPlanningService {
   async remove(id:string,revision:number) {
     await this.transaction(async client=>{
       await this.lock(client,id,revision);
-      const result=await client.query("SELECT 1 FROM agent_tax_records WHERE pay_item_id=$1 LIMIT 1",[id]);
+      const result=await client.query(`SELECT 1 FROM (${paymentsSelect}) payments WHERE pay_item_id=$1 LIMIT 1`,[id]);
       if (result.rows.length) throw new TaxError(409,"This pay entry has received payments. Remove its payment income entries in Records before deleting the earned pay.");
       await client.query("DELETE FROM agent_pay_items WHERE id=$1",[id]);
     });
@@ -107,7 +112,7 @@ export class AgentTaxPlanningService {
         return d.id as string;
       }
       if(pay.revision!==input.expectedRevision) throw new TaxError(409,"This pay entry changed. Reload it before saving again.");
-      const paid=await client.query("SELECT COALESCE(sum(amount_cents),0)::bigint AS paid FROM agent_tax_records WHERE pay_item_id=$1",[id]);
+      const paid=await client.query(`SELECT COALESCE(sum(amount_cents),0)::bigint AS paid FROM (${paymentsSelect}) payments WHERE pay_item_id=$1`,[id]);
       if(input.amountCents>Number(pay.amount_cents)-Number(paid.rows[0].paid)) throw new TaxError(400,"Payment exceeds the remaining amount owed on this entry.");
       const year=Number(input.recordDate.slice(0,4));
       if(year<1900 || year>2200) throw new TaxError(400,"Payment date must be in a supported record year (1900–2200).");
@@ -119,6 +124,59 @@ export class AgentTaxPlanningService {
       return record.rows[0].id as string;
     });
     return {item:await this.item(id),recordId};
+  }
+  async incomeRecords(page:number,limit:number) {
+    const result=await this.pool.query(`SELECT r.id,r.title,r.amount_cents,r.record_date::text AS date_text,
+      r.counterparty,r.revision,r.amount_cents-COALESCE((SELECT sum(a.amount_cents)
+        FROM agent_pay_income_allocations a WHERE a.record_id=r.id),0) AS available_cents
+      FROM agent_tax_records r WHERE r.entry_type='income' AND r.pay_item_id IS NULL
+      AND r.amount_cents>COALESCE((SELECT sum(a.amount_cents) FROM agent_pay_income_allocations a WHERE a.record_id=r.id),0)
+      ORDER BY r.record_date DESC,r.id LIMIT $1 OFFSET $2`,[limit+1,(page-1)*limit]);
+    return {records:result.rows.slice(0,limit).map(r=>({id:r.id,title:r.title,amountCents:Number(r.amount_cents),
+      recordDate:r.date_text,counterparty:r.counterparty,revision:r.revision,availableCents:Number(r.available_cents)})),
+      hasMore:result.rows.length>limit};
+  }
+  async linkIncome(id:string,input:LinkIncomeInput) {
+    await this.transaction(async client=>{
+      // Always lock income before earned pay, as with deletion of an income record.
+      const result=await client.query("SELECT * FROM agent_tax_records WHERE id=$1 FOR UPDATE",[input.recordId]);
+      const record=result.rows[0];
+      if(!record) throw new TaxError(404,"Income record not found.");
+      const pay=await this.lock(client,id,undefined);
+      const existing=await client.query("SELECT amount_cents FROM agent_pay_income_allocations WHERE record_id=$1 AND pay_item_id=$2",[input.recordId,id]);
+      if(existing.rows[0]) {
+        if(Number(existing.rows[0].amount_cents)===input.amountCents) return; // Lost-response retry: never apply twice.
+        throw new TaxError(409,"This income is already applied to this week. Reload and unlink it before changing the amount.");
+      }
+      if(record.revision!==input.expectedRecordRevision || pay.revision!==input.expectedRevision)
+        throw new TaxError(409,"The income or earned week changed. Reload both before applying the payment.");
+      if(record.entry_type!=="income" || record.pay_item_id || !record.record_date)
+        throw new TaxError(400,"Choose an income entry that is not already linked as a payment.");
+      const allocated=await client.query("SELECT COALESCE(sum(amount_cents),0)::bigint AS total FROM agent_pay_income_allocations WHERE record_id=$1",[input.recordId]);
+      if(input.amountCents>Number(record.amount_cents)-Number(allocated.rows[0].total))
+        throw new TaxError(400,"Amount exceeds the unapplied income remaining on this record.");
+      const paid=await client.query(`SELECT COALESCE(sum(amount_cents),0)::bigint AS total FROM (${paymentsSelect}) payments WHERE pay_item_id=$1`,[id]);
+      if(input.amountCents>Number(pay.amount_cents)-Number(paid.rows[0].total))
+        throw new TaxError(400,"Amount exceeds the remaining pay owed on this week.");
+      await client.query("INSERT INTO agent_pay_income_allocations(record_id,pay_item_id,amount_cents) VALUES($1,$2,$3)",[input.recordId,id,input.amountCents]);
+      await client.query("UPDATE agent_tax_records SET revision=revision+1,updated_at=now() WHERE id=$1",[input.recordId]);
+      await client.query("UPDATE agent_pay_items SET revision=revision+1,updated_at=now() WHERE id=$1",[id]);
+    });
+    return {item:await this.item(id)};
+  }
+  async unlinkIncome(id:string,input:Omit<LinkIncomeInput,"amountCents">) {
+    await this.transaction(async client=>{
+      const result=await client.query("SELECT * FROM agent_tax_records WHERE id=$1 FOR UPDATE",[input.recordId]);
+      if(!result.rows[0]) throw new TaxError(404,"Income record not found.");
+      await this.lock(client,id,input.expectedRevision);
+      if(result.rows[0].revision!==input.expectedRecordRevision)
+        throw new TaxError(409,"This income changed. Reload before unlinking it.");
+      const removed=await client.query("DELETE FROM agent_pay_income_allocations WHERE record_id=$1 AND pay_item_id=$2 RETURNING record_id",[input.recordId,id]);
+      if(!removed.rows.length) throw new TaxError(409,"This payment link changed. Reload before continuing.");
+      await client.query("UPDATE agent_tax_records SET revision=revision+1,updated_at=now() WHERE id=$1",[input.recordId]);
+      await client.query("UPDATE agent_pay_items SET revision=revision+1,updated_at=now() WHERE id=$1",[id]);
+    });
+    return {item:await this.item(id)};
   }
   async csv() {
     const result=await this.pool.query(`${itemSelect} ORDER BY p.earned_date,p.id`);
